@@ -229,3 +229,39 @@ class Market(Base):
         # A malformed slug is a 404 that looks like an application bug.
         CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
     )
+
+
+class Category(Base):
+    """The tree products hang from, and the lever over what the storefront shows.
+
+    Two states that have nothing to do with each other: `is_visible` is editorial, and
+    `identity_ready` says whether the parser knows how to pull this category's variant
+    axes out of an offer. A category can be created and shown long before it is ready —
+    its variants simply take the slow path through the matcher.
+    """
+
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    # Entered, not generated from the name: deriving it would let a rename move the URL.
+    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(200))
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # Own visibility AND every ancestor's, recomputed whenever the tree changes. Walking
+    # ancestors per query does not survive millions of variants, and a storefront filter
+    # has to be a boolean on an index rather than a recursion.
+    is_visible_effective: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    identity_ready: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TimestampTZ, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
+        CheckConstraint("parent_id is null or parent_id <> id", name="not_its_own_parent"),
+        Index("ix_categories_parent_id", "parent_id"),
+        # What the storefront filters on.
+        Index("ix_categories_visible_effective", "is_visible_effective"),
+    )

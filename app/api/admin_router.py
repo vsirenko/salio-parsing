@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_admin
 from app.features.audit.router import router as audit_router
+from app.features.categories.admin_router import router as categories_router
 from app.features.countries.admin_router import router as countries_router
 from app.features.currencies.admin_router import router as currencies_router
 from app.features.markets.admin_router import router as markets_router
@@ -26,6 +27,7 @@ admin_router.include_router(audit_router)
 admin_router.include_router(currencies_router)
 admin_router.include_router(countries_router)
 admin_router.include_router(markets_router)
+admin_router.include_router(categories_router)
 
 # Sign-in cannot require a token. Keep this router to the routes that mint one.
 admin_public_router = APIRouter(prefix="/admin")

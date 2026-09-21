@@ -30,6 +30,7 @@ TABLES = (
     "products",
     "users",
     "markets",
+    "categories",
     "countries",
     "currencies",
 )
