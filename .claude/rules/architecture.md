@@ -47,6 +47,18 @@
   allowed set in that test with the answer written down.
 - A feature folder holds what that feature needs and nothing more. `rate_limit` has no
   router because nothing exposes it; `health` has no service because it has no state.
+- **Every feature folder holds a `README.md`, and changing the feature means changing it
+  in the same commit.** Not a summary of the code — the code is already there. It answers
+  what the feature exposes, how it works, and which decision somebody would otherwise get
+  wrong: the reasoning that is invisible in a diff and expensive to rediscover. A change
+  that makes the README wrong is not finished.
+- That README is where a decision is written down. `.claude/rules/` holds what applies
+  everywhere, `docs/parser-design.md` holds what is designed but unbuilt, and a feature's
+  README holds what is true of that feature now. When the same thing would fit two of
+  them, it goes in the narrowest one and the others link to it.
+- `tests/test_architecture.py` enforces what it can: every feature has a README, and the
+  endpoint tables in one are checked against the live routes by method and path. Prose is
+  not checkable — that part is on whoever edits the feature.
 - Service methods stay `async` even while storage is in-memory, so swapping in a real
   database does not touch the API layer.
 

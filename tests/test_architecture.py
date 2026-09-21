@@ -72,3 +72,50 @@ def test_every_feature_is_a_package():
     loose = (p for p in (APP / "features").iterdir() if p.is_file())
     stray = [p.name for p in loose if p.name != "__init__.py"]
     assert not stray, f"put these in a feature folder: {stray}"
+
+
+def test_every_feature_documents_itself():
+    """A feature folder without a README is one nobody can reason about from outside."""
+    missing = [
+        p.name
+        for p in sorted((APP / "features").iterdir())
+        if p.is_dir() and p.name != "__pycache__" and not (p / "README.md").exists()
+    ]
+    assert not missing, f"these features have no README.md: {missing}"
+
+
+def test_documented_endpoints_exist():
+    """The endpoint tables in a feature README are its contract with the outside.
+
+    Method and path together, not the path alone: documenting a DELETE on a route that
+    only answers GET points at a path that exists and still describes something that does
+    not. A check that passes on a wrong document is worse than no check.
+    """
+    import re
+
+    from app.main import app
+
+    METHODS = "GET|POST|PATCH|PUT|DELETE"
+    ROW = re.compile(rf"`((?:{METHODS})(?:\s*·\s*(?:{METHODS}))*)\s+(/[\w/{{}}.-]+)`")
+
+    def normalise(path: str) -> str:
+        # Parameter names are the README's business; the shape of the path is not.
+        return re.sub(r"\{[^}]*\}", "{}", path).rstrip("/")
+
+    live = {
+        (method.upper(), normalise(path))
+        for path, operations in app.openapi()["paths"].items()
+        for method in operations
+    }
+
+    stale = []
+    for readme in sorted((APP / "features").glob("*/README.md")):
+        for row in readme.read_text().splitlines():
+            if not row.startswith("|"):
+                continue
+            for methods, path in ROW.findall(row):
+                for method in re.split(r"\s*·\s*", methods):
+                    if (method, normalise(path)) not in live:
+                        stale.append(f"{readme.parent.name}/README.md: {method} {path}")
+
+    assert not stale, "documented endpoints that do not exist:\n" + "\n".join(stale)
