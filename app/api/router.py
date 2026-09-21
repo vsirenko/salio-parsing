@@ -6,9 +6,7 @@ is mounted here and nowhere else.
 
 from fastapi import APIRouter
 
-from app.features.products.router import router as products_router
 from app.features.users.router import router as users_router
 
 api_router = APIRouter()
 api_router.include_router(users_router)
-api_router.include_router(products_router)

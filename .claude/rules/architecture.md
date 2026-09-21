@@ -24,9 +24,12 @@
                             audit context, net
     db/                     base, models, session, query — every model in models.py
     schemas/                only envelopes shared by every feature: Page, ErrorResponse
-    features/
-      products/             router.py  service.py  schemas.py
+    features/               each one with a README.md of its own
       users/                router.py  admin_router.py  service.py  schemas.py
+      brands/               admin_router.py  service.py  schemas.py  normalization.py
+      categories/           admin_router.py  service.py  schemas.py
+      attributes/           admin_router.py  service.py  schemas.py
+      countries/ currencies/ markets/        reference data
       audit/                router.py  service.py  schemas.py  middleware.py
       rate_limit/           service.py
       health/               router.py

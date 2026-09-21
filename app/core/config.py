@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     )
 
     # --- App ---
-    app_name: str = "Products API"
+    app_name: str = "salio-parsing"
     app_version: str = "0.1.0"
     environment: Literal["local", "dev", "staging", "production"] = "local"
     debug: bool = False

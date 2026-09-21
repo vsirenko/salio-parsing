@@ -116,7 +116,7 @@ def test_redact_scrubs_nested_structures():
 
 def test_client_traffic_is_not_audited(client):
     client.post("/api/auth/login", json=CUSTOMER)
-    client.get("/api/products")
+    client.get("/api/auth/me")
 
     token = admin_token(client)
     paths = {e["path"] for e in entries(client, token)}

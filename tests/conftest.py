@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.base import Base
-from app.db.models import Country, Currency, Product
+from app.db.models import Country, Currency
 
 # A separate database so a test run never touches development data.
 TEST_DATABASE_URL = os.getenv(
@@ -27,7 +27,6 @@ TEST_DATABASE_URL = os.getenv(
 TABLES = (
     "audit_entries",
     "login_attempts",
-    "products",
     "users",
     "markets",
     "attribute_value_aliases",
@@ -50,12 +49,6 @@ SEED_COUNTRIES = (
     ("EE", "Estonia", "EUR", True),
     ("LT", "Lithuania", "EUR", True),
     ("LV", "Latvia", "EUR", True),
-)
-
-SEED_PRODUCTS = (
-    ("Espresso machine", "499.99", ["kitchen", "coffee"]),
-    ("Ceramic mug", "14.50", ["kitchen"]),
-    ("Coffee beans 1kg", "24.00", ["coffee", "consumable"]),
 )
 
 
@@ -114,8 +107,6 @@ def clean_database(event_loop, schema):
             for code, name, currency_code, is_eu in SEED_COUNTRIES:
                 session.add(Country(code=code, name=name, currency_code=currency_code, is_eu=is_eu))
             await seed_users(session)
-            for name, price, tags in SEED_PRODUCTS:
-                session.add(Product(name=name, price=price, currency="EUR", tags=tags))
             await session.commit()
 
     event_loop.run_until_complete(reset())

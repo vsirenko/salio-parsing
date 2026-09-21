@@ -1,7 +1,8 @@
-# Products API
+# salio-parsing
 
 FastAPI service on PostgreSQL: authentication with two separate panels, an append-only
-audit trail, shared pagination, and a Docker image.
+audit trail, and shared pagination. Underneath it, the reference data and taxonomy of a
+price parser that is being built — see [docs/parser-design.md](docs/parser-design.md).
 
 Deliberately flat: route → service → schema. No repository pattern, no CQRS, no event bus.
 The tree is sliced by feature rather than by layer — everything one feature needs sits in
@@ -52,7 +53,7 @@ app/
     │   ├── admin_router.py  # /api/admin/auth/*, /api/admin/users/*
     │   ├── service.py
     │   └── schemas.py
-    ├── products/            # /api/products
+    ├── brands/              # /api/admin/brands
     ├── audit/               # middleware + /api/admin/audit, read-only
     ├── currencies/          # /api/admin/currencies, read-only reference data
     ├── countries/           # /api/admin/countries
@@ -108,9 +109,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 Demo accounts are created on startup while `SEED_USERS=true`.
 
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- OpenAPI JSON: http://localhost:8000/openapi.json
+- Swagger UI: http://localhost:8080/docs
+- ReDoc: http://localhost:8080/redoc
+- OpenAPI JSON: http://localhost:8080/openapi.json
 
 Set `DOCS_ENABLED=false` in production to hide all three.
 
@@ -228,7 +229,7 @@ Every variable is read from the environment or `.env` (see `.env.example`).
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `APP_NAME` | `Products API` | Title shown in Swagger |
+| `APP_NAME` | `salio-parsing` | Title shown in Swagger |
 | `APP_VERSION` | `0.1.0` | API version |
 | `ENVIRONMENT` | `local` | `local` / `dev` / `staging` / `production` |
 | `DEBUG` | `false` | FastAPI debug mode |
@@ -295,13 +296,16 @@ Both sign-in endpoints are rate limited per account and per address.
 | POST | `/api/admin/markets` | Open a market |
 | GET · PATCH | `/api/admin/markets/{code}` | Read or edit one — mainly `is_enabled` |
 
-**Open for now** (products are not behind auth yet)
+| GET · POST | `/api/admin/brands` | List and create brands |
+| GET | `/api/admin/brands/resolve` | What a string resolves to (`q`, `titles_only`) |
+| GET · PATCH | `/api/admin/brands/{brand_id}` | Read or edit one |
+| GET · POST | `/api/admin/categories` | The category tree |
+| GET · PATCH | `/api/admin/categories/{category_id}` | Read or edit one |
+| GET · POST | `/api/admin/attributes` | The canonical attribute registry |
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/products` | List products (`limit`, `offset`, `search`, `in_stock`) |
-| POST | `/api/products` | Create a product |
-| GET | `/api/products/{id}` | Get one product |
+> There is **no public read API yet.** Everything above `/api/auth` is admin-only, so the
+> customer panel can sign in and change its password and nothing else. The storefront is
+> not built.
 
 ### Access model
 
@@ -343,7 +347,7 @@ Two modes, one shape:
 
 | Mode | Parameters | Used by | Why |
 | --- | --- | --- | --- |
-| offset | `limit`, `offset` | products, users | Stable collections paged by position |
+| offset | `limit`, `offset` | users, countries, brands | Stable collections paged by position |
 | cursor | `limit`, `before_id` | audit | Append-only feed read newest-first |
 
 Offset paging drifts on an append-only feed: entries written between two requests push
@@ -427,85 +431,62 @@ with a traceback and returned as a generic 500 — internals never leak to the c
 
 ```bash
 # health
-curl http://localhost:8000/health
+curl http://localhost:8080/health
 
-# list
-curl "http://localhost:8000/api/products?limit=2&offset=0"
-
-# list + filters
-curl "http://localhost:8000/api/products?search=coffee&in_stock=true"
-
-# create
-curl -X POST http://localhost:8000/api/products \
-  -H "Content-Type: application/json" \
-  -d '{
-        "name": "Grinder",
-        "description": "Flat burr",
-        "price": 129.90,
-        "currency": "EUR",
-        "in_stock": true,
-        "tags": ["coffee"]
-      }'
-
-# one product
-curl http://localhost:8000/api/products/1
-
-# 404
-curl -i http://localhost:8000/api/products/9999
-
-# 422
-curl -i -X POST http://localhost:8000/api/products \
-  -H "Content-Type: application/json" \
-  -d '{"name": "", "price": -5}'
+# readiness — checks the database
+curl http://localhost:8080/health/ready
 ```
 
 ### Auth
 
 ```bash
 # customer sign-in
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "customer@example.com", "password": "customer-password"}' \
   | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
 
-curl http://localhost:8000/api/auth/me -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8080/api/auth/me -H "Authorization: Bearer $TOKEN"
 
 # admin sign-in (separate endpoint, separate audience)
-ADMIN=$(curl -s -X POST http://localhost:8000/api/admin/auth/login \
+ADMIN=$(curl -s -X POST http://localhost:8080/api/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "admin@example.com", "password": "admin-password"}' \
   | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
 
-curl http://localhost:8000/api/admin/users -H "Authorization: Bearer $ADMIN"
+curl http://localhost:8080/api/admin/users -H "Authorization: Bearer $ADMIN"
 
 # create a user from the admin panel
-curl -X POST http://localhost:8000/api/admin/users \
+curl -X POST http://localhost:8080/api/admin/users \
   -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
   -d '{"email": "new@example.com", "password": "password123", "role": "customer"}'
 
 # a client token is rejected by the admin API
-curl -i http://localhost:8000/api/admin/users -H "Authorization: Bearer $TOKEN"
+curl -i http://localhost:8080/api/admin/users -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Audit trail
 
 ```bash
 # everything the admins did, newest first
-curl "http://localhost:8000/api/admin/audit?limit=20" -H "Authorization: Bearer $ADMIN"
+curl "http://localhost:8080/api/admin/audit?limit=20" -H "Authorization: Bearer $ADMIN"
 
 # only what failed (rejected requests, bad sign-ins)
-curl "http://localhost:8000/api/admin/audit?outcome=failure" -H "Authorization: Bearer $ADMIN"
+curl "http://localhost:8080/api/admin/audit?outcome=failure" -H "Authorization: Bearer $ADMIN"
 
 # one admin, writes only, since a point in time
-curl "http://localhost:8000/api/admin/audit?actor_id=1&method=POST&since=2026-01-01T00:00:00Z" \
+curl "http://localhost:8080/api/admin/audit?actor_id=1&method=POST&since=2026-01-01T00:00:00Z" \
   -H "Authorization: Bearer $ADMIN"
 
 # walk the trail: follow next_cursor until it comes back null
-curl "http://localhost:8000/api/admin/audit?limit=50&before_id=120" -H "Authorization: Bearer $ADMIN"
+curl "http://localhost:8080/api/admin/audit?limit=50&before_id=120" -H "Authorization: Bearer $ADMIN"
 ```
 
 ## Extending
 
+- **Feature documentation** — every folder under `app/features/` holds a `README.md`, and
+  changing the feature means changing it in the same commit. `tests/test_architecture.py`
+  checks that one exists and that its endpoint table matches the live routes.
 - **New resource** — add `app/features/<thing>/` holding `schemas.py`, `service.py` and
   `router.py` (plus `admin_router.py` if the admin panel touches it), then mount it in
   `app/api/router.py` or `app/api/admin_router.py`. Mount it nowhere else.

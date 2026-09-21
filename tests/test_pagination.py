@@ -50,8 +50,10 @@ def test_next_cursor_only_in_cursor_mode():
 
 
 def test_limit_cap_is_enforced(client):
-    assert client.get("/api/products", params={"limit": 100}).status_code == 200
-    assert client.get("/api/products", params={"limit": 101}).status_code == 422
+    token = admin_token(client)
+    listing = "/api/admin/countries"
+    assert client.get(listing, params={"limit": 100}, headers=auth(token)).status_code == 200
+    assert client.get(listing, params={"limit": 101}, headers=auth(token)).status_code == 422
 
 
 def test_audit_has_its_own_wider_cap(client):
@@ -67,18 +69,22 @@ def test_audit_has_its_own_wider_cap(client):
 
 
 def test_negative_offset_is_rejected(client):
-    assert client.get("/api/products", params={"offset": -1}).status_code == 422
+    token = admin_token(client)
+    response = client.get("/api/admin/countries", params={"offset": -1}, headers=auth(token))
+    assert response.status_code == 422
 
 
 # --- offset paging ---
 
 
 def test_offset_paging_walks_the_collection(client):
-    first = client.get("/api/products", params={"limit": 2, "offset": 0}).json()
-    second = client.get("/api/products", params={"limit": 2, "offset": 2}).json()
+    token = admin_token(client)
+    listing = "/api/admin/countries"
+    first = client.get(listing, params={"limit": 2, "offset": 0}, headers=auth(token)).json()
+    second = client.get(listing, params={"limit": 2, "offset": 2}, headers=auth(token)).json()
 
-    assert [i["id"] for i in first["items"]] == [1, 2]
-    assert [i["id"] for i in second["items"]] == [3]
+    assert [i["code"] for i in first["items"]] == ["EE", "LT"]
+    assert [i["code"] for i in second["items"]] == ["LV"]
     assert first["has_more"] is True
     assert second["has_more"] is False
 

@@ -56,25 +56,6 @@ class User(Base):
     )
 
 
-class Product(Base):
-    __tablename__ = "products"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(200))
-    description: Mapped[str | None] = mapped_column(Text)
-    price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
-    currency: Mapped[str] = mapped_column(String(3), default="EUR")
-    in_stock: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
-    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
-
-    __table_args__ = (
-        CheckConstraint("price > 0", name="price_positive"),
-        # The service treats names case-insensitively; the database enforces it.
-        Index("uq_products_lower_name", func.lower(name), unique=True),
-    )
-
-
 class AuditEntry(Base):
     __tablename__ = "audit_entries"
 

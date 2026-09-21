@@ -18,7 +18,6 @@ from app.features.categories.service import CategoryService
 from app.features.countries.service import CountryService
 from app.features.currencies.service import CurrencyService
 from app.features.markets.service import MarketService
-from app.features.products.service import ProductService
 from app.features.rate_limit.service import LoginRateLimiter
 from app.features.users.schemas import Role, UserInDB
 from app.features.users.service import UserService
@@ -28,10 +27,6 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-
-
-def get_product_service(session: SessionDep) -> ProductService:
-    return ProductService(session)
 
 
 # Stateless: it holds the configured limits and reaches the counters through the

@@ -5,9 +5,6 @@ Tick items off here when they land so the list stays honest.
 
 ## Security — do before anything is exposed
 
-- [ ] **`POST /api/products` is open to everyone.** Auth exists but was never applied to
-      products. Decide the model: catalogue public for reads, writes admin-only, or the
-      whole thing behind a client token.
 - [ ] **Account lockout is a denial of service.** Rate limiting is per account, so
       someone who knows an email can keep that account locked by failing on purpose.
       The window caps it at roughly 15 minutes at a time, but it does not go away.
@@ -72,8 +69,11 @@ and the questions that have to be answered with real data first, are written dow
       forgotten password currently has no recovery path.
 - [ ] **No password rules.** Only a length between 8 and 128 is enforced. No check
       against a breach list, no rejection of the obvious ones.
-- [ ] **Products cannot be updated or deleted.** Create, list and get only.
 - [ ] **No email.** Nothing verifies an address or sends a reset link.
+
+- [ ] **There is no public read API at all.** Everything is behind `/api/admin`; the
+      customer panel can sign in and change its password and nothing else. Whatever the
+      storefront turns out to be, it reads through something that is not designed yet.
 
 ## Nice to have
 
