@@ -34,6 +34,7 @@ TABLES = (
     "attribute_aliases",
     "category_attributes",
     "attributes",
+    "price_events",
     "normalized_offers",
     "raw_offers",
     "offers",
@@ -95,6 +96,17 @@ def schema(event_loop):
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.drop_all)
                 await conn.run_sync(Base.metadata.create_all)
+                # `create_all` builds the partitioned parent and knows nothing about its
+                # partitions, which only the migration creates — so without this every
+                # insert into price_events fails with "no partition found for row". One
+                # default partition is enough here; that the monthly ones are right is the
+                # migration's business, not this fixture's.
+                await conn.execute(
+                    text(
+                        "create table if not exists price_events_default"
+                        " partition of price_events default"
+                    )
+                )
         finally:
             await engine.dispose()
 

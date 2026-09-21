@@ -929,3 +929,46 @@ class NormalizedOffer(Base):
         Index("ix_normalized_offers_gtin", "gtin"),
         Index("ix_normalized_offers_brand_raw", "brand_raw"),
     )
+
+
+class PriceEvent(Base):
+    """What a listing cost at a moment. A fact, and deliberately not an opinion.
+
+    Keyed by the offer rather than by the variant. "SKU-1 at RD cost 1179 on the first of
+    January" was true then and stays true whatever that listing later turns out to be — so a
+    wrong match cannot poison the history, and correcting one does not mean rewriting months
+    of rows. `variant_id` is carried alongside as a hint for queries and is rewritten when a
+    match changes, which touches one listing's rows rather than the table.
+
+    Changes only, never snapshots. Daily snapshots of a million offers are some 365 million
+    rows a year; recording the moves is smaller by more than an order of magnitude. A row is
+    written when the price moves *or* the availability does, because going out of stock is a
+    gap that means as much on a chart as a number.
+    """
+
+    __tablename__ = "price_events"
+
+    # The partition key has to be part of the primary key, which is why this is composite.
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(TimestampTZ, primary_key=True, server_default=func.now())
+    offer_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Denormalized from the offer so a chart can group without a join. They never change for
+    # a given offer, unlike the variant.
+    seller_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    market_code: Mapped[str] = mapped_column(String(2), nullable=False)
+    condition: Mapped[str] = mapped_column(String(12), nullable=False)
+    variant_id: Mapped[int | None] = mapped_column(Integer)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency_code: Mapped[str | None] = mapped_column(String(3))
+    availability: Mapped[str] = mapped_column(String(15), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("price is null or price >= 0", name="price_not_negative"),
+        Index("ix_price_events_offer_at", "offer_id", "at"),
+        Index("ix_price_events_variant_at", "variant_id", "condition", "at"),
+        # Monthly from the first migration. Retrofitting partitioning onto a table of this
+        # size is its own project, and there are no foreign keys out of it for the same
+        # reason: a partitioned table cannot be referenced, and the rows are facts that
+        # should outlive anything that might be deleted.
+        {"postgresql_partition_by": "RANGE (at)"},
+    )

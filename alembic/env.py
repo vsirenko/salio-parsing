@@ -1,7 +1,8 @@
 import asyncio
+from functools import lru_cache
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -58,12 +59,34 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def skip_partitions(object, name, type_, reflected, compare_to) -> bool:
+    """Keep autogenerate away from the partitions of a partitioned table.
+
+    A partition is a real table in the catalogue but it is not in the models, so
+    autogenerate reads it as something to drop — and `alembic check` fails on a schema that
+    is in fact correct. Postgres already knows which tables are partitions; asking it is
+    exact, where a name pattern would only be a guess.
+    """
+    return not (type_ == "table" and reflected and name in _partition_names())
+
+
+@lru_cache(maxsize=1)
+def _partition_names() -> frozenset[str]:
+    connection = context.get_bind()
+    if connection is None:
+        return frozenset()
+    rows = connection.execute(text("select relname from pg_class where relispartition")).scalars()
+    return frozenset(rows)
+
+
 def do_run_migrations(connection: Connection) -> None:
+    _partition_names.cache_clear()
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
+        include_object=skip_partitions,
     )
 
     with context.begin_transaction():

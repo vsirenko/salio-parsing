@@ -16,6 +16,10 @@ FEATURE_AGNOSTIC = ("core", "db", "schemas")
 # belongs in this dict with a reason, not in a module.
 ALLOWED_CROSS_FEATURE = {
     ("users", "rate_limit"): "sign-in counts its own failures",
+    ("offers", "prices"): (
+        "ingestion records a price change but does not decide when one counts;"
+        " that rule belongs with the table it writes to"
+    ),
 }
 
 

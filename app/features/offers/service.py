@@ -26,12 +26,16 @@ from app.features.offers.schemas import (
     RawOfferIngest,
     RawOfferRead,
 )
+from app.features.prices.service import PriceService
 from app.schemas.pagination import Pagination
 
 
 class OfferService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        # Ingestion records a price change; it does not decide when one counts. That rule
+        # is the same knowledge as what the history means, so it lives with the table.
+        self.prices = PriceService(session)
 
     # --- taking it in ---
 
@@ -78,6 +82,12 @@ class OfferService:
 
         reading = await self._store_reading(raw)
         self._apply_reading_to_offer(offer, reading)
+        await self.prices.record(
+            offer,
+            price=reading.price,
+            currency_code=reading.currency_code,
+            availability=reading.availability,
+        )
         await self.session.flush()
 
         audit.set_target("offer", offer.id)
@@ -105,6 +115,15 @@ class OfferService:
         reading = await self._store_reading(raw)
         offer = await self.session.get(Offer, raw.offer_id)
         self._apply_reading_to_offer(offer, reading)
+        if offer is not None:
+            # A re-read can change what we think the price was. If it does, that is a
+            # change in the series like any other.
+            await self.prices.record(
+                offer,
+                price=reading.price,
+                currency_code=reading.currency_code,
+                availability=reading.availability,
+            )
         await self.session.flush()
         audit.record_changes(raw_offer_id=raw_offer_id, ruleset_version=RULESET_VERSION)
         return NormalizedOfferRead.model_validate(reading)
