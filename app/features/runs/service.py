@@ -1,0 +1,261 @@
+"""One execution of one channel: starting it, judging it, and deciding what is due.
+
+The scheduler process is elsewhere. Everything it decides is here, as ordinary queries
+over `runs` and `sources` — so what it would do can be asserted without starting it.
+"""
+
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
+from croniter import CroniterBadCronError, croniter
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core import audit
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.db.models import Run, Source
+from app.db.query import paginated
+from app.features.runs.schemas import Check, Due, Kind, RunRead, RunResult, Status
+from app.schemas.pagination import Pagination
+
+# A slot missed by more than this is let go rather than caught up. A crawl six hours late
+# is answering a question nobody asked any more, and the next slot is along shortly.
+CATCH_UP = timedelta(hours=6)
+
+
+class RunService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    # --- starting ---
+
+    async def start(self, source_id: int, kind: Kind) -> RunRead:
+        source = await self._source(source_id)
+        audit.set_target("source", source_id)
+        if kind is Kind.QUICK and not source.delivers_quick:
+            raise ValidationError(
+                f"'{source.slug}' has no quick pass: it delivers nothing cheaply, so there"
+                " is nothing to run.",
+                code="no_quick_pass",
+            )
+
+        # Read off the row before the flush: a rollback expires the object, and reaching
+        # for it while handling the failure sends it back to the database mid-rollback.
+        slug = source.slug
+
+        run = Run(source_id=source_id, kind=kind.value, status=Status.RUNNING.value)
+        self.session.add(run)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            # The partial unique index. Two schedulers, or one and an impatient human.
+            await self.session.rollback()
+            raise ConflictError(f"A {kind.value} run of '{slug}' is already going") from exc
+
+        await self.session.refresh(run)
+        audit.record_changes(started_run=run.id, kind=kind.value)
+        return RunRead.model_validate(run)
+
+    # --- finishing ---
+
+    async def finish(self, run_id: int, result: RunResult) -> RunRead:
+        run = await self._run(run_id)
+        if run.finished_at is not None:
+            raise ConflictError(f"Run {run_id} already finished as '{run.status}'")
+
+        source = await self._source(run.source_id)
+        audit.set_target("source", run.source_id)
+
+        run.items_seen = result.items_seen
+        run.items_ingested = result.items_ingested
+        run.items_failed = result.items_failed
+        run.coverage = dict(result.coverage)
+        run.error = result.error
+        run.finished_at = datetime.now(UTC)
+
+        if result.error is not None:
+            # The worker itself broke. Judging its numbers would be judging a crash.
+            run.status = Status.FAILED.value
+            run.contract = {"verdict": "not_evaluated", "checks": []}
+        else:
+            checks = await self._contract(source, run)
+            passed = all(check.passed for check in checks)
+            run.status = (Status.OK if passed else Status.REJECTED).value
+            run.contract = {
+                "verdict": "ok" if passed else "rejected",
+                "checks": [check.model_dump(exclude_none=True) for check in checks],
+            }
+
+        await self.session.flush()
+        await self.session.refresh(run)
+        audit.record_changes(
+            finished_run=run.id, status=run.status, verdict=run.contract.get("verdict")
+        )
+        return RunRead.model_validate(run)
+
+    async def _contract(self, source: Source, run: Run) -> list[Check]:
+        """What this channel's own numbers have to look like for its absences to be believed.
+
+        Only facts the channel claims to deliver are asked about: checking price coverage
+        on a pass that never carries a price would reject every run of it forever.
+        """
+        checks: list[Check] = []
+
+        if source.min_items is not None:
+            checks.append(
+                Check(
+                    name="min_items",
+                    passed=run.items_seen >= source.min_items,
+                    got=run.items_seen,
+                    limit=source.min_items,
+                )
+            )
+
+        baseline = await self._last_ok_items(source.id, run.kind, before=run.id)
+        if baseline is None or baseline == 0:
+            checks.append(
+                Check(name="max_drop_pct", passed=True, note="no accepted run to compare against")
+            )
+        else:
+            # Measured against the last run that ended `ok`, not the previous run of this
+            # kind. Against the previous one, two broken crawls in a row pass the second:
+            # it fell only a little, from an already-wrong number.
+            dropped = max(0.0, (baseline - run.items_seen) / baseline * 100)
+            checks.append(
+                Check(
+                    name="max_drop_pct",
+                    passed=dropped <= source.max_drop_pct,
+                    got=round(dropped, 2),
+                    limit=float(source.max_drop_pct),
+                )
+            )
+
+        delivers = source.delivers_full if run.kind == Kind.FULL.value else source.delivers_quick
+        if "price" in delivers:
+            got = float(run.coverage.get("price", 0.0))
+            checks.append(
+                Check(
+                    name="min_price_coverage",
+                    passed=Decimal(str(got)) >= source.min_price_coverage,
+                    got=got,
+                    limit=float(source.min_price_coverage),
+                )
+            )
+
+        return checks
+
+    # --- what the scheduler decides ---
+
+    async def sweep(self) -> int:
+        """Close every live run as interrupted. Called once, at scheduler startup.
+
+        Not a timeout: the scheduler is single by construction, so anything still running
+        when it starts has no process behind it. The count is also an honest metric — it
+        is how often we are being killed.
+        """
+        result = await self.session.execute(
+            update(Run)
+            .where(Run.finished_at.is_(None))
+            .values(status=Status.INTERRUPTED.value, finished_at=datetime.now(UTC))
+        )
+        return result.rowcount or 0
+
+    async def due(self, *, now: datetime | None = None) -> list[Due]:
+        """Which channels should be started right now.
+
+        Reads the most recent slot at or before `now` rather than projecting forward from
+        the last run: a channel that has never run, or that was off for a week, would
+        otherwise have its next slot computed from a point so far back that it is always
+        outside the catch-up window and never starts at all.
+        """
+        now = now or datetime.now(UTC)
+        sources = (
+            await self.session.scalars(select(Source).where(Source.is_enabled.is_(True)))
+        ).all()
+        last_started = await self._last_started()
+        live = await self._live()
+
+        due: list[Due] = []
+        for source in sources:
+            for kind, expression in (
+                (Kind.FULL, source.cron_full),
+                (Kind.QUICK, source.cron_quick),
+            ):
+                if not expression or (source.id, kind.value) in live:
+                    continue
+                try:
+                    slot = croniter(expression, now).get_prev(datetime)
+                except (CroniterBadCronError, ValueError):
+                    # A malformed cron stops that channel, not the whole tick.
+                    continue
+
+                last = last_started.get((source.id, kind.value))
+                if last is not None and last >= slot:
+                    continue
+                if now - slot > CATCH_UP:
+                    continue
+                due.append(Due(source_id=source.id, kind=kind, due_at=slot))
+
+        return sorted(due, key=lambda item: (item.due_at, item.source_id))
+
+    async def _last_started(self) -> dict[tuple[int, str], datetime]:
+        rows = await self.session.execute(
+            select(Run.source_id, Run.kind, func.max(Run.started_at)).group_by(
+                Run.source_id, Run.kind
+            )
+        )
+        return {(source_id, kind): started for source_id, kind, started in rows.all()}
+
+    async def _live(self) -> set[tuple[int, str]]:
+        rows = await self.session.execute(
+            select(Run.source_id, Run.kind).where(Run.finished_at.is_(None))
+        )
+        return {(source_id, kind) for source_id, kind in rows.all()}
+
+    async def _last_ok_items(self, source_id: int, kind: str, *, before: int) -> int | None:
+        return await self.session.scalar(
+            select(Run.items_seen)
+            .where(
+                Run.source_id == source_id,
+                Run.kind == kind,
+                Run.status == Status.OK.value,
+                Run.id != before,
+            )
+            .order_by(Run.started_at.desc(), Run.id.desc())
+            .limit(1)
+        )
+
+    # --- reading it back ---
+
+    async def runs(
+        self,
+        pagination: Pagination,
+        *,
+        source_id: int | None = None,
+        status: Status | None = None,
+    ) -> tuple[list[RunRead], int]:
+        stmt = select(Run)
+        if source_id is not None:
+            stmt = stmt.where(Run.source_id == source_id)
+        if status is not None:
+            stmt = stmt.where(Run.status == status.value)
+        rows, total = await paginated(
+            self.session, stmt.order_by(Run.started_at.desc(), Run.id.desc()), pagination
+        )
+        return [RunRead.model_validate(row) for row in rows], total
+
+    async def get(self, run_id: int) -> RunRead:
+        return RunRead.model_validate(await self._run(run_id))
+
+    async def _run(self, run_id: int) -> Run:
+        run = await self.session.get(Run, run_id)
+        if run is None:
+            raise NotFoundError(f"Run {run_id} not found")
+        return run
+
+    async def _source(self, source_id: int) -> Source:
+        source = await self.session.get(Source, source_id)
+        if source is None:
+            raise NotFoundError(f"Source {source_id} not found")
+        return source

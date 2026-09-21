@@ -50,7 +50,13 @@ def setup_source(client, token, *, marketplace=False):
         client,
         token,
         f"/api/admin/shops/{shop['id']}/sources",
-        {"slug": "rd-feed", "kind": "feed", "trust": "high"},
+        {
+            "slug": "rd-feed",
+            "access": "wholesale",
+            "decode": "xml",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "trust": "high",
+        },
     )
     return shop, source
 
@@ -177,7 +183,14 @@ def test_two_channels_of_one_shop_converge_on_one_listing(client):
         client,
         token,
         f"/api/admin/shops/{shop['id']}/sources",
-        {"slug": "rd-site", "kind": "scrape", "trust": "low"},
+        {
+            "slug": "rd-site",
+            "access": "retail",
+            "decode": "markup",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "delivers_quick": ["price"],
+            "trust": "low",
+        },
     )
 
     body = {"external_id": "SKU-1", "market_code": "LV", "payload": FEED_ROW}

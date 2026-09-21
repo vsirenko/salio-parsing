@@ -195,13 +195,26 @@ def test_a_shop_may_have_several_sources(client):
         client,
         token,
         f"/api/admin/shops/{shop['id']}/sources",
-        {"slug": "rd-feed", "kind": "feed", "trust": "high"},
+        {
+            "slug": "rd-feed",
+            "access": "wholesale",
+            "decode": "xml",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "trust": "high",
+        },
     )
     post(
         client,
         token,
         f"/api/admin/shops/{shop['id']}/sources",
-        {"slug": "rd-site", "kind": "scrape", "trust": "low"},
+        {
+            "slug": "rd-site",
+            "access": "retail",
+            "decode": "markup",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "delivers_quick": ["price"],
+            "trust": "low",
+        },
     )
 
     sources = client.get(f"/api/admin/shops/{shop['id']}/sources", headers=auth(token)).json()
@@ -219,7 +232,12 @@ def test_a_source_starts_disabled_and_is_switched_on_separately(client):
         client,
         token,
         f"/api/admin/shops/{shop['id']}/sources",
-        {"slug": "rd-feed", "kind": "feed"},
+        {
+            "slug": "rd-feed",
+            "access": "wholesale",
+            "decode": "xml",
+            "delivers_full": ["catalogue", "price", "availability"],
+        },
     )
     assert source["is_enabled"] is False
     assert source["trust"] == "medium"
@@ -233,6 +251,95 @@ def test_a_source_starts_disabled_and_is_switched_on_separately(client):
     assert updated["trust"] == "high"
 
 
+def test_a_quick_pass_cannot_reach_past_the_full_one(client):
+    """A cheap request cannot bring back more than an expensive one."""
+    token = admin_token(client)
+    shop = add_shop(client, token)
+    response = client.post(
+        f"/api/admin/shops/{shop['id']}/sources",
+        headers=auth(token),
+        json={
+            "slug": "rd-site",
+            "access": "retail",
+            "decode": "markup",
+            "delivers_full": ["catalogue", "price"],
+            "delivers_quick": ["price", "availability"],
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "quick_exceeds_full"
+
+
+def test_a_wholesale_channel_has_no_quick_pass(client):
+    """One request already returns everything, so there is nothing cheaper to run."""
+    token = admin_token(client)
+    shop = add_shop(client, token)
+    response = client.post(
+        f"/api/admin/shops/{shop['id']}/sources",
+        headers=auth(token),
+        json={
+            "slug": "rd-feed",
+            "access": "wholesale",
+            "decode": "xml",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "delivers_quick": ["price"],
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "wholesale_has_no_quick_pass"
+
+
+def test_narrowing_the_full_pass_is_checked_against_the_row(client):
+    """The update sends one field; the rule spans two, and the other one is already stored."""
+    token = admin_token(client)
+    shop = add_shop(client, token)
+    source = post(
+        client,
+        token,
+        f"/api/admin/shops/{shop['id']}/sources",
+        {
+            "slug": "rd-site",
+            "access": "retail",
+            "decode": "markup",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "delivers_quick": ["price", "availability"],
+        },
+    )
+    response = client.patch(
+        f"/api/admin/sources/{source['id']}",
+        headers=auth(token),
+        json={"delivers_full": ["catalogue", "price"]},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "quick_exceeds_full"
+
+
+def test_two_channels_into_one_shop_can_reach_different_things(client):
+    """The reason a channel is the unit: same shop, same products, different coverage."""
+    token = admin_token(client)
+    shop = add_shop(client, token)
+    for slug, decode, quick in (("rd-index", "private_api", []), ("rd-site", "markup", ["price"])):
+        post(
+            client,
+            token,
+            f"/api/admin/shops/{shop['id']}/sources",
+            {
+                "slug": slug,
+                "access": "retail",
+                "decode": decode,
+                "delivers_full": ["catalogue", "price", "availability"],
+                "delivers_quick": quick,
+            },
+        )
+
+    sources = client.get(f"/api/admin/shops/{shop['id']}/sources", headers=auth(token)).json()
+    by_slug = {s["slug"]: s for s in sources}
+    assert by_slug["rd-index"]["delivers_quick"] == []
+    assert by_slug["rd-site"]["delivers_quick"] == ["price"]
+    # Fresh availability costs a full crawl on both, and that is a budget fact, not a bug.
+    assert all("availability" not in s["delivers_quick"] for s in sources)
+
+
 def test_trust_and_rating_are_different_things(client):
     """One is how much we believe the channel, the other what buyers think of the shop."""
     token = admin_token(client)
@@ -241,7 +348,14 @@ def test_trust_and_rating_are_different_things(client):
         client,
         token,
         f"/api/admin/shops/{shop['id']}/sources",
-        {"slug": "rd-site", "kind": "scrape", "trust": "low"},
+        {
+            "slug": "rd-site",
+            "access": "retail",
+            "decode": "markup",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "delivers_quick": ["price"],
+            "trust": "low",
+        },
     )
     assert shop["rating"] == "4.50"
     assert source["trust"] == "low"

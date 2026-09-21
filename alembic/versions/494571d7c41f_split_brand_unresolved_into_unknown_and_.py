@@ -16,9 +16,10 @@ down_revision: Union[str, Sequence[str], None] = '661f69288bd6'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# op.f() marks the name as final: the metadata naming convention would otherwise prefix
-# "ck_match_queue_" onto a name that already carries it.
-CONSTRAINT = op.f("ck_match_queue_reason_known")
+# The literal name. It is passed through op.f() at the call sites rather than here: the
+# proxy is not established while the module is merely imported, which is what `alembic
+# revision` does to every file in the directory.
+CONSTRAINT = "ck_match_queue_reason_known"
 
 
 def upgrade() -> None:
@@ -35,10 +36,10 @@ def upgrade() -> None:
     so a row landing there is at worst more work than it needed, never a wrong answer. The
     matcher rewrites the reason on its next pass over that offer anyway.
     """
-    op.drop_constraint(CONSTRAINT, "match_queue", type_="check")
+    op.drop_constraint(op.f(CONSTRAINT), "match_queue", type_="check")
     op.execute("update match_queue set reason = 'brand_unknown' where reason = 'brand_unresolved'")
     op.create_check_constraint(
-        CONSTRAINT,
+        op.f(CONSTRAINT),
         "match_queue",
         "reason in ('brand_unknown', 'brand_ambiguous', 'no_signals',"
         " 'signals_unmatched', 'ambiguous', 'low_confidence')",
@@ -47,13 +48,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint(CONSTRAINT, "match_queue", type_="check")
+    op.drop_constraint(op.f(CONSTRAINT), "match_queue", type_="check")
     op.execute(
         "update match_queue set reason = 'brand_unresolved'"
         " where reason in ('brand_unknown', 'brand_ambiguous')"
     )
     op.create_check_constraint(
-        CONSTRAINT,
+        op.f(CONSTRAINT),
         "match_queue",
         "reason in ('brand_unresolved', 'no_signals', 'signals_unmatched',"
         " 'ambiguous', 'low_confidence')",

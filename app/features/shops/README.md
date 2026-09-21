@@ -24,9 +24,9 @@ switching its markets off — which keeps the history instead of losing it.
 
 - A **shop** is the commercial party a buyer deals with. It has a name, a logo, a rating
   among buyers, and it is what somebody picks on a card.
-- A **source** is the channel we read bytes through — a feed, an API, a scraped site. Its
-  `trust` says how much that channel's data is worth, which has nothing to do with whether
-  the shop is any good.
+- A **source** is one way into a shop. Not the shop and not its website: a shop can have
+  several, and they do not reach the same things. Its `trust` says how much that channel's
+  data is worth, which has nothing to do with whether the shop is any good.
 - A **seller** is who is actually selling. For an ordinary shop that is the shop itself;
   for a marketplace it is one of thousands of traders behind it.
 
@@ -35,6 +35,27 @@ hung off the source, that one shop would become two sellers, the same listing tw
 two lines in the price history and two shops on the card. With the split, both channels
 converge on one offer and `raw_offer.source_id` remembers which saw it — which is also how a
 barcode from the feed and a description from the page end up on the same row.
+
+**A channel declares three things, and format is the least of them.**
+
+| | |
+|---|---|
+| `access` | `wholesale` — one request returns everything; `retail` — a listing, then a request per product. This is what decides the schedule. |
+| `decode` | `json_ld`, `embedded_state`, `graphql`, `private_api`, `xml`, `markup`. A swappable function and nothing more. |
+| `delivers_full` / `delivers_quick` | which of `catalogue`, `price`, `availability` each pass actually brings back. |
+
+`delivers_quick` is the one that is easy to get wrong and expensive to discover. Whether a
+cheap pass carries stock is a property of the channel, not a general rule, and it decides
+whether fresh availability costs a full crawl — a budget fact worth knowing before anything
+is promised to a shopper. Two rules are enforced, in the service for a usable message and in
+the database as the backstop: a quick pass cannot deliver what the full one does not, and a
+wholesale channel has no quick pass at all, because one request is already everything.
+
+Why the unit is a channel rather than a shop: two shops of one group can run the same search
+engine behind the same code and differ only in which index is queried, one carrying barcodes
+for every product and the other for none. Read as "a shop without barcodes", that sends
+someone to parse titles for thousands of listings; read as a channel, the answer is a second
+door into the same shop.
 
 **A shop's country is not a market.** `country_code` points at `countries`: a German shop
 delivering to Riga needs a row even though we run no German storefront. Where its offers

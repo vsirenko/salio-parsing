@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    desc,
     func,
     text,
 )
@@ -758,10 +759,16 @@ class ShopMarket(Base):
 
 
 class Source(Base):
-    """A channel we read a shop's offers through.
+    """One way into a shop, not the shop and not its website.
 
-    `trust` belongs here rather than on the shop: a feed that carries barcodes is more
-    reliable than a title scraped out of markup, and that says nothing about whether the
+    A shop can have several, and they do not reach the same things: two shops of one group
+    can run the same search engine behind the same code and differ only in which index is
+    queried, one carrying barcodes for every product and the other for none. Calling that
+    "a shop without barcodes" sends someone to parse titles for thousands of listings when
+    the answer is a second channel into the same shop.
+
+    `trust` belongs here rather than on the shop: data read out of a structured document is
+    worth more than a value recovered from markup, and that says nothing about whether the
     shop is any good. When offers disagree, this is what breaks the tie.
     """
 
@@ -770,16 +777,63 @@ class Source(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id", ondelete="CASCADE"))
     slug: Mapped[str] = mapped_column(String(64), unique=True)
-    kind: Mapped[str] = mapped_column(String(10))
+    # How many requests a product costs, which is what decides the schedule. `wholesale`
+    # returns everything in one request or a few pages; `retail` needs a listing and then
+    # a request per product.
+    access: Mapped[str] = mapped_column(String(10))
+    # How a response turns into fields. The smallest and most replaceable part: most shops
+    # already publish machine-readable product data inside the page, for search engines or
+    # for their own front end, and reading markup is the fallback for what is left.
+    decode: Mapped[str] = mapped_column(String(20))
+    # Which facts each pass actually brings back. A property of the channel, not a general
+    # rule: some listings carry stock and some carry only a price, and the difference
+    # decides whether fresh availability costs a full crawl.
+    delivers_full: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    delivers_quick: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
     trust: Mapped[str] = mapped_column(String(10), default="medium", server_default="medium")
     base_url: Mapped[str | None] = mapped_column(String(1000))
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # When each pass runs. An empty cron is how a pass is switched off; there is no second
+    # flag beside it that could disagree with it.
+    cron_full: Mapped[str | None] = mapped_column(String(64))
+    cron_quick: Mapped[str | None] = mapped_column(String(64))
+    # What this channel's own numbers have to look like for a run to be believed. Per
+    # channel because fifteen items and nine hundred are both normal somewhere.
+    min_items: Mapped[int | None] = mapped_column(Integer)
+    max_drop_pct: Mapped[int] = mapped_column(SmallInteger, default=30, server_default="30")
+    min_price_coverage: Mapped[Decimal] = mapped_column(
+        Numeric(3, 2), default=Decimal("0.98"), server_default="0.98"
+    )
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
-        CheckConstraint("kind in ('feed', 'api', 'scrape')", name="kind_known"),
+        CheckConstraint("access in ('wholesale', 'retail')", name="access_known"),
+        # Scheduling a pass that brings back nothing is a config error, not a cheap run.
+        CheckConstraint(
+            "cron_quick is null or cardinality(delivers_quick) > 0",
+            name="quick_cron_needs_a_quick_pass",
+        ),
+        CheckConstraint("min_items is null or min_items > 0", name="min_items_positive"),
+        CheckConstraint("max_drop_pct between 0 and 100", name="drop_is_a_percentage"),
+        CheckConstraint("min_price_coverage between 0 and 1", name="coverage_is_a_fraction"),
+        CheckConstraint(
+            "decode in ('json_ld', 'embedded_state', 'graphql', 'private_api', 'xml', 'markup')",
+            name="decode_known",
+        ),
         CheckConstraint("trust in ('high', 'medium', 'low')", name="trust_known"),
+        CheckConstraint(
+            "delivers_full <@ array['catalogue', 'price', 'availability']::text[]"
+            " and cardinality(delivers_full) > 0",
+            name="delivers_full_known",
+        ),
+        # A cheap pass cannot bring back more than an expensive one.
+        CheckConstraint("delivers_quick <@ delivers_full", name="quick_within_full"),
+        # A wholesale channel has no cheap pass: it is already everything.
+        CheckConstraint(
+            "access <> 'wholesale' or cardinality(delivers_quick) = 0",
+            name="wholesale_has_no_quick_pass",
+        ),
         Index("ix_sources_shop_id", "shop_id"),
     )
 
@@ -1142,4 +1196,66 @@ class JudgeVerdict(Base):
         CheckConstraint("kind in ('brand_choice')", name="kind_known"),
         CheckConstraint("confidence between 0 and 1", name="confidence_is_a_fraction"),
         Index("ix_judge_verdicts_kind_created", "kind", "created_at"),
+    )
+
+
+class Run(Base):
+    """One execution of one channel, and the scheduler's entire memory.
+
+    There is no separate scheduler state because this answers both questions it has: when
+    did this last run, and is it running now. `next_run_at` is deliberately not a column —
+    it would be a cache of `cron + last run` that goes stale the moment somebody edits the
+    schedule, leaving two sources of truth to disagree silently.
+
+    The status is what a run is *for*. A channel that returns three products instead of
+    nine hundred has not lied about the three: they are real and writing them harms
+    nothing. The damage is concluding that the eight hundred and ninety-seven unseen ones
+    are gone — so the contract gates that inference and nothing else, and no staging
+    mechanism is needed to hold a batch until it is judged.
+    """
+
+    __tablename__ = "runs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(12), default="running", server_default="running")
+
+    started_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
+
+    items_seen: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    items_ingested: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    items_failed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # Measured, per field. `delivers_*` on the channel says what it is shaped to give;
+    # this says what it gave. The gap between the two is the alarm: a channel whose gtin
+    # was 0.95 last week and is 0.10 today is a shop that changed something, found the day
+    # it happens rather than a month later through matching quietly getting worse.
+    coverage: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    contract: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    error: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("kind in ('full', 'quick')", name="kind_known"),
+        CheckConstraint(
+            "status in ('running', 'ok', 'rejected', 'failed', 'interrupted')",
+            name="status_known",
+        ),
+        # A live run is exactly a row without finished_at. Without this the status and the
+        # timestamp drift apart and "what is running" stops being one query.
+        CheckConstraint(
+            "(status = 'running') = (finished_at is null)", name="finished_matches_status"
+        ),
+        # One live run per channel and kind, held by the database rather than by the hope
+        # that there is only ever one scheduler.
+        Index(
+            "uq_runs_one_live",
+            "source_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("finished_at is null"),
+        ),
+        # Both "when did this last run" and "the last one that ended ok" read from here.
+        Index("ix_runs_source_kind_started", "source_id", "kind", desc("started_at")),
     )

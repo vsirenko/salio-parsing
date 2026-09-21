@@ -325,10 +325,19 @@ def test_a_service_failure_is_reported_and_not_stored(judged):
 
 
 def test_judging_is_off_without_a_key(client):
-    """The key is the only switch. A flag beside it could disagree with it."""
-    token = admin_token(client)
-    body = client.post("/api/admin/matching/judge", headers=auth(token)).json()
-    assert body["error"]["code"] == "judge_disabled"
+    """The key is the only switch. A flag beside it could disagree with it.
+
+    Forced off rather than assumed off: settings are loaded from the developer's own
+    `.env`, so a test that reads it passes or fails depending on whose machine runs it.
+    """
+    previous = settings.typesafe_api_key
+    settings.typesafe_api_key = None
+    try:
+        token = admin_token(client)
+        body = client.post("/api/admin/matching/judge", headers=auth(token)).json()
+        assert body["error"]["code"] == "judge_disabled"
+    finally:
+        settings.typesafe_api_key = previous
 
 
 def test_judging_requires_an_admin_token(client):

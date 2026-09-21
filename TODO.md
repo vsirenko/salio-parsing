@@ -16,6 +16,10 @@ Tick items off here when they land so the list stays honest.
 
 ## Operations
 
+- [ ] **Tests read the developer's `.env`.** Settings are one module-level instance built
+      from it, so a value set locally changes what the suite asserts — it has already made
+      one test pass or fail depending on whose machine ran it. The fix is a settings
+      override for the test session, not a `finally` in each test that happens to care.
 - [ ] **No CI.** Nothing runs the tests, ruff or `alembic check` on a pull request.
       GitHub Actions on the same commands the hooks use locally.
 - [ ] **Nothing prunes `judge_verdicts`.** The store only grows, and a question keyed by a

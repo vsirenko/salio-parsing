@@ -9,6 +9,8 @@ from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.db.models import Country, Market, Seller, Shop, ShopGroup, ShopMarket, Source
 from app.db.query import paginated
 from app.features.shops.schemas import (
+    Access,
+    Fact,
     SellerCreate,
     SellerRead,
     ShopCreate,
@@ -187,6 +189,13 @@ class ShopService:
         await self._shop(shop_id)
         audit.set_target("shop", shop_id)
 
+        self._check_delivers(payload.access, payload.delivers_full, payload.delivers_quick)
+        if payload.cron_quick and not payload.delivers_quick:
+            raise ValidationError(
+                "A quick cron on a channel with no quick pass would schedule a run that"
+                " brings nothing back.",
+                code="quick_cron_needs_a_quick_pass",
+            )
         source = Source(shop_id=shop_id, **payload.model_dump(mode="json"))
         self.session.add(source)
         try:
@@ -196,7 +205,7 @@ class ShopService:
             raise ConflictError(f"The slug '{payload.slug}' is already taken") from exc
 
         await self.session.refresh(source)
-        audit.record_changes(added_source=payload.slug, kind=payload.kind.value)
+        audit.record_changes(added_source=payload.slug, **payload.model_dump(mode="json"))
         return SourceRead.model_validate(source)
 
     async def update_source(self, source_id: int, payload: SourceUpdate) -> SourceRead:
@@ -204,19 +213,74 @@ class ShopService:
         audit.set_target("shop", source.shop_id)
         sent = payload.model_dump(exclude_unset=True, mode="json")
 
-        if payload.kind is not None:
-            source.kind = payload.kind.value
+        if payload.access is not None:
+            source.access = payload.access.value
+        if payload.decode is not None:
+            source.decode = payload.decode.value
+        if payload.delivers_full is not None:
+            source.delivers_full = [fact.value for fact in payload.delivers_full]
+        if payload.delivers_quick is not None:
+            source.delivers_quick = [fact.value for fact in payload.delivers_quick]
+        # Checked against what the row will hold, not against what was sent: a partial
+        # update that only narrows the full pass can still leave the quick one reaching
+        # past it.
+        self._check_delivers(
+            Access(source.access),
+            [Fact(f) for f in source.delivers_full],
+            [Fact(f) for f in source.delivers_quick],
+        )
         if payload.trust is not None:
             source.trust = payload.trust.value
         if "base_url" in sent:
             source.base_url = payload.base_url
         if payload.is_enabled is not None:
             source.is_enabled = payload.is_enabled
+        if "cron_full" in sent:
+            source.cron_full = payload.cron_full
+        if "cron_quick" in sent:
+            source.cron_quick = payload.cron_quick
+        if "min_items" in sent:
+            source.min_items = payload.min_items
+        if payload.max_drop_pct is not None:
+            source.max_drop_pct = payload.max_drop_pct
+        if payload.min_price_coverage is not None:
+            source.min_price_coverage = payload.min_price_coverage
+        self._check_schedule(source)
 
         await self.session.flush()
         await self.session.refresh(source)
         audit.record_changes(source_id=source_id, **sent)
         return SourceRead.model_validate(source)
+
+    @staticmethod
+    def _check_schedule(source: Source) -> None:
+        """Checked against the row, because narrowing either side breaks the pairing."""
+        if source.cron_quick and not source.delivers_quick:
+            raise ValidationError(
+                "A quick cron on a channel with no quick pass would schedule a run that"
+                " brings nothing back.",
+                code="quick_cron_needs_a_quick_pass",
+            )
+
+    @staticmethod
+    def _check_delivers(access: Access, full: list[Fact], quick: list[Fact]) -> None:
+        """The two rules the caller gets wrong, named rather than left to a constraint.
+
+        The database holds both as well, but a check-constraint violation arrives as one
+        undifferentiated IntegrityError and would have to be guessed at.
+        """
+        beyond = sorted({fact.value for fact in quick} - {fact.value for fact in full})
+        if beyond:
+            raise ValidationError(
+                f"The quick pass cannot deliver what the full one does not: {', '.join(beyond)}",
+                code="quick_exceeds_full",
+            )
+        if access is Access.WHOLESALE and quick:
+            raise ValidationError(
+                "A wholesale channel has no quick pass — one request already returns"
+                " everything, so there is nothing cheaper to run.",
+                code="wholesale_has_no_quick_pass",
+            )
 
     # --- who is selling ---
 

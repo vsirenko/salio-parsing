@@ -55,6 +55,198 @@ and everything after it must be re-runnable over stored raw data without going b
 the network. That is not a convenience. Matching rules get rewritten hundreds of times,
 and each rewrite is worth only what it costs to re-apply to the corpus already held.
 
+## Collection
+
+The pipeline above starts at `SOURCE` and says nothing about how anything arrives there.
+This is that part: what a source is, what running one means, and what decides when.
+
+### A channel, not a site
+
+The unit is not a shop and not a website. It is one way into a shop, and a shop can have
+several with different reach.
+
+The evidence is unambiguous. Two Baltic shops of the same group run the same search
+engine behind the same code, differing only in which index is queried:
+
+| channel | engine | barcode coverage |
+|---|---|---|
+| shop A | search index | 100% |
+| shop B | same index engine, own index | 0% |
+
+The second index simply does not carry the field. The products have barcodes; the channel
+does not deliver them. Calling that "a site without barcodes" would send us to build
+title parsing for thousands of listings when the answer is a second channel into the same
+shop.
+
+`sources` is already shaped this way — "a channel we read a shop's offers through". What
+is wrong today is only `kind`, which records a format.
+
+### Format is the smallest part
+
+Three shapes get confused into one axis: how a response is decoded, how many requests a
+product costs, and which facts each request carries. Only the first is about format, and
+it is the one that matters least.
+
+Most shops publish machine-readable product data inside the page — for search engines
+(JSON-LD, microdata), for their own front end (embedded state blobs), or on a private
+endpoint the front end calls. Reading markup with selectors is the fallback for what is
+left over, not the normal case. A survey of thirteen shops found markup parsing genuinely
+needed in four of them, twice as a supplement to JSON-LD rather than instead of it.
+
+So the work of adding a channel is **finding where the data already is**, not writing
+selectors. And when selectors are needed, they are cheap: a small shared helper layer over
+lxml, never BeautifulSoup — on a 400 KB page the same two dozen selectors cost 60–90 ms
+under soupsieve against 3 ms to build the tree in lxml, and lxml releases the GIL while
+BeautifulSoup holds it for the whole parse. In an async worker that difference is not
+speed, it is whether one slow document stalls every other request in flight.
+
+### What a channel declares
+
+```
+access     wholesale   one request (or a few pages) returns everything
+           retail      listing, then a request per product
+
+decode     json-ld | embedded-state | graphql | private-api | xml | markup
+
+delivers   full:   [catalogue, price, availability]
+           quick:  [price]
+```
+
+`access` decides cost and therefore the schedule. `decode` is a function, swappable
+without touching anything else. `delivers` is the one that is easy to get wrong.
+
+**What a cheap pass carries is a property of the channel, not a general rule.** Some
+listings show price and stock; some show price only; a wholesale feed has no cheap pass at
+all, because it is already everything. A single "the listing may lag" flag cannot express
+this, and the difference is not cosmetic: when availability lives only on the product
+page, fresh availability costs a full crawl, and that is a budget fact to know before
+promising anything to a shopper.
+
+### Declared against measured
+
+`delivers` is what a channel is shaped to give. Coverage is what it actually gave, counted
+on every run:
+
+```
+coverage  {"price": 0.99, "availability": 0.87, "gtin": 0.68, "mpn": 0.55}
+```
+
+The two are different claims and the gap between them is the alarm. A channel that
+declares catalogue signals and measures `gtin: 0.00` is the case above — reaching the
+right shop through the wrong door. A channel whose `gtin` was 0.95 last week and is 0.10
+today is a shop that changed something, found the day it happens rather than a month later
+through matching quietly getting worse.
+
+### Two kinds of run, and only two
+
+```
+FULL                            QUICK
+listing → every product page    listing only
+once a day                      several times a day
+      │                               │
+      ├─► raw_offers                  │   does not touch the catalogue
+      ├─► normalized_offers           │
+      ├─► offers                      ├─► offers.last_seen_at
+      ├─► price_events                ├─► price_events
+      └─► availability_events         └─► availability_events
+```
+
+A dedicated stock endpoint is not a third kind. It is another channel into the same shop,
+whose full run happens to carry availability and nothing else — which the channel model
+already covers and the scheduler needs no new concept for.
+
+### A partial observation must not overwrite a complete one
+
+Matching stands on the newest reading of a listing. If a cheap pass wrote one, then four
+hours after a full crawl the newest reading would be the partial one: a price, no barcode,
+no part number, no model. A listing placed by barcode an hour earlier would fall into
+`no_signals`, nothing would fail, and the catalogue would come apart several times a day.
+
+> **A catalogue reading is written only by an observation that carries catalogue signals.**
+> An observation that brought a price and a stock state writes those facts and does not
+> become the reading anything is matched on.
+
+Stated by content rather than by run kind, so it also covers a channel that delivers only
+availability.
+
+### Runs are the scheduler's memory
+
+There is no separate scheduler state. `runs` answers both questions it has: when did this
+last run, and is it running now.
+
+```
+source_id  kind   status    started_at  finished_at
+items_seen        what the channel returned
+items_ingested    what we accepted
+items_failed      what would not parse
+coverage          measured, per field
+contract          which checks ran and what they found
+error             tail of stderr when it crashed
+```
+
+`next_run_at` is deliberately not a column. It is a cache of `cron + last run`, and it goes
+stale the moment someone edits the schedule — leaving two sources of truth that disagree
+silently. Seventy channels recomputed every tick costs nothing.
+
+### The lifecycle, and what each end means
+
+```
+                    insert
+                      │
+                 ┌────▼────┐
+                 │ running │   finished_at is null
+                 └────┬────┘
+        ┌─────────────┼─────────────┬──────────────┐
+   contract ok   contract failed  crashed     scheduler started
+        ▼             ▼             ▼              ▼
+    ┌──────┐    ┌──────────┐   ┌────────┐   ┌─────────────┐
+    │  ok  │    │ rejected │   │ failed │   │ interrupted │
+    └──────┘    └──────────┘   └────────┘   └─────────────┘
+```
+
+`interrupted` is swept at startup, not timed out: the scheduler is single by construction,
+so anything still running when it starts is dead by definition. The count of them is also
+an honest metric — it is how often we are being killed.
+
+### The contract gates absence, not writes
+
+A shop changes its markup and the channel returns three products instead of nine hundred.
+The instinct is to hold the batch until it is judged, which buys a staging mechanism.
+
+It is not needed. Those three observations are real and writing them harms nothing. The
+damage is concluding that the eight hundred and ninety-seven unseen ones are gone.
+
+> **Only a run that ended `ok` earns the right to treat what it did not see as gone.**
+
+Everything else writes normally. Thresholds are per channel, because nine hundred and
+fifteen are both normal somewhere: `min_items`, `max_drop_pct`, `min_price_coverage`.
+
+A drop is measured against the last run that ended `ok`, not the last run of that kind.
+Against the previous run, two broken crawls in a row pass the second one — it fell only a
+little, from an already-wrong number.
+
+### One scheduler, held by the database
+
+Inside the API process a scheduler duplicates per worker and dies with it, so it is its
+own process: the same image, a different command.
+
+Single instance is a Postgres advisory lock rather than a row. A lock held in a table needs
+a TTL, a heartbeat and a way to steal a stale one — three mechanisms, each with its own
+race. An advisory lock is released when the connection drops, which is exactly the
+semantics wanted and none of the machinery. It has to be held on a dedicated connection:
+a pooled one will be recycled and take the lock with it.
+
+Workers are subprocesses rather than a queue. One machine, on the order of seventy
+channels; a queue here would be infrastructure for its own sake. The boundary that matters
+is already HTTP — a worker posts into the ingestion endpoint like anything else — so
+moving workers onto other machines later adds a claim endpoint and changes nothing about
+how a channel is written.
+
+Bounded on purpose: a measurement on a comparable 4 vCPU box showed two concurrent crawls
+being killed four times for memory, while a single channel ran at roughly ten times the
+per-item rate it managed with a dozen running beside it. Concurrency is a setting, and its
+default is low.
+
 ## Principles
 
 ### Raw is kept; everything after it is recomputable

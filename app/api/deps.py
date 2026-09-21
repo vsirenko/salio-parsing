@@ -24,6 +24,7 @@ from app.features.matching.service import MatchingService
 from app.features.offers.service import OfferService
 from app.features.prices.service import PriceService
 from app.features.rate_limit.service import LoginRateLimiter
+from app.features.runs.service import RunService
 from app.features.shops.service import ShopService
 from app.features.users.schemas import Role, UserInDB
 from app.features.users.service import UserService
@@ -102,6 +103,10 @@ def get_matching_service(session: SessionDep, judge: JudgeServiceDep) -> Matchin
     return MatchingService(session, judge=judge)
 
 
+def get_run_service(session: SessionDep) -> RunService:
+    return RunService(session)
+
+
 def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
@@ -119,6 +124,7 @@ ShopServiceDep = Annotated[ShopService, Depends(get_shop_service)]
 OfferServiceDep = Annotated[OfferService, Depends(get_offer_service)]
 PriceServiceDep = Annotated[PriceService, Depends(get_price_service)]
 MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]
+RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 
