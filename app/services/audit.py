@@ -9,6 +9,7 @@ import asyncio
 from datetime import UTC, datetime
 
 from app.schemas.audit import AuditEntry, AuditEntryCreate, Outcome
+from app.schemas.pagination import Pagination
 
 
 class AuditService:
@@ -31,9 +32,8 @@ class AuditService:
 
     async def list_entries(
         self,
+        pagination: Pagination,
         *,
-        limit: int = 50,
-        offset: int = 0,
         actor_id: int | None = None,
         method: str | None = None,
         path: str | None = None,
@@ -43,6 +43,10 @@ class AuditService:
     ) -> tuple[list[AuditEntry], int]:
         items = list(self._items.values())
 
+        # Cursor: everything written before the anchor. Applied like any other filter,
+        # so `total` stays consistent with what the caller asked for.
+        if pagination.before_id is not None:
+            items = [e for e in items if e.id < pagination.before_id]
         if actor_id is not None:
             items = [e for e in items if e.actor_id == actor_id]
         if method:
@@ -58,7 +62,7 @@ class AuditService:
 
         # Newest first: an audit trail is read from the most recent event backwards.
         items.sort(key=lambda e: e.id, reverse=True)
-        return items[offset : offset + limit], len(items)
+        return pagination.slice(items), len(items)
 
 
 audit_service = AuditService()

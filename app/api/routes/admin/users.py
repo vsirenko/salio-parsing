@@ -5,28 +5,28 @@ Mounted on the guarded admin router, so every route here already requires an adm
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import UserServiceDep
-from app.schemas.common import ErrorResponse, Page
+from app.api.pagination import pagination_params
+from app.schemas.common import ErrorResponse
+from app.schemas.pagination import Page, Pagination
 from app.schemas.user import Role, UserCreate, UserRead
 
 router = APIRouter(prefix="/users", tags=["admin: users"])
+
+PageParams = Annotated[Pagination, Depends(pagination_params())]
 
 
 @router.get("", response_model=Page[UserRead], summary="List users")
 async def list_users(
     users: UserServiceDep,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    pagination: PageParams,
     role: Annotated[Role | None, Query(description="Filter by role")] = None,
 ) -> Page[UserRead]:
-    items, total = await users.list_users(limit=limit, offset=offset, role=role)
-    return Page[UserRead](
-        items=[UserRead.model_validate(u, from_attributes=True) for u in items],
-        total=total,
-        limit=limit,
-        offset=offset,
+    items, total = await users.list_users(pagination, role=role)
+    return Page[UserRead].of(
+        [UserRead.model_validate(u, from_attributes=True) for u in items], total, pagination
     )
 
 

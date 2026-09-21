@@ -17,6 +17,7 @@ app/
 ├── main.py                 # app factory: CORS, routers, error handlers, lifespan
 ├── api/
 │   ├── deps.py             # shared deps + auth guards
+│   ├── pagination.py       # limit/offset/before_id query dependencies
 │   ├── router.py           # client routes    -> /api/*
 │   ├── admin_router.py     # admin routes     -> /api/admin/*, guarded at router level
 │   └── routes/
@@ -36,7 +37,8 @@ app/
 │   ├── audit_middleware.py # writes one audit record per admin request
 │   └── logging.py
 ├── schemas/
-│   ├── common.py           # ErrorResponse, Page[T], HealthResponse
+│   ├── common.py           # ErrorResponse, HealthResponse
+│   ├── pagination.py       # Page[T] envelope + Pagination value object
 │   ├── auth.py             # Audience, TokenPair, LoginRequest
 │   ├── audit.py            # AuditEntry, Outcome
 │   ├── user.py             # Role, UserCreate / UserRead / UserInDB
@@ -200,7 +202,7 @@ for one panel carries an `aud` claim the other panel rejects.
 | GET | `/api/admin/users` | List users (`limit`, `offset`, `role`) |
 | POST | `/api/admin/users` | Create a user |
 | GET | `/api/admin/users/{id}` | Get one user |
-| GET | `/api/admin/audit` | Read the audit trail |
+| GET | `/api/admin/audit` | Read the audit trail (cursor paging) |
 
 **Open for now** (products are not behind auth yet)
 
@@ -225,6 +227,38 @@ for one panel carries an `aud` claim the other panel rejects.
 
 > Refresh tokens are stateless, so signing out everywhere is not possible yet. Add a `jti`
 > denylist (Redis) or rotation when that is needed.
+
+### Pagination
+
+Every list endpoint returns the same envelope and takes its paging parameters from a
+shared dependency in `app/api/pagination.py`, so bounds and defaults are declared once.
+
+```json
+{ "items": [], "total": 42, "limit": 20, "offset": 0, "next_cursor": null, "has_more": true }
+```
+
+Two modes, one shape:
+
+| Mode | Parameters | Used by | Why |
+| --- | --- | --- | --- |
+| offset | `limit`, `offset` | products, users | Stable collections paged by position |
+| cursor | `limit`, `before_id` | audit | Append-only feed read newest-first |
+
+Offset paging drifts on an append-only feed: entries written between two requests push
+everything down, so page 2 repeats rows page 1 already showed. Cursor paging anchors to
+an id instead — follow `next_cursor` until it comes back `null`.
+
+```python
+PageParams = Annotated[Pagination, Depends(pagination_params())]  # 1..100, default 20
+PageParams = Annotated[Pagination, Depends(cursor_pagination_params(max_limit=200))]  # cursor mode
+```
+
+A service takes the `Pagination` object and returns `(items, total)`; the route wraps it
+with `Page[Model].of(items, total, pagination)`. Nothing slices lists by hand.
+
+> In cursor mode `before_id` is applied as a filter, so `total` reports what remains from
+> the anchor rather than the size of the whole feed. That is what makes the walk terminate
+> exactly, with no trailing empty page.
 
 ### Audit trail
 
@@ -356,6 +390,9 @@ curl "http://localhost:8000/api/admin/audit?outcome=failure" -H "Authorization: 
 # one admin, writes only, since a point in time
 curl "http://localhost:8000/api/admin/audit?actor_id=1&method=POST&since=2026-01-01T00:00:00Z" \
   -H "Authorization: Bearer $ADMIN"
+
+# walk the trail: follow next_cursor until it comes back null
+curl "http://localhost:8000/api/admin/audit?limit=50&before_id=120" -H "Authorization: Bearer $ADMIN"
 ```
 
 ## Extending

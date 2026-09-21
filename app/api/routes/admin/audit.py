@@ -7,20 +7,26 @@ middleware and nothing else.
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import AuditServiceDep
+from app.api.pagination import cursor_pagination_params
 from app.schemas.audit import AuditEntry, Outcome
-from app.schemas.common import Page
+from app.schemas.pagination import Page, Pagination
 
 router = APIRouter(prefix="/audit", tags=["admin: audit"])
+
+# The trail is append-only and read newest-first, so it pages by cursor: offset would
+# repeat rows as new entries arrive between requests.
+PageParams = Annotated[
+    Pagination, Depends(cursor_pagination_params(default_limit=50, max_limit=200))
+]
 
 
 @router.get("", response_model=Page[AuditEntry], summary="Read the audit trail")
 async def list_audit_entries(
     audit: AuditServiceDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    pagination: PageParams,
     actor_id: Annotated[int | None, Query(description="Filter by the admin who acted")] = None,
     method: Annotated[str | None, Query(description="HTTP method, e.g. POST")] = None,
     path: Annotated[str | None, Query(description="Substring of the request path")] = None,
@@ -29,8 +35,7 @@ async def list_audit_entries(
     until: Annotated[datetime | None, Query(description="Entries at or before this time")] = None,
 ) -> Page[AuditEntry]:
     items, total = await audit.list_entries(
-        limit=limit,
-        offset=offset,
+        pagination,
         actor_id=actor_id,
         method=method,
         path=path,
@@ -38,4 +43,4 @@ async def list_audit_entries(
         since=since,
         until=until,
     )
-    return Page[AuditEntry](items=items, total=total, limit=limit, offset=offset)
+    return Page[AuditEntry].of(items, total, pagination)

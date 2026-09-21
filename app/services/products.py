@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.core.exceptions import ConflictError, NotFoundError
+from app.schemas.pagination import Pagination
 from app.schemas.product import ProductCreate, ProductRead
 
 
@@ -41,9 +42,8 @@ class ProductService:
 
     async def list_products(
         self,
+        pagination: Pagination,
         *,
-        limit: int = 20,
-        offset: int = 0,
         search: str | None = None,
         in_stock: bool | None = None,
     ) -> tuple[list[ProductRead], int]:
@@ -57,7 +57,7 @@ class ProductService:
             items = [p for p in items if p.in_stock is in_stock]
 
         items.sort(key=lambda p: p.id)
-        return items[offset : offset + limit], len(items)
+        return pagination.slice(items), len(items)
 
     async def get_product(self, product_id: int) -> ProductRead:
         product = self._items.get(product_id)

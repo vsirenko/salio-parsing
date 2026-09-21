@@ -1,4 +1,4 @@
-"""Schemas shared across endpoints."""
+"""Schemas shared across endpoints. Pagination lives in schemas/pagination.py."""
 
 from typing import Any
 
@@ -15,15 +15,6 @@ class ErrorResponse(BaseModel):
     """Every non-2xx response from this API has this shape."""
 
     error: ErrorDetail
-
-
-class Page[T](BaseModel):
-    """Simple offset-based page of items."""
-
-    items: list[T]
-    total: int = Field(description="Total number of items matching the query")
-    limit: int
-    offset: int
 
 
 class HealthResponse(BaseModel):

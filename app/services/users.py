@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import AuthError, hash_password, verify_password
 from app.schemas.auth import Audience
+from app.schemas.pagination import Pagination
 from app.schemas.user import Role, UserCreate, UserInDB
 
 # Dev-only accounts. `seed_users` is forced off in production by Settings.
@@ -68,11 +69,11 @@ class UserService:
         return next((u for u in self._items.values() if u.email == needle), None)
 
     async def list_users(
-        self, *, limit: int = 20, offset: int = 0, role: Role | None = None
+        self, pagination: Pagination, *, role: Role | None = None
     ) -> tuple[list[UserInDB], int]:
         items = [u for u in self._items.values() if role is None or u.role is role]
         items.sort(key=lambda u: u.id)
-        return items[offset : offset + limit], len(items)
+        return pagination.slice(items), len(items)
 
     async def create_user(self, payload: UserCreate) -> UserInDB:
         async with self._lock:
