@@ -140,8 +140,12 @@ category has, and which of those attributes make one variant different from anot
 **Catalogue** is what identity produces: brands, products, variants, and the merge trails
 that let a wrong answer be corrected without destroying what it replaced.
 
-**Commerce** is what flows through the pipeline: sources, sellers, listings, the raw bytes
-behind them, the matches linking them to variants, and the price history that falls out.
+**Markets and shops** is where trade happens: the storefronts we run, the shops whose
+offers appear in them, the channels we read those offers through, and the sellers behind
+them.
+
+**Offers and prices** is what flows through the pipeline: listings, the raw bytes behind
+them, the matches linking them to variants, and the price history that falls out.
 
 Two of those tables carry most of the weight and are easy to get wrong.
 
@@ -254,124 +258,172 @@ only where they are obvious.
 
 ### The full shape
 
-Three groups. The taxonomy and the catalogue are what identity is decided against; the
-commerce side is what flows through the pipeline into them.
+Four groups. The taxonomy and the catalogue are what identity is decided against; markets
+and shops are where trade happens; offers and prices are what flows through the pipeline
+into them. `[built]` marks what exists in the database today — where it does, the table is
+named in the plural (`countries`, `currencies`, `markets`) while this document names the
+entity in the singular throughout.
 
 ```
+-- Where and in what money ----------------------------------------------------
+
+currency       code char(3) PK, name, symbol, minor_units              [built]
+country        code char(2) PK, name, currency_code -> currency,       [built]
+               vat_standard_rate NULL, is_eu
+market         code char(2) PK -> country.code, name,                  [built]
+               slug UNIQUE, languages[], is_enabled
+               CHECK cardinality(languages) > 0
+
+-- Who is selling ------------------------------------------------------------
+
+shop_group     id, slug UNIQUE, name           -- one brand across countries; optional
+shop           id, shop_group_id NULL, country_code -> country,
+               slug UNIQUE, name, website, is_marketplace, rating NULL
+shop_market    shop_id, market_code, is_enabled     -- where its offers are shown
+               PK (shop_id, market_code)
+source         id, shop_id, kind(feed|api|scrape), trust, base_url, is_enabled
+seller         id, shop_id, external_id, name
+               UNIQUE (shop_id, external_id)
+
 -- Taxonomy -------------------------------------------------------------------
 
-category              id, parent_id NULL, slug UNIQUE, name,
-                      is_visible,                  -- what an operator sets
-                      is_visible_effective,        -- own AND every ancestor; recomputed
-                      identity_ready               -- attributes defined, extraction wired
-
-attribute_def         id, category_id, key, name,
-                      value_type(enum|number|bool|text),
-                      unit_dimension(mass|volume|length|count) NULL,
-                      identity_bearing             -- the variant axes
-                      UNIQUE (category_id, key)
-
-attribute_value       id, attribute_def_id, canonical, position
-attribute_value_alias attribute_value_id, alias, origin(rule|judge|human)
-                                                   -- "Natural Titanium" = "Titan Natur"
-
-source_category_map   source_id, source_path, category_id, mapped_by, mapped_at
-                      UNIQUE (source_id, source_path)   -- unmapped rows are the queue
+category       id, parent_id NULL, slug UNIQUE, name,
+               is_visible, is_visible_effective, identity_ready
+category_market_stats  category_id, market_code, offer_count, refreshed_at
+attribute_def  id, category_id, key, name, value_type,
+               unit_dimension NULL, identity_bearing
+attribute_value        id, attribute_def_id, canonical, position
+attribute_value_alias  attribute_value_id, alias, language NULL, origin
+source_category_map    source_id, source_path, category_id, mapped_by, mapped_at
+               UNIQUE (source_id, source_path)
 
 -- Catalogue ------------------------------------------------------------------
 
-brand                 id, canonical_name, slug UNIQUE
-brand_alias           id, brand_id, alias UNIQUE, origin(rule|judge|human), confidence
-                                                   -- where the judge's verdicts land
+brand          id, slug UNIQUE, canonical_name
+brand_alias    id, brand_id, alias UNIQUE, origin(rule|judge|human), confidence
+product        id, slug UNIQUE, brand_id, category_id, title, is_visible
+product_merge  from_id, into_id, merged_at, reason, decided_by
+variant        id, slug UNIQUE, product_id NULL, brand_id, category_id, title,
+               kind(single|multipack|bundle), unit_count,
+               identity_attrs JSONB, identity_key NULL UNIQUE
+               CHECK (kind = 'multipack') = (unit_count > 1)
+variant_gtin   variant_id, gtin, origin, first_seen_at        -- INDEX (gtin)
+variant_mpn    variant_id, brand_id, mpn_normalized, origin, first_seen_at
+                                                              -- INDEX (brand_id, mpn)
+variant_merge  from_id, into_id, merged_at, reason, decided_by
+variant_component      bundle_id, component_variant_id, qty
 
-product               id, brand_id, category_id, title, is_visible
-product_merge         from_id, into_id, merged_at, reason, decided_by
+-- Offers and prices ----------------------------------------------------------
 
-variant               id,
-                      product_id NULL,             -- ungrouped until it is grouped
-                      brand_id, category_id, title,
-                      kind(single|multipack|bundle), unit_count,
-                      identity_attrs JSONB,        -- base units: 500 g and 0.5 kg agree
-                      identity_key NULL UNIQUE     -- only when every axis is extracted
-                      CHECK ((kind = 'multipack') = (unit_count > 1))
-
-variant_gtin          variant_id, gtin, origin, first_seen_at
-                      PK (variant_id, gtin), INDEX (gtin)     -- the exact-match lookup
-variant_mpn           variant_id, brand_id, mpn_normalized, origin, first_seen_at
-                      INDEX (brand_id, mpn_normalized)        -- brand denormalized on
-                                                              -- purpose: the block is
-                                                              -- the pair, not the mpn
-variant_merge         from_id, into_id, merged_at, reason, decided_by
-variant_component     bundle_id, component_variant_id, qty    -- only when kind = bundle
-
--- Commerce -------------------------------------------------------------------
-
-source                id, slug, name, kind(feed|api|scrape), trust(high|medium|low),
-                      base_url, is_enabled
-
-seller                id, source_id, external_id, name,
-                      country,                     -- ISO 3166-1 alpha-2: VAT and
-                                                   -- delivery differ across the EU
-                      UNIQUE (source_id, external_id)
-
-offer                 id, seller_id, external_id, url,
-                      condition(new|refurbished|used), condition_grade NULL,
-                      price, currency,             -- as the buyer sees it, VAT included
-                      availability(in_stock|out_of_stock|preorder|unknown),
-                      first_seen_at, last_seen_at
-                      UNIQUE (seller_id, external_id)
-                                                   -- the listing's stable identity;
-                                                   -- price here is the latest reading,
-                                                   -- derived and recomputable
-raw_offer             id, offer_id, payload, content_hash, fetched_at, last_seen_at
-                      UNIQUE (offer_id, content_hash)   -- one row per distinct content
-normalized_offer      id, raw_offer_id, ruleset_version,
-                      title, brand_id NULL, category_id NULL,
-                      gtin NULL, mpn NULL, model NULL,
-                      attributes JSONB, price, currency, condition
-
-offer_match           id, offer_id, variant_id, method, confidence, evidence JSONB,
-                      decided_at, decided_by, superseded_at NULL
-                      UNIQUE (offer_id) WHERE superseded_at IS NULL
-                                                   -- the match belongs to the listing,
-                                                   -- not to one observation of it
-
-price_event           id, variant_id, seller_id, condition, price, currency, at
-                      PARTITION BY RANGE (at)      -- monthly, from the first migration
-                      INDEX (variant_id, condition, at DESC)
-
-judge_verdict         pair_fingerprint UNIQUE, verdict, reason, model, decided_at
+offer          id, seller_id, market_code, external_id, url,
+               condition(new|refurbished|used), condition_grade NULL,
+               price, currency_code, availability, first_seen_at, last_seen_at
+               UNIQUE (seller_id, external_id)
+raw_offer      id, offer_id, source_id, payload, content_hash,
+               fetched_at, last_seen_at
+               UNIQUE (offer_id, content_hash)
+normalized_offer       id, raw_offer_id, ruleset_version,
+               title, brand_id NULL, category_id NULL,
+               gtin NULL, mpn NULL, model NULL,
+               attributes JSONB, price, currency_code, condition
+offer_match    id, offer_id, variant_id, method, confidence, evidence JSONB,
+               decided_at, decided_by, superseded_at NULL
+               UNIQUE (offer_id) WHERE superseded_at IS NULL
+price_event    id, variant_id, seller_id, market_code, condition,
+               price, currency_code, at
+               PARTITION BY RANGE (at)
+               INDEX (variant_id, condition, at DESC)
+judge_verdict  pair_fingerprint UNIQUE, verdict, reason, model, decided_at
 ```
 
-Three things in there are decisions rather than plumbing:
+Four things in there are decisions rather than plumbing:
 
 **There is no `variant_id` on `offer`.** The active match is the row in `offer_match`
 whose `superseded_at` is null, held to one by a partial unique index. A column would be
 faster to read and would quietly destroy the previous answer on every re-match.
 
-**`offer` is separate from `raw_offer`.** The listing is a thing that persists across
-fetches; the raw rows are observations of it. Without that split, every fetch produces a
-new offer and the match has to be made again from nothing each time.
+**`offer` is separate from `raw_offer`.** The listing persists across fetches; the raw
+rows are observations of it. Without that split, every fetch produces a new offer and the
+match has to be made again from nothing each time.
+
+**`source` and `seller` both hang off `shop`, separately.** A shop with a feed and a
+scraper is one shop, one seller and one offer, with `raw_offer.source_id` remembering
+which channel saw it. Hang the seller off the source instead and the same shop becomes
+two sellers, the same listing two offers, two lines in the price history and two shops on
+the card.
 
 **`brand_id` is repeated on `variant_mpn`.** A part number is only meaningful next to its
 brand — two manufacturers reuse the same string freely — so the index has to be over the
 pair, and that means the brand sits on the row.
 
-### Region and currency
+### Slugs are entered where a human creates the row
 
-One domain, Europe, euro. `currency` stays a column rather than an assumption: the phrase
-was "on this domain", other domains are therefore possible, and adding a currency to
-`price_event` later is the migration this model has twice been shaped to avoid.
+A slug is a public URL, so it must not move on its own. Deriving it from a name means a
+rename silently breaks every link to the thing. So `shop`, `category`, `brand` and
+`market` have their slug entered, with generation offered as a suggestion in the form and
+nothing more. The database checks the shape, because a malformed slug is a 404 that looks
+like an application bug.
 
-What one currency does not buy is one market. VAT is 19% in Germany and 23% in Portugal,
-and both shops show the buyer a price with their own rate inside it. So the price is
-stored exactly as the buyer sees it, and `seller.country` is stored next to it — not to
-correct for the difference, but so that the difference can be explained rather than
-looking like a better deal.
+That rule cannot hold where the machine creates the row. Products and variants arrive
+from offers in their millions, so their slug is derived from the title with the id
+appended — `iphone-15-pro-128gb-14237`. Collisions become impossible by construction, and
+a retitle does not break the link because the tail survives.
 
-Whether a seller delivers to the buyer's country is a property of the seller, and until
-it is modelled, "cheapest" on a card is cheapest for someone, not necessarily for the
-person reading it.
+The slug never replaces the key. A natural key is right where the code comes from outside
+and does not change (`EUR`, `LV`); where the identifier is ours and editable, the row
+keeps a stable key and the slug is a unique column beside it.
+
+`market.slug` is the exception worth naming: changing it moves every URL of a storefront
+rather than one page, so until there is a redirect table, a live market's slug is fixed.
+
+### Markets, shops and where money is charged
+
+The storefronts are Latvia first, then Lithuania and Estonia, all in euro. Adding one has
+to be data rather than a release, which is what shapes the three entities below.
+
+**A market is a country we have decided to sell in.** `country` holds every country we
+need to be able to describe — a German shop delivering to Riga needs a row there — and
+`market` holds the storefronts. The country code is the market's primary key and its
+foreign key at once, so two markets in one country are impossible by construction rather
+than by convention. It is also what `offer` and `price_event` carry, where two characters
+instead of an eight-byte id is worth a couple of gigabytes.
+
+**A market is created disabled.** It is wired into the parsers, its categories are mapped,
+and only then is it shown. That is what makes adding Lithuania a process rather than a
+release, and nothing about it is seeded: countries and currencies are facts about the
+world and belong in a migration, opening a market is a decision.
+
+**A language is not a market.** Latvia read in Russian is the same prices, the same shops
+and the same delivery, so languages are an ordered list on the market and the first one is
+the default. Splitting them into two markets would double the catalogue for a UI toggle.
+
+**A shop is not a source.** The shop is the commercial party a buyer deals with; the
+source is the channel we get bytes through, and its trust — a feed carrying barcodes is
+not a title scraped out of markup — has nothing to do with the shop's rating among
+buyers. One shop may have several sources.
+
+**A seller is scoped to its shop.** An ordinary shop has exactly one, which is the shop
+itself. A marketplace has thousands, and treating the marketplace as the seller would draw
+one price line through forty independent traders and present the gaps between them as
+movement. Deliberately not modelled: the same trader on two marketplaces. That is a second
+identity problem which buys nothing for price comparison.
+
+**One currency does not mean one market.** VAT differs across Latvia, Lithuania and
+Estonia, and it changes — Estonia raised its rate recently. Each shop shows a buyer a
+price with a rate already inside it, so the price is stored exactly as the buyer sees it
+and the rate is kept on the country only to explain a difference, never to recompute one.
+The rate is nullable and unknown by default, because a wrong rate explains a difference
+wrongly and silently.
+
+`currency` stays a column on `price_event` rather than being derived from the market. The
+market's currency is a mutable lookup; a recorded price has to say what it was in, or
+editing one row of a reference table retroactively rewrites the meaning of the whole
+history.
+
+**Whether a shop delivers to the buyer** is `shop_market`, and it carries its own
+`is_enabled`: a shop may deliver to Lithuania while we choose not to show it there yet.
+Until that table is populated, "cheapest" on a card is cheapest for somebody, not
+necessarily for the person reading it.
 
 ### Open questions on this model
 
@@ -379,8 +431,12 @@ person reading it.
 2. **Does a variant ever move category?** Its identity key is computed from that
    category's identity-bearing attributes, so moving it invalidates the key and every
    match the key produced.
-3. **Does a seller deliver to the buyer?** Until that is modelled, the cheapest offer on
-   a card is cheapest for somebody, not necessarily for the person reading it.
+3. **How is a shop's delivery reach discovered?** `shop_market` records it, but nothing
+   fills it in: a feed rarely states which countries it ships to, and a scraped page
+   states it in prose.
+4. **What happens to a slug when a shop is renamed?** There is no redirect table, so a
+   changed slug is a dead link. For a market it is worse — every page of that storefront
+   moves at once.
 
 ## Categories and visibility
 
@@ -413,6 +469,22 @@ categories are few, the recompute is instant, and the storefront filter becomes 
 on an index instead of a recursion. This is not an optimisation to add later — a query
 that recurses per row cannot be rescued afterwards.
 
+### Empty is hidden without anyone deciding it
+
+Visibility above is one flag for all markets, and that is deliberate. Launching Lithuania
+with three shops leaves most categories with nothing in them there, and they should not
+appear — but the reason is not editorial, it is that there is nothing to show. That is
+computable, so it is computed.
+
+A flag per category per market would be the obvious alternative and is worse: the
+editorial work would multiply by the number of markets, to express something the data
+already knows.
+
+The cost is honest and worth naming. "Does this category have an offer in Lithuania" over
+millions of offers is not a question to ask per page view, so `category_market_stats`
+keeps the count and a job refreshes it. A storefront tolerates that being a few minutes
+stale — a category does not need to appear the instant its first offer lands.
+
 ### Visibility is a storefront concept only
 
 The public API filters on it. **The admin API never does.** Whoever administers the
@@ -429,20 +501,6 @@ hidden. Nothing half-understood reaches the storefront, and nothing is lost on t
 Unmapped source categories accumulate into a queue. Mapping one by hand moves the whole
 batch of variants behind it into a real category, and hands them the identity-key fast
 path at the same time.
-
-### A seller is scoped to its source
-
-Price history is keyed by seller, so the word has to mean something exact. A seller is
-the party actually selling, identified within one source — not across sources.
-
-An ordinary shop has exactly one seller, which is the shop itself, so nothing is
-complicated by this. A marketplace has thousands behind one source, and treating that
-source as the seller would draw a single price line through forty independent traders,
-presenting the gaps between them as movement.
-
-Deliberately not modelled: the same trader appearing on two marketplaces. That is a
-second identity problem, it buys nothing for price comparison, and it can be added later
-without touching what is stored.
 
 ### Managing a category is an audited action
 
@@ -491,6 +549,12 @@ one is answered.
    defined per category, and that work does not generalise.
 4. **How fresh does a price have to be?** This sets the crawl budget, and the crawl
    budget sets everything about the fetch layer.
+5. **How much does the Baltic language mix cost the matcher?** The same television is
+   `Samsung televizors`, `Samsung televizorius` and `Samsung teler`, plus Russian and
+   English on the same sites. Fuzzy title comparison barely works across that, which
+   raises the weight of brand and part number — both language-neutral — and lowers the
+   weight of anything reading a title. Worth measuring alongside the first question,
+   because it decides where the effort goes.
 
 ## Deliberately not decided yet
 
