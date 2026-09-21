@@ -14,6 +14,7 @@ from starlette.requests import Request
 from starlette.types import ASGIApp
 
 from app.core.audit import open_context
+from app.core.net import client_ip
 from app.schemas.audit import AuditEntryCreate
 from app.services.audit import record_entry
 
@@ -27,15 +28,6 @@ class AuditMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.path_prefix = path_prefix
         self.trust_proxy_headers = trust_proxy_headers
-
-    def _client_ip(self, request: Request) -> str | None:
-        # X-Forwarded-For is trivially spoofable unless a trusted proxy rewrites it,
-        # so it is only read when the deployment says there is one.
-        if self.trust_proxy_headers:
-            forwarded = request.headers.get("x-forwarded-for")
-            if forwarded:
-                return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else None
 
     async def dispatch(self, request: Request, call_next):
         if not request.url.path.startswith(self.path_prefix):
@@ -62,7 +54,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 target_type=context.target_type,
                 target_id=context.target_id,
                 changes=context.changes or None,
-                ip=self._client_ip(request),
+                ip=client_ip(request, trust_proxy_headers=self.trust_proxy_headers),
                 user_agent=request.headers.get("user-agent"),
                 duration_ms=int((perf_counter() - started) * 1000),
             )

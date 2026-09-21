@@ -7,11 +7,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import UserServiceDep
+from app.api.deps import CurrentAdmin, UserServiceDep
 from app.api.pagination import pagination_params
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
-from app.schemas.user import Role, UserCreate, UserRead
+from app.schemas.user import Role, UserCreate, UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["admin: users"])
 
@@ -48,4 +48,28 @@ async def create_user(payload: UserCreate, users: UserServiceDep) -> UserRead:
 )
 async def get_user(user_id: int, users: UserServiceDep) -> UserRead:
     user = await users.get_user(user_id)
+    return UserRead.model_validate(user)
+
+
+@router.patch(
+    "/{user_id}",
+    response_model=UserRead,
+    summary="Update a user",
+    responses={
+        404: {"model": ErrorResponse, "description": "User not found"},
+        409: {"model": ErrorResponse, "description": "Would remove your own access"},
+    },
+)
+async def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    users: UserServiceDep,
+    current_admin: CurrentAdmin,
+) -> UserRead:
+    """Edit name, role or active flag.
+
+    Deactivation is how an account is retired: the audit trail points at the user row,
+    so there is no delete here and deliberately no service method behind one.
+    """
+    user = await users.update_user(user_id, payload, actor_id=current_admin.id)
     return UserRead.model_validate(user)

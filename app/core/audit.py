@@ -16,6 +16,7 @@ SENSITIVE_KEYS = frozenset(
     {
         "password",
         "new_password",
+        "current_password",
         "password_hash",
         "secret",
         "secret_key",

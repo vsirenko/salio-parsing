@@ -41,6 +41,12 @@ class User(Base):
         TimestampTZ, server_default=func.now(), onupdate=func.now()
     )
     last_login_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
+    # Every token carries the epoch it was minted at; only the current one is accepted.
+    # Bumping this ends every session the account has, which is what a password change
+    # must do — the tokens are stateless, so revocation has to live on the account.
+    # A counter rather than a timestamp because JWT `iat` holds whole seconds, and a
+    # token minted in the same second as the change would survive a time comparison.
+    token_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     __table_args__ = (
         CheckConstraint("role in ('customer', 'admin')", name="role_known"),
@@ -93,4 +99,28 @@ class AuditEntry(Base):
         Index("ix_audit_entries_id_desc", id.desc()),
         Index("ix_audit_entries_created_at", created_at.desc()),
         Index("ix_audit_entries_actor_id", actor_id),
+    )
+
+
+class LoginAttempt(Base):
+    """Failed sign-ins, counted per account and per address.
+
+    One row per bucket rather than one per attempt: the limiter only ever needs the
+    running count and the current lock, and a row per attempt would make sign-in pay
+    for an ever-growing table.
+    """
+
+    __tablename__ = "login_attempts"
+
+    scope: Mapped[str] = mapped_column(String(10), primary_key=True)
+    key: Mapped[str] = mapped_column(String(320), primary_key=True)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    window_start: Mapped[datetime] = mapped_column(TimestampTZ)
+    locked_until: Mapped[datetime | None] = mapped_column(TimestampTZ)
+    updated_at: Mapped[datetime] = mapped_column(TimestampTZ)
+
+    __table_args__ = (
+        CheckConstraint("scope in ('ip', 'account')", name="scope_known"),
+        # Buckets nobody has touched for a while are prunable; nothing else reads this.
+        Index("ix_login_attempts_updated_at", "updated_at"),
     )

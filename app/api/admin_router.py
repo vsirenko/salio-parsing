@@ -17,7 +17,8 @@ from app.api.routes.admin import users as admin_users
 admin_router = APIRouter(prefix="/admin", dependencies=[Depends(get_current_admin)])
 admin_router.include_router(admin_users.router)
 admin_router.include_router(admin_audit.router)
+admin_router.include_router(admin_auth.router)
 
-# Sign-in cannot require a token. Keep this router empty apart from /auth.
+# Sign-in cannot require a token. Keep this router to the routes that mint one.
 admin_public_router = APIRouter(prefix="/admin")
-admin_public_router.include_router(admin_auth.router)
+admin_public_router.include_router(admin_auth.public_router)

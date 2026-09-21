@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     # Dev convenience: create the demo admin/customer accounts on startup.
     seed_users: bool = True
 
+    # --- Sign-in rate limit ---
+    # Counted per account and per address. The per-address budget is the looser of the
+    # two: a shared office NAT is one address for everybody behind it.
+    login_rate_limit_enabled: bool = True
+    login_max_failures_per_account: int = 5
+    login_max_failures_per_ip: int = 20
+    login_failure_window_minutes: int = 15
+    # The lock doubles with every failure past the limit, up to the maximum.
+    login_lock_seconds: int = 60
+    login_max_lock_seconds: int = 3600
+
     # --- Audit ---
     # Trust X-Forwarded-For / X-Request-ID. Only enable behind a proxy that rewrites them.
     trust_proxy_headers: bool = False

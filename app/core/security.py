@@ -5,6 +5,11 @@ Two independent guarantees live here:
   the admin API even if a role check is forgotten somewhere;
 - `type` separates access from refresh, so a long-lived refresh token cannot be
   used as an access token.
+
+Neither is revocable on its own — the tokens carry no server state. `epoch` is the
+third piece: the account holds a counter, every token carries the value it was minted
+at, and bumping the counter refuses every token issued before it however valid its
+signature.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -40,11 +45,17 @@ def verify_password(raw_password: str, password_hash: str) -> bool:
 
 
 def _create_token(
-    *, user_id: int, audience: Audience, token_type: TokenType, lifetime: timedelta
+    *,
+    user_id: int,
+    epoch: int,
+    audience: Audience,
+    token_type: TokenType,
+    lifetime: timedelta,
 ) -> str:
     now = datetime.now(UTC)
     claims = {
         "sub": str(user_id),
+        "epoch": epoch,
         "aud": audience.value,
         "type": token_type.value,
         "iat": now,
@@ -53,18 +64,20 @@ def _create_token(
     return jwt.encode(claims, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_access_token(user_id: int, audience: Audience) -> str:
+def create_access_token(user_id: int, epoch: int, audience: Audience) -> str:
     return _create_token(
         user_id=user_id,
+        epoch=epoch,
         audience=audience,
         token_type=TokenType.ACCESS,
         lifetime=timedelta(minutes=settings.access_token_ttl_minutes),
     )
 
 
-def create_refresh_token(user_id: int, audience: Audience) -> str:
+def create_refresh_token(user_id: int, epoch: int, audience: Audience) -> str:
     return _create_token(
         user_id=user_id,
+        epoch=epoch,
         audience=audience,
         token_type=TokenType.REFRESH,
         lifetime=timedelta(days=settings.refresh_token_ttl_days),
@@ -92,4 +105,11 @@ def decode_token(
     if claims.get("type") != expected_type.value:
         raise AuthError(f"Expected a {expected_type.value} token")
 
-    return TokenPayload(sub=int(claims["sub"]), aud=claims["aud"], type=claims["type"])
+    return TokenPayload(
+        sub=int(claims["sub"]),
+        # Absent from tokens minted before the epoch existed, which are treated as
+        # belonging to no epoch and so refused.
+        epoch=claims.get("epoch", -1),
+        aud=claims["aud"],
+        type=claims["type"],
+    )

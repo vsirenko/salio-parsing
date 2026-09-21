@@ -2,17 +2,20 @@
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
+from app.core.config import settings
+from app.core.net import client_ip
 from app.core.security import AuthError, ForbiddenError, decode_token
 from app.db.session import get_session
 from app.schemas.auth import Audience, TokenType
 from app.schemas.user import Role, UserInDB
 from app.services.audit import AuditService
 from app.services.products import ProductService
+from app.services.rate_limit import LoginRateLimiter
 from app.services.users import UserService
 
 # auto_error=False so a missing header raises our own AuthError shape, not Starlette's.
@@ -26,8 +29,17 @@ def get_product_service(session: SessionDep) -> ProductService:
     return ProductService(session)
 
 
+# Stateless: it holds the configured limits and reaches the counters through the
+# session factory, so one instance serves every request.
+login_rate_limiter = LoginRateLimiter(enabled=settings.login_rate_limit_enabled)
+
+
 def get_user_service(session: SessionDep) -> UserService:
-    return UserService(session)
+    return UserService(session, limiter=login_rate_limiter)
+
+
+def get_client_ip(request: Request) -> str | None:
+    return client_ip(request, trust_proxy_headers=settings.trust_proxy_headers)
 
 
 def get_audit_service(session: SessionDep) -> AuditService:
@@ -36,6 +48,7 @@ def get_audit_service(session: SessionDep) -> AuditService:
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
+ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 
 async def _authenticate(
@@ -47,9 +60,7 @@ async def _authenticate(
     payload = decode_token(
         credentials.credentials, expected_audience=audience, expected_type=TokenType.ACCESS
     )
-    user = await users.get_by_id_or_none(payload.sub)
-    if user is None or not user.is_active:
-        raise AuthError("Account is no longer active")
+    user = await users.get_for_token(payload.sub, payload.epoch, audience)
 
     audit.set_actor(actor_id=user.id, email=user.email)
     return user

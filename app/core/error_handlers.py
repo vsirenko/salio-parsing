@@ -13,15 +13,25 @@ from app.schemas.common import ErrorDetail, ErrorResponse
 logger = logging.getLogger(__name__)
 
 
-def _error_response(status_code: int, code: str, message: str, details=None) -> JSONResponse:
+def _error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    details=None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     payload = ErrorResponse(error=ErrorDetail(code=code, message=message, details=details))
-    return JSONResponse(status_code=status_code, content=payload.model_dump(exclude_none=True))
+    return JSONResponse(
+        status_code=status_code,
+        content=payload.model_dump(exclude_none=True),
+        headers=headers,
+    )
 
 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def handle_app_error(_: Request, exc: AppError) -> JSONResponse:
-        return _error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return _error_response(exc.status_code, exc.code, exc.message, exc.details, exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:

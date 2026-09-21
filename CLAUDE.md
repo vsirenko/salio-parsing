@@ -16,9 +16,11 @@ FastAPI service. Deliberately flat: route → service → schema.
   services hold an `AsyncSession` and write queries directly.
 - Services call `flush()`, never `commit()`. The request transaction is owned by
   `get_session` and commits when the handler returns.
-- The audit middleware is the one exception: it writes through `session_factory` in its
-  own transaction, so a record of a failed request survives that request's rollback.
-  Do not "simplify" it onto the request session.
+- Two things deliberately write outside that transaction, through `session_factory`:
+  the audit middleware and the sign-in rate limiter. Both record what happened during a
+  request that then failed and rolled back, so writing on the request session would roll
+  their record back with it. Do not "simplify" either onto the request session, and do
+  not add a third without that same reason.
 - After changing a model: `alembic revision --autogenerate`, then read the migration
   before committing. `alembic check` must pass.
 - `/health` must never touch the database — it is liveness, and a database blip should
@@ -31,7 +33,8 @@ FastAPI service. Deliberately flat: route → service → schema.
 - Services raise `AppError` subclasses from `app/core/exceptions.py`. Routes never build
   HTTP errors themselves — `app/core/error_handlers.py` turns them into the single
   `{"error": {"code", "message", "details"}}` envelope. A new error type is a new
-  subclass, not a new handler.
+  subclass, not a new handler. An error that needs a response header — `Retry-After` on
+  a 429 — sets `headers` on its subclass and the one handler applies them.
 - Money is `Decimal`, never float.
 - New resource = `app/schemas/<x>.py` + `app/services/<x>.py` + `app/api/routes/<x>.py`,
   then register the router in `app/api/router.py`.
@@ -46,12 +49,52 @@ FastAPI service. Deliberately flat: route → service → schema.
   so a token from one is rejected by the other before any role check runs.
 - Admin routes go on `admin_router` in `app/api/admin_router.py`, which carries
   `Depends(get_current_admin)` at router level — never guard admin endpoints one by one.
-  `admin_public_router` exists only for sign-in; do not add anything else to it.
+  `admin_public_router` holds only the routes that mint a token without one — login and
+  refresh. Anything that takes a token, `/me` included, belongs on `admin_router`.
 - Never use `UserInDB` as a `response_model` — it carries `password_hash`. Routes return
   `UserRead`.
 - `role` is not accepted from any public input. There is no public registration endpoint;
   accounts are created through `/api/admin/users`.
 - Passwords: argon2 via `app/core/security.py`. Never compare or store raw passwords.
+- A password never travels through the user update schema. Changing one is its own
+  endpoint, and changing your own means proving the current one first.
+- Accounts are retired with `is_active = false`, never deleted. The audit trail points at
+  the user row and keeps the actor's email denormalised for exactly this reason; there is
+  no `DELETE /api/admin/users/{id}` and no service method behind one.
+- A user edit must refuse to remove the caller's own admin access (`self_lockout`). That
+  one guard is what keeps the panel reachable — the caller is by definition an active
+  admin, so whoever else they demote or disable, one is left standing. Do not add a
+  "last active admin" count next to it: it can never fire.
+
+## Sessions and revocation
+- A JWT carries no server state, so revocation lives on the account: `users.token_epoch`.
+  Every token is minted at the account's current epoch and only that epoch is accepted.
+- Mint through `_token_pair(user)`, which reads the epoch off the account. Never mint
+  from a bare user id — a pair built at the wrong epoch is dead on arrival.
+- Bump `token_epoch` from the service whenever access has to end now: password change,
+  deactivation. One bump ends every session the account has, refresh tokens included.
+- `UserService.get_for_token` is the single place that decides a valid signature is not
+  enough. Both the access path in `app/api/deps.py` and the refresh endpoints of both
+  panels go through it, so they cannot drift apart. A new reason to reject a token is a
+  check inside it, never a check bolted onto one caller.
+- The epoch is a counter, not a timestamp. JWT `iat` holds whole seconds, so a
+  time-based epoch lets a token minted in the same second survive the change meant to
+  kill it.
+
+## Sign-in rate limiting
+- Both login endpoints go through `LoginRateLimiter` (`app/services/rate_limit.py`),
+  keyed per account and per address. A new endpoint that accepts a password takes the
+  limiter with it.
+- Counters live in PostgreSQL, not in process memory: several api replicas share one
+  budget, otherwise the effective limit is the configured one times the replica count.
+- Only credential failures are counted. An attempt made while a bucket is locked is
+  refused before the password is checked, so hammering a locked account cannot extend
+  its own lock — that is deliberate, not an oversight.
+- A successful sign-in clears the account bucket only. Clearing the address bucket as
+  well would let anyone holding one valid account wipe the budget for every account
+  behind that address.
+- Limits come from `settings`, never hard-coded at a call site. Tests read them from
+  there too, so tightening a limit does not turn into a test failure.
 
 ## Pagination
 - Every list endpoint uses the shared envelope `Page[T]` from `app/schemas/pagination.py`
@@ -65,10 +108,22 @@ FastAPI service. Deliberately flat: route → service → schema.
 
 ## Audit trail
 - Every `/api/admin` request is recorded by `AuditMiddleware`. Do not add per-route audit
-  calls for the envelope — it is captured already.
-- Add meaning from the service layer with `audit.set_target(...)` and
-  `audit.record_changes(...)` from `app/core/audit.py`. Never pass raw credentials in;
-  `record_changes` redacts known secret keys, but that is a safety net, not the contract.
+  calls for the envelope — method, path, status, actor, address and duration are captured
+  already.
+- The envelope is not the meaning, and the meaning is not optional. Every service method
+  behind an admin route that changes state — or refuses to — names what it acted on with
+  `audit.set_target(...)` and what it changed with `audit.record_changes(...)` from
+  `app/core/audit.py`. An admin action that leaves the trail reading only
+  `PATCH /api/admin/users/4 → 409` is not finished.
+- Call `set_target` as soon as the row is loaded, before the guards run. A refused
+  attempt has to be recorded against the account it was aimed at, not at nothing.
+- `record_changes` reports what was actually applied. A refusal applies nothing, so it
+  records nothing — the status code already says it failed.
+- Sign-in names the actor email before the password is checked. A failed admin sign-in
+  is exactly what the trail is read for and it has no actor id to name.
+- Never pass raw credentials in. `record_changes` redacts the keys in `SENSITIVE_KEYS`,
+  but that is a safety net, not the contract; a new field that can carry a secret is
+  added to that set as well.
 - Only `open_context` may call `ContextVar.set`. Downstream code mutates the existing
   `AuditContext` object — re-binding the var inside the endpoint task would not propagate
   back to the middleware.

@@ -30,6 +30,15 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class PasswordChange(BaseModel):
+    """Changing your own password. Proving the current one is what makes it yours."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
@@ -43,3 +52,6 @@ class TokenPayload(BaseModel):
     sub: int
     aud: Audience
     type: TokenType
+    # Checked against the account's current epoch, so a password change can end the
+    # sessions that were opened before it.
+    epoch: int

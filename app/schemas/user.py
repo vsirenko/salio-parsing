@@ -36,6 +36,21 @@ class UserCreate(UserBase):
     is_active: bool = True
 
 
+class UserUpdate(BaseModel):
+    """Admin-side edit. Every field is optional; only what is sent is applied.
+
+    `full_name` may be sent as null to clear it. `role` and `is_active` have no
+    meaningful null, so a null there is treated as "not sent" rather than rejected
+    field-by-field. There is no password here — changing one is its own endpoint.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str | None = Field(default=None, max_length=200)
+    role: Role | None = None
+    is_active: bool | None = None
+
+
 class UserRead(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -50,3 +65,4 @@ class UserInDB(UserRead):
     """Internal representation — carries the hash, so it must never be a response_model."""
 
     password_hash: str
+    token_epoch: int

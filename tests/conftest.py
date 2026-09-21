@@ -24,7 +24,7 @@ TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL", "postgresql+asyncpg://app:app@localhost:55432/app_test"
 )
 
-TABLES = ("audit_entries", "products", "users")
+TABLES = ("audit_entries", "login_attempts", "products", "users")
 
 SEED_PRODUCTS = (
     ("Espresso machine", "499.99", ["kitchen", "coffee"]),
