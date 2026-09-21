@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -1009,4 +1010,85 @@ class AvailabilityEvent(Base):
         Index("ix_availability_events_offer_at", "offer_id", "at"),
         Index("ix_availability_events_variant_at", "variant_id", "condition", "at"),
         {"postgresql_partition_by": "RANGE (at)"},
+    )
+
+
+class OfferMatch(Base):
+    """Which variant a listing is, and how we came to think so.
+
+    An opinion with a history, never a column on the offer. Re-matching supersedes rather
+    than overwrites, so a bad rule can be rolled back, a human override survives the next
+    pass, and a link can explain itself when it turns out to be wrong.
+
+    It only ever means "this offer is this variant". What to do about an offer nobody could
+    place is `match_queue`, which is a different question with different state.
+    """
+
+    __tablename__ = "offer_matches"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("offers.id", ondelete="CASCADE"))
+    variant_id: Mapped[int] = mapped_column(ForeignKey("variants.id", ondelete="CASCADE"))
+    # Which rung of the ladder fired. Kept because trust in them differs wildly: a barcode
+    # is proof, a model string parsed out of a title is a guess that happened to land.
+    method: Mapped[str] = mapped_column(String(20))
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3))
+    # What the link is made of: which signal, which values agreed. Without it a wrong match
+    # cannot be argued with, only deleted.
+    evidence: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    decided_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    decided_by: Mapped[str] = mapped_column(String(10), default="rule", server_default="rule")
+    superseded_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
+
+    __table_args__ = (
+        CheckConstraint(
+            "method in ('gtin', 'brand_mpn', 'brand_model', 'identity_key', 'judge', 'human')",
+            name="method_known",
+        ),
+        CheckConstraint("decided_by in ('rule', 'judge', 'human')", name="decided_by_known"),
+        CheckConstraint("confidence between 0 and 1", name="confidence_is_a_fraction"),
+        # One live opinion per listing. Superseded rows stay, which is the point.
+        Index(
+            "uq_offer_matches_active",
+            "offer_id",
+            unique=True,
+            postgresql_where=text("superseded_at is null"),
+        ),
+        Index("ix_offer_matches_variant_id", "variant_id"),
+    )
+
+
+class MatchQueue(Base):
+    """A listing nobody could place, and what was found while trying.
+
+    Not a null variant on a match: this carries work state a verdict has no business
+    holding — how often it has been attempted, what the near misses were, and above all
+    *why* it failed. "Did not match" is at least five different problems routing to five
+    different kinds of work, and one undifferentiated pile is a pile nobody sorts.
+
+    The invariant: an offer has an active match or a row here, never both. A second place
+    answering "what is this listing" is a second place to disagree.
+    """
+
+    __tablename__ = "match_queue"
+
+    offer_id: Mapped[int] = mapped_column(
+        ForeignKey("offers.id", ondelete="CASCADE"), primary_key=True
+    )
+    reason: Mapped[str] = mapped_column(String(20))
+    # The near misses, with why each was considered. What turns "we could not decide" into
+    # something a human can finish in one click.
+    candidates: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    attempts: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    last_attempt_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    # Looked at, cannot be decided yet, do not show it again until then.
+    snoozed_until: Mapped[datetime | None] = mapped_column(TimestampTZ)
+
+    __table_args__ = (
+        CheckConstraint(
+            "reason in ('brand_unresolved', 'no_signals', 'signals_unmatched',"
+            " 'ambiguous', 'low_confidence')",
+            name="reason_known",
+        ),
+        Index("ix_match_queue_reason", "reason"),
     )

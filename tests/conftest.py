@@ -34,6 +34,8 @@ TABLES = (
     "attribute_aliases",
     "category_attributes",
     "attributes",
+    "match_queue",
+    "offer_matches",
     "price_events",
     "availability_events",
     "normalized_offers",

@@ -95,9 +95,24 @@ and the questions that have to be answered with real data first, are written dow
       partitioned parent and nothing else, so every insert fails with "no partition
       found". The test fixture creates a default one for each; anything else that
       bootstraps without migrations has to as well.
-- [ ] **Nothing matches.** `offer_match` is the last table of the design, and its shape is
-      decided by the coverage number above. `price_event.variant_id` stays null until it
-      exists, and is filled in — and rewritten on a re-match — from there.
+- [x] Matching on three deterministic rungs, with a queue that says why a listing could
+      not be placed, and a summary that counts what actually happened
+- [ ] **Load a real sample and read `GET /api/admin/match-queue/summary`.** Which bucket
+      fills decides what to build next, and only real data answers it: mostly
+      `signals_unmatched` means creating variants, `brand_unresolved` means brand aliases,
+      `no_signals` means extraction, `ambiguous` is the only one a pair judge helps with.
+- [ ] **No fuzzy rung, so `low_confidence` has no producer.** Matching on a model needs
+      the string to agree exactly after normalization. A near miss is invisible, which
+      means a typo in a feed lands in `signals_unmatched` looking like a missing variant.
+- [ ] **No `identity_key` rung.** It needs an offer's attributes resolved to the canonical
+      registry, and nothing resolves them — the raw pairs sit in `normalized_offer`
+      untouched.
+- [ ] **No per-brand extraction rules.** The model is taken from whatever field the source
+      called `model`, falling back to the whole title. Samsung, Bosch and Apple name models
+      by incompatible conventions and one regex will not read all three.
+- [ ] **No judge.** Its place is `ambiguous` and `low_confidence` and nowhere else — the
+      other three reasons have no pair to judge. Whether it is worth building is what the
+      summary answers.
 
 ## Features
 

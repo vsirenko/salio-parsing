@@ -19,6 +19,7 @@ from app.features.categories.service import CategoryService
 from app.features.countries.service import CountryService
 from app.features.currencies.service import CurrencyService
 from app.features.markets.service import MarketService
+from app.features.matching.service import MatchingService
 from app.features.offers.service import OfferService
 from app.features.prices.service import PriceService
 from app.features.rate_limit.service import LoginRateLimiter
@@ -86,6 +87,10 @@ def get_price_service(session: SessionDep) -> PriceService:
     return PriceService(session)
 
 
+def get_matching_service(session: SessionDep) -> MatchingService:
+    return MatchingService(session)
+
+
 def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
@@ -102,6 +107,7 @@ CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
 ShopServiceDep = Annotated[ShopService, Depends(get_shop_service)]
 OfferServiceDep = Annotated[OfferService, Depends(get_offer_service)]
 PriceServiceDep = Annotated[PriceService, Depends(get_price_service)]
+MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 
