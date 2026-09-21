@@ -202,6 +202,19 @@ class MatchingService:
         has_any = any((reading.gtin, reading.mpn, reading.model, reading.brand_raw))
         if not has_any:
             return Reason.NO_SIGNALS, []
+
+        # A barcode needs no brand. The first rung ran before the brand was looked at, and
+        # reaching here means it found nothing — so whatever the brand turned out to be
+        # cannot explain this failure, and naming it sends somebody to write aliases when
+        # what is missing is the product. Measured the hard way: 520 real listings, 99.6%
+        # of them carrying a barcode, all reported as `brand_unknown` when the truth was an
+        # empty catalogue.
+        #
+        # Part numbers and model strings are different: both rungs search within a brand,
+        # so a brand that would not resolve really is what stopped them.
+        if reading.gtin:
+            return Reason.SIGNALS_UNMATCHED, []
+
         if lookup.state == "ambiguous":
             return Reason.BRAND_AMBIGUOUS, [
                 {"brand_id": brand_id, "why": "brand_alias"} for brand_id in lookup.candidates

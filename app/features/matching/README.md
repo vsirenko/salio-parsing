@@ -61,7 +61,15 @@ inference can throw away the right answer and report it as absent.
 | `low_confidence` | one candidate, too weak | not produced yet; needs a fuzzy rung | the variant |
 
 A queue row carries the near misses that were considered, so deciding is a choice rather
-than a search. The last column is the difference that matters when picking what to automate
+than a search.
+
+**A signal that was used outranks one that was not.** A barcode needs no brand — the first
+rung runs before the brand is looked at — so a listing whose barcode was tried and missed is
+`signals_unmatched`, whatever its brand turned out to be. Part numbers and model strings are
+the other way round: both search inside a brand, so an unresolved one really is what stopped
+them. The distinction was earned on real data, where 520 listings with a barcode on 99.6% of
+them all came back `brand_unknown` and the truth was an empty catalogue — the difference
+between being sent to write brand aliases and being sent to fill the catalogue. The last column is the difference that matters when picking what to automate
 next: a bucket with candidates can be finished by choosing, and choosing is the only thing
 a judge does. A bucket without them needs someone to go and look first.
 

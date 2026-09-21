@@ -198,6 +198,40 @@ def test_a_brand_string_that_is_not_a_string(client):
     assert run_on(client, token, offer)["reason"] == "brand_unknown"
 
 
+def test_a_barcode_that_missed_is_not_a_brand_problem(client):
+    """The strongest rung needs no brand, so the brand cannot explain its failure.
+
+    Found on real data: 520 listings, a barcode on 99.6% of them, every one reported as
+    `brand_unknown` — which sends somebody to write brand aliases when what is missing is
+    the product itself.
+    """
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    catalogue(client, token)
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        # A barcode nothing has, and a brand nobody has entered.
+        {"name": "Nokla phone", "brand": "Nokla", "ean": "4006381333931"},
+    )
+
+    assert run_on(client, token, offer)["reason"] == "signals_unmatched"
+
+
+def test_a_part_number_that_missed_still_is_a_brand_problem(client):
+    """Both of the weaker rungs search inside a brand, so an unresolved one really stops
+    them."""
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    catalogue(client, token)
+    offer = offer_from(
+        client, token, source["id"], {"name": "Nokla phone", "brand": "Nokla", "mpn": "X1"}
+    )
+
+    assert run_on(client, token, offer)["reason"] == "brand_unknown"
+
+
 def test_signals_the_catalogue_does_not_have(client):
     token = admin_token(client)
     _, source = setup_source(client, token)

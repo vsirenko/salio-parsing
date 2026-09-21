@@ -112,11 +112,13 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **The brand registry and the catalogue are both empty.** All 520 real offers queue,
       and there is nothing to match them against: zero brands, zero variants. Filling the
       brand registry is the cheapest large win there is.
-- [ ] **A queued offer can be given the wrong reason.** With a barcode present on 99.6% of
-      them, all 520 came back `brand_unknown` — but the barcode was tried first, needs no
-      brand, and missed because the catalogue is empty. `_why` lets the brand's state
-      outrank a signal that was actually used, which routes the work to brand aliases when
-      it belongs to filling the catalogue. The instrument lied on its first real data.
+- [x] A signal that was used outranks one that was not: a barcode that was tried and
+      missed is `signals_unmatched`, whatever the brand turned out to be
+- [ ] **Nothing creates a variant from an offer.** The catalogue has to start somewhere and
+      there is no way to start it: `POST /api/admin/variants` takes one by hand, and
+      `PUT /offers/{id}/match` links to a variant that already exists. Every listing in
+      `signals_unmatched` is a candidate, and until one of them can be promoted the first
+      shop collected is a shop nothing can ever match against.
 - [ ] **Two more channels.** `bigbox-phones` (Next.js embedded state) and `rdveikals-phones`
       (markup, the only one needing lxml) — chosen so that each proves a different decode
       path holds the same contract. `1a.lv` is nearly free after ksenukai: same engine,
