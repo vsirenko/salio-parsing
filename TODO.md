@@ -49,6 +49,15 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **Fill in the VAT rates** for LV, LT and EE. They were not seeded because they
       change and are not ours to guess; nothing computes with them, but they are what
       explains a price difference between markets.
+- [x] Category tree with cascading visibility, and the canonical attribute registry
+      with its aliases and per-category identity flags
+- [ ] **The candidate queues are not built.** `attribute_candidate`,
+      `attribute_value_candidate` and `brand_candidate` are what turns an unknown string
+      into a mapping, and they are filled by ingestion — which does not exist yet. Build
+      them with the parser, not before: a queue with no producer is furniture.
+- [ ] **Nothing extracts attributes.** The registry can be filled by hand; pulling
+      `256GB` out of a title still needs per-category patterns, and that is what
+      `identity_ready` on a category is actually asserting.
 - [ ] **Measure how far a deterministic matcher gets.** Everything else in that document
       is downstream of this number. 30-50 real offers from both kinds of source, with the
       same product sold by more than one shop.

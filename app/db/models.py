@@ -16,6 +16,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -264,4 +265,129 @@ class Category(Base):
         Index("ix_categories_parent_id", "parent_id"),
         # What the storefront filters on.
         Index("ix_categories_visible_effective", "is_visible_effective"),
+    )
+
+
+class Attribute(Base):
+    """One canonical registry, because sources name the same thing a dozen ways.
+
+    `Цвет`, `Color`, `Krāsa` and `Spalva` all resolve here, which is what makes a feed
+    param and a phrase cut out of a title interchangeable: once both become
+    `capacity = 256 GB`, where the value came from stops mattering downstream.
+
+    An attribute is one attribute only if its values mean the same thing everywhere. Size
+    42 in shoes and size 42 in clothing are different scales, so they are two.
+    """
+
+    __tablename__ = "attributes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(200))
+    value_type: Mapped[str] = mapped_column(String(10))
+    # Only for numbers. The unit everything is converted to, and how far it is rounded —
+    # without a fixed scale, 39.624 and 39.62 describe one screen and hash to two keys.
+    unit_dimension: Mapped[str | None] = mapped_column(String(20))
+    scale: Mapped[int | None] = mapped_column(SmallInteger)
+
+    __table_args__ = (
+        CheckConstraint("key ~ '^[a-z][a-z0-9_]*$'", name="key_shape"),
+        CheckConstraint(
+            "value_type in ('enum', 'number', 'bool', 'text')", name="value_type_known"
+        ),
+        # A unit and a rounding scale only mean something for a number.
+        CheckConstraint(
+            "(value_type = 'number') or (unit_dimension is null and scale is null)",
+            name="units_are_for_numbers",
+        ),
+        CheckConstraint("scale is null or scale between 0 and 6", name="scale_sane"),
+    )
+
+
+class AttributeAlias(Base):
+    """What a source called it. `Krāsa` -> color.
+
+    Not unique on the string alone: `Размер` is a real name for both shoe size and
+    clothing size. Which one an offer means is settled by the category it landed in,
+    through `category_attributes` — the same way an ambiguous brand string is.
+    """
+
+    __tablename__ = "attribute_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    attribute_id: Mapped[int] = mapped_column(ForeignKey("attributes.id", ondelete="CASCADE"))
+    alias_normalized: Mapped[str] = mapped_column(String(200))
+    language: Mapped[str | None] = mapped_column(String(2))
+    origin: Mapped[str] = mapped_column(String(10), default="human", server_default="human")
+
+    __table_args__ = (
+        UniqueConstraint("attribute_id", "alias_normalized", name="uq_alias_per_attribute"),
+        CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
+        Index("ix_attribute_aliases_normalized", "alias_normalized"),
+    )
+
+
+class CategoryAttribute(Base):
+    """Which attributes a category has, and which of them carry identity there.
+
+    The flag sits on the pairing rather than on the attribute because the answer genuinely
+    differs: weight is an axis for food — 500 g and 1 kg are different products — and a
+    specification for a washing machine.
+    """
+
+    __tablename__ = "category_attributes"
+
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True
+    )
+    attribute_id: Mapped[int] = mapped_column(
+        ForeignKey("attributes.id", ondelete="CASCADE"), primary_key=True
+    )
+    identity_bearing: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Same attribute, different label here: "Diagonal" on a phone, "Screen size" on a TV.
+    label_override: Mapped[str | None] = mapped_column(String(200))
+    # Stored in the base unit, shown in this one.
+    display_unit: Mapped[str | None] = mapped_column(String(20))
+
+    __table_args__ = (Index("ix_category_attributes_attribute_id", "attribute_id"),)
+
+
+class AttributeValue(Base):
+    """A canonical value of an enum attribute. Only enums have these."""
+
+    __tablename__ = "attribute_values"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    attribute_id: Mapped[int] = mapped_column(ForeignKey("attributes.id", ondelete="CASCADE"))
+    canonical: Mapped[str] = mapped_column(String(200))
+    # Display order, because S / M / L / XL is not alphabetical.
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    __table_args__ = (UniqueConstraint("attribute_id", "canonical", name="uq_value_per_attribute"),)
+
+
+class AttributeValueAlias(Base):
+    """`melns`, `juodas`, `must`, `чёрный` -> black.
+
+    `attribute_id` is repeated here so the unique constraint can span it: one spelling
+    must not resolve to two values of the same attribute, and the value id alone cannot
+    express that.
+    """
+
+    __tablename__ = "attribute_value_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    attribute_value_id: Mapped[int] = mapped_column(
+        ForeignKey("attribute_values.id", ondelete="CASCADE")
+    )
+    attribute_id: Mapped[int] = mapped_column(ForeignKey("attributes.id", ondelete="CASCADE"))
+    alias_normalized: Mapped[str] = mapped_column(String(200))
+    language: Mapped[str | None] = mapped_column(String(2))
+    origin: Mapped[str] = mapped_column(String(10), default="human", server_default="human")
+
+    __table_args__ = (
+        UniqueConstraint("attribute_id", "alias_normalized", name="uq_value_alias_per_attribute"),
+        CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
+        Index("ix_attribute_value_aliases_normalized", "alias_normalized"),
     )

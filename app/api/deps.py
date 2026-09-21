@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.net import client_ip
 from app.core.security import Audience, AuthError, ForbiddenError, TokenType, decode_token
 from app.db.session import get_session
+from app.features.attributes.service import AttributeService
 from app.features.audit.service import AuditService
 from app.features.categories.service import CategoryService
 from app.features.countries.service import CountryService
@@ -61,6 +62,10 @@ def get_category_service(session: SessionDep) -> CategoryService:
     return CategoryService(session)
 
 
+def get_attribute_service(session: SessionDep) -> AttributeService:
+    return AttributeService(session)
+
+
 def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
@@ -71,6 +76,7 @@ CurrencyServiceDep = Annotated[CurrencyService, Depends(get_currency_service)]
 CountryServiceDep = Annotated[CountryService, Depends(get_country_service)]
 MarketServiceDep = Annotated[MarketService, Depends(get_market_service)]
 CategoryServiceDep = Annotated[CategoryService, Depends(get_category_service)]
+AttributeServiceDep = Annotated[AttributeService, Depends(get_attribute_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 
