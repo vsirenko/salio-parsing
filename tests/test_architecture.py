@@ -27,6 +27,11 @@ ALLOWED_CROSS_FEATURE = {
     ("matching", "brands"): "a brand string has to be normalized as brand aliases were",
     ("matching", "catalog"): "a model string has to be normalized as variants were",
     ("matching", "offers"): "the matcher reads the ruleset version that produced a reading",
+    # The second feature that exists to serve another, and the same shape as rate_limit
+    # under users: the judge knows nothing about offers or the queue, it answers a
+    # question and remembers the answer. Which questions are worth asking is the
+    # matcher's business, so the dependency points this way and not back.
+    ("matching", "judge"): "the matcher decides what is worth judging; the judge only answers",
 }
 
 

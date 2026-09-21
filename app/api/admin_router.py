@@ -21,6 +21,7 @@ from app.features.catalog.admin_router import products_router, variants_router
 from app.features.categories.admin_router import router as categories_router
 from app.features.countries.admin_router import router as countries_router
 from app.features.currencies.admin_router import router as currencies_router
+from app.features.judge.admin_router import router as judge_router
 from app.features.markets.admin_router import router as markets_router
 from app.features.matching.admin_router import offers_router as match_offers_router
 from app.features.matching.admin_router import queue_router as match_queue_router
@@ -58,6 +59,7 @@ admin_router.include_router(availability_router)
 admin_router.include_router(match_offers_router)
 admin_router.include_router(matching_router)
 admin_router.include_router(match_queue_router)
+admin_router.include_router(judge_router)
 admin_router.include_router(category_attributes_router)
 
 # Sign-in cannot require a token. Keep this router to the routes that mint one.

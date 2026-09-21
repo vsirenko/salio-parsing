@@ -18,6 +18,9 @@ Tick items off here when they land so the list stays honest.
 
 - [ ] **No CI.** Nothing runs the tests, ruff or `alembic check` on a pull request.
       GitHub Actions on the same commands the hooks use locally.
+- [ ] **Nothing prunes `judge_verdicts`.** The store only grows, and a question keyed by a
+      listing's title is answered again the moment that title changes, so the old row stops
+      being reachable without ever being unreachable to a query. Needs a retention rule.
 - [ ] **Nothing prunes `login_attempts`.** Buckets stop mattering once their window
       has passed, but the rows stay. `ix_login_attempts_updated_at` is there for a
       periodic delete; there is no job to run it yet.
@@ -99,8 +102,9 @@ and the questions that have to be answered with real data first, are written dow
       not be placed, and a summary that counts what actually happened
 - [ ] **Load a real sample and read `GET /api/admin/match-queue/summary`.** Which bucket
       fills decides what to build next, and only real data answers it: mostly
-      `signals_unmatched` means creating variants, `brand_unresolved` means brand aliases,
-      `no_signals` means extraction, `ambiguous` is the only one a pair judge helps with.
+      `signals_unmatched` means creating variants, `brand_unknown` means naming brands,
+      `no_signals` means extraction; `brand_ambiguous` and `ambiguous` are the two a pair
+      judge helps with, because they are the two that arrive with their candidates.
 - [ ] **No fuzzy rung, so `low_confidence` has no producer.** Matching on a model needs
       the string to agree exactly after normalization. A near miss is invisible, which
       means a typo in a feed lands in `signals_unmatched` looking like a missing variant.
@@ -110,9 +114,27 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **No per-brand extraction rules.** The model is taken from whatever field the source
       called `model`, falling back to the whole title. Samsung, Bosch and Apple name models
       by incompatible conventions and one regex will not read all three.
-- [ ] **No judge.** Its place is `ambiguous` and `low_confidence` and nowhere else — the
-      other three reasons have no pair to judge. Whether it is worth building is what the
-      summary answers.
+- [ ] **A listing with no brand stated is filed as `signals_unmatched`**, which reads as
+      "create the variant" when the truth is that the brand rung never ran. The reason is
+      honest about the other four cases and wrong about this one; the fix is either its own
+      reason or routing it to extraction, and which depends on how common it turns out to
+      be.
+- [x] A judge on `brand_ambiguous`, through TypeSafe: a `Choice` over the candidate
+      brands described by what the catalogue holds under each, with the answers stored so
+      a question is asked once. The matcher reads verdicts and never calls out.
+- [ ] **The judge has never answered a real question.** Every test replaces the transport,
+      so the wire format, the question body and the decoding are exercised and the model's
+      behaviour on this catalogue is not. Nothing is known yet about how often it is right,
+      what it costs per thousand listings, or whether `JUDGE_MIN_CONFIDENCE=0.85` is
+      anywhere near the correct line. Needs an API key and the real sample.
+- [ ] **No judge on `ambiguous` or `low_confidence`.** Those are variant pairs rather than
+      brand options, and the shape that fits them is TypeSafe's entity-alignment recipe — a
+      `Score` over three levels with `Noul` companions per field, not a `Choice`. Worth
+      building after the summary says how full those buckets are.
+- [ ] **A brand with no variants cannot be judged.** The options are described by the
+      categories the catalogue holds under each brand, so a brand with nothing under it gets
+      no description and the answer comes back unconfident by design. A human-written note
+      on the brand row would cover the cold start; there is no column for one.
 
 ## Features
 

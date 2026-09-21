@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # HS256 needs >= 32 bytes of key material (RFC 7518).
@@ -63,6 +63,25 @@ class Settings(BaseSettings):
     login_lock_seconds: int = 60
     login_max_lock_seconds: int = 3600
 
+    # --- The judge (TypeSafe) ---
+    # Judging is off unless a key is set. There is deliberately no separate "enabled"
+    # flag: a flag and a key can disagree, and then the panel offers a button that
+    # cannot work.
+    typesafe_api_key: SecretStr | None = None
+    # jev-latest moves. The concrete model that answered is stored on every verdict, so
+    # a change is visible after the fact; pinning is a decision to make once there is
+    # enough real data to say a newer model is better or worse for this catalogue.
+    typesafe_model: str = "jev-latest"
+    typesafe_timeout_seconds: float = 10.0
+    # One listing is one request — the state differs per listing, so they cannot share
+    # one. They are sent together instead, which is what keeps a pass over the queue from
+    # taking its length in seconds.
+    judge_concurrency: int = Field(default=4, ge=1, le=32)
+    # Below this the answer is still recorded, and still not acted on. The number is a
+    # starting point, not a measurement: the docs are explicit that a threshold has to be
+    # evaluated against real data, and this catalogue has none yet.
+    judge_min_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+
     # --- Audit ---
     # Trust X-Forwarded-For / X-Request-ID. Only enable behind a proxy that rewrites them.
     trust_proxy_headers: bool = False
@@ -80,6 +99,11 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @property
+    def judge_enabled(self) -> bool:
+        """Whether anything may call out to TypeSafe. The key is the only switch."""
+        return self.typesafe_api_key is not None
 
     @property
     def is_production(self) -> bool:

@@ -7,6 +7,7 @@ GET    /api/admin/offers/{id}/matches   every opinion ever held about it
 POST   /api/admin/matching/run          work through what is unplaced
 GET    /api/admin/match-queue           what could not be placed, and why
 GET    /api/admin/match-queue/summary   the breakdown that says what to build next
+POST   /api/admin/matching/judge        ask the judge about the brand choices, then retry
 """
 
 from typing import Annotated
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import MatchingServiceDep
 from app.api.pagination import pagination_params
+from app.features.judge.schemas import JudgeReport
 from app.features.matching.schemas import (
     ManualMatch,
     MatchOutcome,
@@ -98,14 +100,34 @@ async def run(
     return await service.run(limit=limit)
 
 
+@router.post(
+    "/judge",
+    response_model=JudgeReport,
+    summary="Ask the judge about the brand choices",
+    responses={422: {"model": ErrorResponse, "description": "No TypeSafe API key configured"}},
+)
+async def judge_brands(
+    service: MatchingServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500, description="How many to ask about")] = 50,
+) -> JudgeReport:
+    """Works `brand_ambiguous` and nothing else: it is the bucket that arrives with its
+    options already in hand, and choosing between options is the only thing the judge does.
+
+    A question already answered is not asked again, so running this twice costs nothing the
+    second time. Answers below the confidence threshold are recorded and not acted on.
+    """
+    return await service.judge_brands(limit=limit)
+
+
 @queue_router.get("/summary", response_model=QueueSummary, summary="What is in the way")
 async def summary(service: MatchingServiceDep) -> QueueSummary:
     """The breakdown that decides what to build next.
 
-    Mostly `signals_unmatched` means the work is creating variants. `brand_unresolved`
-    means brand aliases. `no_signals` means pulling identity out of titles. `ambiguous` is
-    the only bucket a pair judge can help with — and if it is nearly empty, a judge is not
-    what this needs.
+    Mostly `signals_unmatched` means the work is creating variants. `brand_unknown` means
+    reading raw strings and naming the brand behind them; `no_signals` means pulling
+    identity out of titles. `brand_ambiguous` and `ambiguous` are the buckets that already
+    carry their candidates, so they are the two a pair judge can help with — and if both are
+    nearly empty, a judge is not what this needs.
     """
     return await service.summary()
 

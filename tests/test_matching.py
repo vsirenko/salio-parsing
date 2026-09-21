@@ -151,15 +151,21 @@ def test_a_brand_nobody_knows(client):
         client, token, source["id"], {"name": "Nokla phone", "brand": "Nokla", "model": "X1"}
     )
 
-    assert run_on(client, token, offer)["reason"] == "brand_unresolved"
+    outcome = run_on(client, token, offer)
+    assert outcome["reason"] == "brand_unknown"
+    # Nothing to offer: finishing this one starts with a person reading "Nokla".
+    assert outcome["candidates"] == []
 
 
 def test_a_brand_that_means_two_brands(client):
+    """A separate problem from a brand nobody knows: the answers are already in hand."""
     token = admin_token(client)
     _, source = setup_source(client, token)
     catalogue(client, token)
+    ids = []
     for slug in ("delta", "delta-tools"):
         brand = post(client, token, "/api/admin/brands", {"slug": slug, "canonical_name": "Delta"})
+        ids.append(brand["id"])
         post(
             client,
             token,
@@ -170,7 +176,26 @@ def test_a_brand_that_means_two_brands(client):
     offer = offer_from(
         client, token, source["id"], {"name": "Delta tap", "brand": "Delta", "model": "T1"}
     )
-    assert run_on(client, token, offer)["reason"] == "brand_unresolved"
+    outcome = run_on(client, token, offer)
+    assert outcome["reason"] == "brand_ambiguous"
+    # The whole point of the split: the choice is on the row, so it is one click and not
+    # a search through the brand table.
+    assert outcome["candidates"] == [
+        {"brand_id": ids[0], "why": "brand_alias"},
+        {"brand_id": ids[1], "why": "brand_alias"},
+    ]
+
+
+def test_a_brand_string_that_is_not_a_string(client):
+    """Punctuation normalizes to nothing, which is the same work as an unknown brand."""
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    catalogue(client, token)
+    offer = offer_from(
+        client, token, source["id"], {"name": "Thing", "brand": "---", "model": "X1"}
+    )
+
+    assert run_on(client, token, offer)["reason"] == "brand_unknown"
 
 
 def test_signals_the_catalogue_does_not_have(client):
@@ -340,7 +365,7 @@ def test_the_summary_says_what_is_in_the_way(client):
     assert summary["matched_offers"] == 1
     assert summary["matched_share"] == 0.25
     assert summary["by_reason"] == {
-        "brand_unresolved": 1,
+        "brand_unknown": 1,
         "signals_unmatched": 1,
         "no_signals": 1,
     }

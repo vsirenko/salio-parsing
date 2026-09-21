@@ -18,6 +18,7 @@ from app.features.catalog.service import CatalogService
 from app.features.categories.service import CategoryService
 from app.features.countries.service import CountryService
 from app.features.currencies.service import CurrencyService
+from app.features.judge.service import JudgeService
 from app.features.markets.service import MarketService
 from app.features.matching.service import MatchingService
 from app.features.offers.service import OfferService
@@ -87,8 +88,18 @@ def get_price_service(session: SessionDep) -> PriceService:
     return PriceService(session)
 
 
-def get_matching_service(session: SessionDep) -> MatchingService:
-    return MatchingService(session)
+def get_judge_service(session: SessionDep) -> JudgeService:
+    return JudgeService(session)
+
+
+JudgeServiceDep = Annotated[JudgeService, Depends(get_judge_service)]
+
+
+def get_matching_service(session: SessionDep, judge: JudgeServiceDep) -> MatchingService:
+    """The judge arrives as a dependency rather than being built inside the matcher, so
+    that replacing it — with a stub transport in tests — is done in one place and both
+    the matcher and `/judge/verdicts` see the same one."""
+    return MatchingService(session, judge=judge)
 
 
 def get_market_service(session: SessionDep) -> MarketService:

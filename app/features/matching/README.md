@@ -13,6 +13,7 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `POST /api/admin/matching/run` | work through what is unplaced |
 | `GET /api/admin/match-queue` | what could not be placed, filterable by `reason` |
 | `GET /api/admin/match-queue/summary` | the breakdown that says what to build next |
+| `POST /api/admin/matching/judge` | ask the judge about the brand choices, then retry them |
 
 ## How it works
 
@@ -33,24 +34,36 @@ it turns matching from a scan into a lookup in a small drawer. It is also where 
 quietly wrong: a brand resolved to the wrong row means searching the wrong drawer and
 correctly finding nothing, which looks exactly like a catalogue that is missing a row. So a
 brand string that resolves to nothing, or to two brands, does not get guessed at — it gets
-its own queue reason.
+its own queue reason, and those two are separate reasons: one has to be researched, the
+other only has to be chosen between.
+
+**A string that means two brands is never settled by an alias.** `Delta` belongs to the tap
+company and the tool company equally legitimately, so no row can be added that makes the
+ambiguity go away — it is decided per listing. That is the one gap more data does not close,
+and the only place an outside judgement earns its cost: `POST /api/admin/matching/judge`
+asks [the judge](../judge/README.md) about exactly that bucket and retries what it answers.
+The ladder itself never calls out; it reads stored verdicts and nothing else, so running the
+matcher stays offline, deterministic and as fast as its indexes.
 
 **The category is deliberately not a filter.** A brand arrives stated in a feed field; a
 category is *inferred* by us, through a mapping or from text. Filtering on our own
 inference can throw away the right answer and report it as absent.
 
-**Five reasons, because "did not match" is five different kinds of work.**
+**Six reasons, because "did not match" is six different kinds of work.**
 
-| reason | what it means | who fixes it |
-|---|---|---|
-| `brand_unresolved` | the drawer could not be chosen | brand aliases |
-| `no_signals` | nothing to match on at all | pulling identity out of titles |
-| `signals_unmatched` | the catalogue has no such thing | create the variant |
-| `ambiguous` | several plausible candidates | a human, or a pair judge |
-| `low_confidence` | one candidate, too weak | not produced yet; needs a fuzzy rung |
+| reason | what it means | who fixes it | candidates on the row |
+|---|---|---|---|
+| `brand_unknown` | the string names no brand we have | read it, name the brand, add an alias | none — there is nothing to offer |
+| `brand_ambiguous` | the string names several brands | pick one | the brands |
+| `no_signals` | nothing to match on at all | pulling identity out of titles | none |
+| `signals_unmatched` | the catalogue has no such thing | create the variant | none |
+| `ambiguous` | several plausible variants | a human, or a pair judge | the variants |
+| `low_confidence` | one candidate, too weak | not produced yet; needs a fuzzy rung | the variant |
 
 A queue row carries the near misses that were considered, so deciding is a choice rather
-than a search.
+than a search. The last column is the difference that matters when picking what to automate
+next: a bucket with candidates can be finished by choosing, and choosing is the only thing
+a judge does. A bucket without them needs someone to go and look first.
 
 ## Decisions worth knowing before changing it
 
@@ -62,6 +75,11 @@ than a search.
   worth more as a record than as a deletion.
 - **`evidence` says what the link is made of** — which signal fired and which values
   agreed. Without it a wrong match cannot be argued with, only deleted.
+- **`method` is the rung that fired; `decided_by` is what had the final say.** They come
+  apart when a judge chose the brand and a rule then matched the model: the method is still
+  `brand_model`, `decided_by` is `judge`, and the evidence carries the answer and its
+  confidence. Keeping both is what makes "which matches rest on a model's opinion" a query
+  rather than an archaeology exercise.
 - **A match rewrites this listing's price and availability rows** to point at the variant.
   That is the cost of denormalizing the hint onto the series, and it is real: the number of
   rows rewritten grows with how long the listing has existed. Bounded to one listing, which

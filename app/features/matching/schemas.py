@@ -33,13 +33,18 @@ class DecidedBy(StrEnum):
 class Reason(StrEnum):
     """Why a listing could not be placed.
 
-    Five different problems that route to five different kinds of work. One
+    Six different problems that route to six different kinds of work. One
     undifferentiated pile is a pile nobody sorts.
     """
 
-    # The brand string resolved to nothing or to several brands, so the block to search
-    # in could not be chosen. Looking in the wrong drawer finds nothing correctly.
-    BRAND_UNRESOLVED = "brand_unresolved"
+    # The brand string resolved to nothing at all. There is no drawer to look in and no
+    # candidate to offer, so finishing this needs a search: someone reads the raw string
+    # and decides which brand it is, or that it is a new one.
+    BRAND_UNKNOWN = "brand_unknown"
+    # The brand string resolved to several brands. Kept apart from the above because the
+    # candidates exist and are on the row — this is a choice, and a choice can be made
+    # without going looking.
+    BRAND_AMBIGUOUS = "brand_ambiguous"
     # No barcode, no part number, no model, no brand. Nothing to match on at all.
     NO_SIGNALS = "no_signals"
     # Signals were there and the catalogue has no such thing. Usually: create the variant.
@@ -105,9 +110,10 @@ class QueueSummary(BaseModel):
     """The breakdown that answers what to build next.
 
     If most listings sit in `signals_unmatched`, the work is creating variants. In
-    `brand_unresolved`, it is brand aliases. In `no_signals`, it is pulling identity out of
-    titles. In `ambiguous`, a judge earns its cost — and if that bucket is nearly empty, it
-    does not.
+    `brand_unknown`, it is reading raw strings and naming the brand behind them. In
+    `brand_ambiguous` or `ambiguous`, the candidates are already there and the work is
+    choosing — the two buckets a judge can help with, and if both are nearly empty, a judge
+    is not what this needs. In `no_signals`, it is pulling identity out of titles.
     """
 
     total: int

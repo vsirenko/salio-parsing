@@ -1063,7 +1063,7 @@ class MatchQueue(Base):
 
     Not a null variant on a match: this carries work state a verdict has no business
     holding — how often it has been attempted, what the near misses were, and above all
-    *why* it failed. "Did not match" is at least five different problems routing to five
+    *why* it failed. "Did not match" is at least six different problems routing to six
     different kinds of work, and one undifferentiated pile is a pile nobody sorts.
 
     The invariant: an offer has an active match or a row here, never both. A second place
@@ -1086,9 +1086,60 @@ class MatchQueue(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "reason in ('brand_unresolved', 'no_signals', 'signals_unmatched',"
-            " 'ambiguous', 'low_confidence')",
+            "reason in ('brand_unknown', 'brand_ambiguous', 'no_signals',"
+            " 'signals_unmatched', 'ambiguous', 'low_confidence')",
             name="reason_known",
         ),
         Index("ix_match_queue_reason", "reason"),
+    )
+
+
+class JudgeVerdict(Base):
+    """What an outside model answered, kept so it is asked once.
+
+    The reason this table exists is not saving money on repeats of the same listing — it
+    is that the matcher retries everything in the queue on every pass, because the
+    catalogue it failed against keeps changing underneath it. Without a store, one queued
+    listing would be paid for again on every run, forever.
+
+    Keyed by the question rather than by the offer. `question_hash` covers the state and
+    the options exactly as they were sent, so a listing whose title changed, or whose
+    candidate brands changed because a brand was added, is a different question and gets
+    asked again. That is the behaviour worth having: the same question is never paid for
+    twice, and a changed one is never answered from a stale cache.
+
+    A verdict is an input to matching, never a match. The matcher reads this table and
+    never calls out — running the ladder stays offline, deterministic and fast, and asking
+    is its own explicit pass that an admin starts.
+    """
+
+    __tablename__ = "judge_verdicts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # What was being decided. One kind today; attribute and category mapping are the
+    # shapes this was built wide enough to hold.
+    kind: Mapped[str] = mapped_column(String(20))
+    question_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    # What the listing was, and which options it was offered. Stored for the same reason
+    # `offer_match.evidence` is: a wrong answer that cannot be inspected can only be
+    # deleted, not argued with.
+    state: Mapped[dict] = mapped_column(JSONB)
+    options: Mapped[list] = mapped_column(JSONB)
+    # The full answer, probabilities included. `choice` and `confidence` are lifted out
+    # of it because they are what every query filters on.
+    answer: Mapped[dict] = mapped_column(JSONB)
+    choice: Mapped[str] = mapped_column(String(100))
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4))
+    # The model that actually answered, not the alias that was asked for: `jev-latest`
+    # moves, and a verdict nobody can attribute to a version cannot be re-examined when
+    # the next one behaves differently.
+    model: Mapped[str] = mapped_column(String(50))
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("kind in ('brand_choice')", name="kind_known"),
+        CheckConstraint("confidence between 0 and 1", name="confidence_is_a_fraction"),
+        Index("ix_judge_verdicts_kind_created", "kind", "created_at"),
     )

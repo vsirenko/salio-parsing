@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import NamedTuple
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,10 @@ from app.db.models import (
 from app.db.query import paginated
 from app.features.brands.normalization import normalize_brand
 from app.features.catalog.identity import normalize_model
+from app.features.judge.schemas import BrandRequest, BrandVerdict, JudgeReport
+from app.features.judge.service import JudgeService
 from app.features.matching.schemas import (
+    DecidedBy,
     ManualMatch,
     MatchOutcome,
     MatchQueueRead,
@@ -48,9 +52,31 @@ CONFIDENCE = {
 }
 
 
+class BrandLookup(NamedTuple):
+    """What a brand string turned into, and what stood in the way when it turned into
+    nothing.
+
+    `candidates` is the point of carrying a tuple rather than a brand: a string that means
+    two brands is a question with the answers already in hand, and dropping them would turn
+    a one-click choice back into a search.
+    """
+
+    brand: Brand | None
+    state: str
+    candidates: list[int]
+    # Present only when a stored judgement is what settled it. Carried so the match it
+    # leads to can record that a model, not an alias, chose the brand.
+    verdict: BrandVerdict | None = None
+
+
 class MatchingService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, judge: JudgeService) -> None:
         self.session = session
+        # Consulted, never called from the ladder. `stored_brand_verdict` reads the
+        # verdict store and cannot reach the network, so running the matcher stays
+        # offline, deterministic and as fast as its indexes — asking is a separate pass
+        # an admin starts.
+        self.judge = judge
 
     # --- running it ---
 
@@ -107,9 +133,24 @@ class MatchingService:
                     offer, found[0], Method.GTIN, {"signal": "gtin", "value": reading.gtin}
                 )
             if len(found) > 1:
-                return await self._queue(offer, Reason.AMBIGUOUS, found, signal="gtin")
+                return await self._queue(offer, Reason.AMBIGUOUS, self._variants(found, "gtin"))
 
-        brand, brand_state = await self._resolve_brand(reading.brand_raw)
+        lookup = await self._resolve_brand(offer, reading)
+        brand = lookup.brand
+        # A brand a model chose is not a brand an alias stated, and a match built on one
+        # says so: `method` stays the rung that fired, `decided_by` names what had the
+        # final say, and the evidence carries the answer it had.
+        judged = lookup.verdict is not None
+        by = DecidedBy.JUDGE if judged else None
+        via = (
+            {
+                "brand_via": "judge",
+                "brand_choice": lookup.verdict.choice,
+                "brand_confidence": float(lookup.verdict.confidence),
+            }
+            if judged
+            else {}
+        )
 
         if brand is not None:
             # 2. A part number only means something beside its maker, which is why the
@@ -121,10 +162,11 @@ class MatchingService:
                         offer,
                         found[0],
                         Method.BRAND_MPN,
-                        {"signal": "mpn", "brand_id": brand.id, "value": reading.mpn},
+                        {"signal": "mpn", "brand_id": brand.id, "value": reading.mpn, **via},
+                        decided_by=by,
                     )
                 if len(found) > 1:
-                    return await self._queue(offer, Reason.AMBIGUOUS, found, signal="mpn")
+                    return await self._queue(offer, Reason.AMBIGUOUS, self._variants(found, "mpn"))
 
             # 3. The model designation, normalized so that WW90T554DAX, ww90t554-dax and
             #    WW 90 T554 DAX are one string. Language-neutral, which matters when a
@@ -137,26 +179,44 @@ class MatchingService:
                         offer,
                         found[0],
                         Method.BRAND_MODEL,
-                        {"signal": "model", "brand_id": brand.id, "value": model},
+                        {"signal": "model", "brand_id": brand.id, "value": model, **via},
+                        decided_by=by,
                     )
                 if len(found) > 1:
-                    return await self._queue(offer, Reason.AMBIGUOUS, found, signal="model")
+                    return await self._queue(
+                        offer, Reason.AMBIGUOUS, self._variants(found, "model")
+                    )
 
-        return await self._queue(offer, self._why(reading, brand, brand_state), [])
+        return await self._queue(offer, *self._why(reading, lookup))
 
     @staticmethod
-    def _why(reading: NormalizedOffer, brand: Brand | None, brand_state: str) -> Reason:
-        """Name the problem, because each one is a different kind of work.
+    def _why(reading: NormalizedOffer, lookup: BrandLookup) -> tuple[Reason, list[dict]]:
+        """Name the problem and hand over whatever was found while failing.
+
+        Each reason is a different kind of work, so they are not one bucket — and the two
+        brand reasons are not one either. A string that means nothing has to be researched;
+        a string that means two brands only has to be chosen between, and the difference is
+        whether there is anything on the row to choose from.
 
         Order matters: an offer with nothing in it is not a brand problem, and a brand that
         would not resolve is not the catalogue missing a row.
         """
         has_any = any((reading.gtin, reading.mpn, reading.model, reading.brand_raw))
         if not has_any:
-            return Reason.NO_SIGNALS
-        if brand is None and brand_state != "none_given":
-            return Reason.BRAND_UNRESOLVED
-        return Reason.SIGNALS_UNMATCHED
+            return Reason.NO_SIGNALS, []
+        if lookup.state == "ambiguous":
+            return Reason.BRAND_AMBIGUOUS, [
+                {"brand_id": brand_id, "why": "brand_alias"} for brand_id in lookup.candidates
+            ]
+        # The judge was asked and said none of the candidates makes this. That is not an
+        # unanswered choice any more — it is a brand nobody has, which is different work.
+        if lookup.state in ("unknown", "unreadable", "judged_none"):
+            return Reason.BRAND_UNKNOWN, []
+        return Reason.SIGNALS_UNMATCHED, []
+
+    @staticmethod
+    def _variants(variant_ids: list[int], signal: str) -> list[dict]:
+        return [{"variant_id": variant_id, "why": signal} for variant_id in variant_ids]
 
     # --- the lookups, each an index hit rather than a scan ---
 
@@ -186,19 +246,27 @@ class MatchingService:
         )
         return sorted(set(rows))
 
-    async def _resolve_brand(self, brand_raw: str | None) -> tuple[Brand | None, str]:
-        """A brand string to a brand, or an honest nothing.
+    async def _resolve_brand(self, offer: Offer, reading: NormalizedOffer) -> BrandLookup:
+        """A brand string to a brand, or an honest nothing with its reason attached.
 
         A string that resolves to two brands is not a brand: Delta is taps and machine
         tools. Picking one would send the search into the wrong block, where it would find
-        nothing and report the catalogue as incomplete.
+        nothing and report the catalogue as incomplete. Both brands are carried back so the
+        queue row can hold the question rather than only the failure.
+
+        An alias cannot settle that, and no alias ever will: `Delta` belongs to both of
+        them legitimately, so this is decided per listing and not once for the string. That
+        is the gap a stored judgement fills — and only a stored one, read here without a
+        network call.
         """
-        if not brand_raw:
-            return None, "none_given"
+        if not reading.brand_raw:
+            return BrandLookup(None, "none_given", [])
         try:
-            normalized = normalize_brand(brand_raw)
+            normalized = normalize_brand(reading.brand_raw)
         except ValueError:
-            return None, "unreadable"
+            # A string that normalizes to nothing — punctuation, a stray trademark sign.
+            # Same work as a brand nobody knows: a person reads the raw value.
+            return BrandLookup(None, "unreadable", [])
 
         rows = await self.session.execute(
             select(Brand)
@@ -208,22 +276,62 @@ class MatchingService:
         )
         brands = list(rows.scalars().unique())
         if len(brands) == 1:
-            return brands[0], "resolved"
-        return None, "ambiguous" if brands else "unknown"
+            return BrandLookup(brands[0], "resolved", [brands[0].id])
+        if not brands:
+            return BrandLookup(None, "unknown", [])
+
+        candidates = [brand.id for brand in brands]
+        verdict = await self.judge.stored_brand_verdict(
+            self._brand_request(offer, reading, candidates)
+        )
+        if verdict is None:
+            return BrandLookup(None, "ambiguous", candidates)
+        if verdict.accepted:
+            chosen = next(brand for brand in brands if brand.id == verdict.brand_id)
+            return BrandLookup(chosen, "resolved_judge", candidates, verdict)
+        # Answered "neither" is a decision; answered without enough certainty is not, and
+        # leaving that one ambiguous is what keeps a weak opinion from placing a listing.
+        return BrandLookup(None, "judged_none" if verdict.no_match else "ambiguous", candidates)
+
+    @staticmethod
+    def _brand_request(
+        offer: Offer, reading: NormalizedOffer, candidates: list[int]
+    ) -> BrandRequest:
+        """The listing, in the terms the judge asks about it.
+
+        One place builds it, so the question a pass asks and the question the ladder looks
+        up are the same question — they are keyed by their content, and a field spelled
+        differently in two places would be a store that never hits.
+        """
+        return BrandRequest(
+            key=offer.id,
+            title=reading.title,
+            brand_raw=reading.brand_raw,
+            model_raw=reading.model,
+            brand_ids=candidates,
+        )
 
     # --- writing the outcome ---
 
     async def _link(
-        self, offer: Offer, variant_id: int, method: Method, evidence: dict
+        self,
+        offer: Offer,
+        variant_id: int,
+        method: Method,
+        evidence: dict,
+        *,
+        decided_by: DecidedBy | None = None,
     ) -> MatchOutcome:
         await self._supersede(offer.id)
+        if decided_by is None:
+            decided_by = DecidedBy.HUMAN if method is Method.HUMAN else DecidedBy.RULE
         match = OfferMatch(
             offer_id=offer.id,
             variant_id=variant_id,
             method=method.value,
             confidence=CONFIDENCE[method],
             evidence=evidence,
-            decided_by="human" if method is Method.HUMAN else "rule",
+            decided_by=decided_by.value,
         )
         self.session.add(match)
         await self.session.execute(
@@ -240,16 +348,15 @@ class MatchingService:
             candidates=[],
         )
 
-    async def _queue(
-        self, offer: Offer, reason: Reason, candidates: list[int], *, signal: str | None = None
-    ) -> MatchOutcome:
-        rows = [{"variant_id": v, "why": signal} for v in candidates]
+    async def _queue(self, offer: Offer, reason: Reason, candidates: list[dict]) -> MatchOutcome:
         existing = await self.session.get(MatchQueue, offer.id)
         if existing is None:
-            self.session.add(MatchQueue(offer_id=offer.id, reason=reason.value, candidates=rows))
+            self.session.add(
+                MatchQueue(offer_id=offer.id, reason=reason.value, candidates=candidates)
+            )
         else:
             existing.reason = reason.value
-            existing.candidates = rows
+            existing.candidates = candidates
             existing.attempts += 1
             existing.last_attempt_at = datetime.now(UTC)
 
@@ -260,7 +367,7 @@ class MatchingService:
             method=None,
             variant_id=None,
             reason=reason,
-            candidates=rows,
+            candidates=candidates,
         )
 
     async def _supersede(self, offer_id: int) -> None:
@@ -281,6 +388,57 @@ class MatchingService:
             await self.session.execute(
                 update(model).where(model.offer_id == offer_id).values(variant_id=variant_id)
             )
+
+    # --- asking for help ---
+
+    async def judge_brands(self, *, limit: int = 50) -> JudgeReport:
+        """Put the brand choices nobody could make in front of the judge, then retry them.
+
+        Only `brand_ambiguous`. The other reasons have nothing to choose between, and a
+        choice is the only thing the judge does — handing it `signals_unmatched` would be
+        asking a question whose options do not exist.
+
+        Answering and placing are one call because they are useless apart: a verdict that
+        nothing acts on is a row, and re-running the whole queue to pick it up would redo
+        every listing that is stuck for an unrelated reason.
+        """
+        rows = (
+            await self.session.scalars(
+                select(MatchQueue)
+                .where(MatchQueue.reason == Reason.BRAND_AMBIGUOUS.value)
+                .order_by(MatchQueue.offer_id)
+                .limit(limit)
+            )
+        ).all()
+
+        requests: list[BrandRequest] = []
+        for row in rows:
+            reading = await self._reading(row.offer_id)
+            if reading is None:
+                continue
+            offer = await self._offer(row.offer_id)
+            candidates = [
+                entry["brand_id"] for entry in row.candidates if entry.get("brand_id") is not None
+            ]
+            requests.append(self._brand_request(offer, reading, candidates))
+
+        verdicts, report = await self.judge.decide_brands(requests)
+
+        placed = 0
+        for offer_id, verdict in verdicts.items():
+            if not verdict.accepted and not verdict.no_match:
+                continue
+            # Re-run rather than write the brand in: the verdict is now in the store, so
+            # the ladder resolves it on its own and takes whichever rung actually fires.
+            reading = await self._reading(offer_id)
+            if reading is None:
+                continue
+            outcome = await self._decide(await self._offer(offer_id), reading)
+            placed += outcome.matched
+
+        report = report.model_copy(update={"placed": placed})
+        audit.record_changes(**report.model_dump(mode="json"))
+        return report
 
     # --- a human deciding ---
 
