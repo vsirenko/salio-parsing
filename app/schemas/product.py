@@ -37,5 +37,7 @@ class ProductCreate(ProductBase):
 
 
 class ProductRead(ProductBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime

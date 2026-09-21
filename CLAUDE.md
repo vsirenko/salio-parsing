@@ -4,9 +4,25 @@ FastAPI service. Deliberately flat: route → service → schema.
 
 ## Environment
 - Python 3.12+, virtualenv in `.venv`. Run tooling through it: `.venv/bin/pytest`,
-  `.venv/bin/ruff`, `.venv/bin/uvicorn`, `.venv/bin/cz`.
+  `.venv/bin/ruff`, `.venv/bin/uvicorn`, `.venv/bin/cz`, `.venv/bin/alembic`.
 - Install dev deps: `uv pip install -r requirements-dev.txt`.
 - Settings come from `.env` via pydantic-settings (`app/core/config.py`).
+- PostgreSQL runs in compose on host port **55432**, the api on **8080**. Do not move
+  them to 5432 / 8000 — those are taken by other projects on this machine.
+- Tests need the `app_test` database and a running `db` container.
+
+## Database
+- SQLAlchemy 2.0 async + Alembic. Models in `app/db/models.py`; no repository layer —
+  services hold an `AsyncSession` and write queries directly.
+- Services call `flush()`, never `commit()`. The request transaction is owned by
+  `get_session` and commits when the handler returns.
+- The audit middleware is the one exception: it writes through `session_factory` in its
+  own transaction, so a record of a failed request survives that request's rollback.
+  Do not "simplify" it onto the request session.
+- After changing a model: `alembic revision --autogenerate`, then read the migration
+  before committing. `alembic check` must pass.
+- `/health` must never touch the database — it is liveness, and a database blip should
+  not cause a restart loop. Dependency checks belong in `/health/ready`.
 
 ## Architecture
 - Flow is strictly route → service → schema. Routes contain no business logic.
@@ -61,7 +77,9 @@ FastAPI service. Deliberately flat: route → service → schema.
 
 ## Checks
 - After any Python change: `.venv/bin/ruff check .` and `.venv/bin/pytest`.
+- After any model change: `.venv/bin/alembic check`.
 - Before pushing: `.venv/bin/pre-commit run --all-files`.
+- Keep `TODO.md` current: tick an item off when it lands, add one when a gap is found.
 
 ## Commits
 - Conventional Commits, enforced by the commitizen `commit-msg` hook.

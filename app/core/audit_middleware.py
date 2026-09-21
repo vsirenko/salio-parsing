@@ -15,6 +15,7 @@ from starlette.types import ASGIApp
 
 from app.core.audit import open_context
 from app.schemas.audit import AuditEntryCreate
+from app.services.audit import record_entry
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 duration_ms=int((perf_counter() - started) * 1000),
             )
             try:
-                await request.app.state.audit_service.record(entry)
+                await record_entry(entry)
             except Exception:
                 # Never let bookkeeping break the request. If the audit trail becomes a
                 # compliance requirement, fail closed here instead.

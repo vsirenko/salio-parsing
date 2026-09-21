@@ -1,23 +1,9 @@
 """Audit trail tests: completeness, redaction and scope."""
 
 import pytest
-from fastapi.testclient import TestClient
-
-from app.api.deps import get_user_service
-from app.main import app
-from app.services.audit import AuditService
-from app.services.users import UserService
 
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
 CUSTOMER = {"email": "customer@example.com", "password": "customer-password"}
-
-
-@pytest.fixture
-def client():
-    app.dependency_overrides[get_user_service] = lambda: UserService()
-    app.state.audit_service = AuditService()
-    yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 def admin_token(client) -> str:
@@ -189,45 +175,33 @@ async def test_concurrent_requests_do_not_mix_actors():
 
     import httpx
 
-    from app.schemas.user import Role, UserCreate
-    from app.services.users import UserService
+    from app.main import app
 
-    users = UserService()
-    await users.create_user(
-        UserCreate(email="second@example.com", password="second-password", role=Role.ADMIN)
-    )
-    app.dependency_overrides[get_user_service] = lambda: users
-    app.state.audit_service = AuditService()
+    SECOND = {"email": "second@example.com", "password": "second-password"}
 
     transport = httpx.ASGITransport(app=app)
-    try:
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-            first = (await ac.post("/api/admin/auth/login", json=ADMIN)).json()["access_token"]
-            second = (
-                await ac.post(
-                    "/api/admin/auth/login",
-                    json={"email": "second@example.com", "password": "second-password"},
-                )
-            ).json()["access_token"]
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        first = (await ac.post("/api/admin/auth/login", json=ADMIN)).json()["access_token"]
+        created = await ac.post(
+            "/api/admin/users", headers=auth(first), json={**SECOND, "role": "admin"}
+        )
+        assert created.status_code == 201
+        second_id = created.json()["id"]
+        second = (await ac.post("/api/admin/auth/login", json=SECOND)).json()["access_token"]
 
-            # 20 interleaved requests from two different admins.
-            await asyncio.gather(
-                *[
-                    ac.get(f"/api/admin/users/{1 if i % 2 else 3}", headers=auth(token))
-                    for i, token in enumerate([first, second] * 10)
-                ]
-            )
+        # 20 interleaved requests from two different admins.
+        await asyncio.gather(
+            *[ac.get("/api/admin/users/1", headers=auth(token)) for token in [first, second] * 10]
+        )
 
-            page = await ac.get("/api/admin/audit", headers=auth(first), params={"limit": 200})
-            logged = page.json()["items"]
-    finally:
-        app.dependency_overrides.clear()
+        page = await ac.get("/api/admin/audit", headers=auth(first), params={"limit": 200})
+        logged = page.json()["items"]
 
-    by_user = [e for e in logged if e["path"].startswith("/api/admin/users/")]
+    by_user = [e for e in logged if e["path"] == "/api/admin/users/1"]
     assert len(by_user) == 20
-    # Every entry carries a real actor, and the id and the email always agree.
-    emails = {1: "admin@example.com", 3: "second@example.com"}
+
+    emails = {1: ADMIN["email"], second_id: SECOND["email"]}
     for entry in by_user:
-        assert entry["actor_id"] in emails
+        assert entry["actor_id"] in emails, "every action must carry a real actor"
         assert entry["actor_email"] == emails[entry["actor_id"]]
-    assert {e["actor_id"] for e in by_user} == {1, 3}
+    assert {e["actor_id"] for e in by_user} == {1, second_id}

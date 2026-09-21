@@ -1,22 +1,7 @@
 """Auth tests, focused on the boundary between the two panels."""
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.api.deps import get_user_service
-from app.main import app
-from app.services.users import UserService
-
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
 CUSTOMER = {"email": "customer@example.com", "password": "customer-password"}
-
-
-@pytest.fixture
-def client():
-    service = UserService()
-    app.dependency_overrides[get_user_service] = lambda: service
-    yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 def tokens(client, credentials, *, panel="") -> dict:

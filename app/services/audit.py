@@ -1,34 +1,40 @@
 """Audit trail storage.
 
 Append-only by design: there is no update and no delete, and no endpoint exposes one.
-In a real deployment this is a separate table whose DB user holds INSERT and SELECT
-grants only.
+The database user that runs this in production should hold INSERT and SELECT only.
 """
 
-import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import AuditEntry as AuditEntryRow
+from app.db.query import paginated
+from app.db.session import session_factory
 from app.schemas.audit import AuditEntry, AuditEntryCreate, Outcome
 from app.schemas.pagination import Pagination
 
+# status >= 400 is a failure; expressed here so the filter can run in SQL.
+FAILURE_FROM = 400
+
+
+async def record_entry(payload: AuditEntryCreate) -> None:
+    """Write one entry in its own transaction.
+
+    Deliberately not the request session: when a request fails its transaction is
+    rolled back, and the record of that failure must not be rolled back with it.
+    """
+    async with session_factory() as session:
+        session.add(AuditEntryRow(**payload.model_dump(exclude={"outcome"})))
+        await session.commit()
+
 
 class AuditService:
-    def __init__(self) -> None:
-        self._items: dict[int, AuditEntry] = {}
-        self._next_id = 1
-        self._lock = asyncio.Lock()
+    """Read side. Writes go through `record_entry` above."""
 
-    async def record(self, payload: AuditEntryCreate) -> AuditEntry:
-        async with self._lock:
-            entry = AuditEntry(
-                id=self._next_id,
-                created_at=datetime.now(UTC),
-                # outcome is computed, not stored.
-                **payload.model_dump(exclude={"outcome"}),
-            )
-            self._items[entry.id] = entry
-            self._next_id += 1
-            return entry
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
     async def list_entries(
         self,
@@ -41,28 +47,29 @@ class AuditService:
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> tuple[list[AuditEntry], int]:
-        items = list(self._items.values())
+        stmt = select(AuditEntryRow)
 
         # Cursor: everything written before the anchor. Applied like any other filter,
         # so `total` stays consistent with what the caller asked for.
         if pagination.before_id is not None:
-            items = [e for e in items if e.id < pagination.before_id]
+            stmt = stmt.where(AuditEntryRow.id < pagination.before_id)
         if actor_id is not None:
-            items = [e for e in items if e.actor_id == actor_id]
+            stmt = stmt.where(AuditEntryRow.actor_id == actor_id)
         if method:
-            items = [e for e in items if e.method == method.upper()]
+            stmt = stmt.where(AuditEntryRow.method == method.upper())
         if path:
-            items = [e for e in items if path in e.path]
-        if outcome is not None:
-            items = [e for e in items if e.outcome is outcome]
+            stmt = stmt.where(AuditEntryRow.path.contains(path))
+        if outcome is Outcome.SUCCESS:
+            stmt = stmt.where(AuditEntryRow.status_code < FAILURE_FROM)
+        elif outcome is Outcome.FAILURE:
+            stmt = stmt.where(AuditEntryRow.status_code >= FAILURE_FROM)
         if since is not None:
-            items = [e for e in items if e.created_at >= since]
+            stmt = stmt.where(AuditEntryRow.created_at >= since)
         if until is not None:
-            items = [e for e in items if e.created_at <= until]
+            stmt = stmt.where(AuditEntryRow.created_at <= until)
 
         # Newest first: an audit trail is read from the most recent event backwards.
-        items.sort(key=lambda e: e.id, reverse=True)
-        return pagination.slice(items), len(items)
-
-
-audit_service = AuditService()
+        rows, total = await paginated(
+            self.session, stmt.order_by(AuditEntryRow.id.desc()), pagination
+        )
+        return [AuditEntry.model_validate(row) for row in rows], total

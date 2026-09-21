@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     # Turn off to hide Swagger/ReDoc in production.
     docs_enabled: bool = True
 
+    # --- Database ---
+    database_url: str = "postgresql+asyncpg://app:app@localhost:55432/app"
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_echo: bool = False
+    # Do not keep pooled connections. Needed where a connection cannot outlive the
+    # context that opened it: tests (each client runs its own event loop) and
+    # serverless runtimes.
+    db_use_null_pool: bool = False
+
     # --- Auth ---
     # Generate a real one with: python -c "import secrets; print(secrets.token_urlsafe(48))"
     secret_key: str = Field(default=DEV_SECRET_KEY, min_length=32)

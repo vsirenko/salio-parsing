@@ -49,4 +49,4 @@ async def refresh(payload: RefreshRequest, users: UserServiceDep) -> TokenPair:
 
 @router.get("/me", response_model=UserRead, summary="Current customer")
 async def me(current_user: CurrentClient) -> UserRead:
-    return UserRead.model_validate(current_user, from_attributes=True)
+    return UserRead.model_validate(current_user)

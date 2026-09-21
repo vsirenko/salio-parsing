@@ -8,7 +8,9 @@ Deliberately flat: routes → service → schemas. No repository pattern, no CQR
 ## Requirements
 
 - Python 3.12+
-- (optional) Docker
+- Docker (PostgreSQL runs in compose)
+
+See [TODO.md](TODO.md) for what is not built yet.
 
 ## Project structure
 
@@ -28,6 +30,11 @@ app/
 │           ├── auth.py     # admin sign-in
 │           ├── users.py    # admin user management
 │           └── audit.py    # audit trail, read-only
+├── db/
+│   ├── base.py             # DeclarativeBase + constraint naming convention
+│   ├── models.py           # User, Product, AuditEntry tables
+│   ├── query.py            # count + window helper shared by the services
+│   └── session.py          # engine, request session, independent session factory
 ├── core/
 │   ├── config.py           # Settings (pydantic-settings, reads .env)
 │   ├── error_handlers.py   # one consistent error body for every failure
@@ -47,6 +54,8 @@ app/
     ├── products.py         # business logic + in-memory storage
     ├── users.py            # lookup, authentication, panel check
     └── audit.py            # append-only audit storage
+alembic/                    # migrations
+docker-compose.yml          # db + migrate + api
 tests/
 .pre-commit-config.yaml     # ruff + commit message linting
 ```
@@ -54,6 +63,11 @@ tests/
 ## Setup
 
 ```bash
+# 1. PostgreSQL. Host ports are 55432 (db) and 8080 (api) — 5432 and 8000 are
+#    commonly taken by other projects.
+docker compose up -d db
+
+# 2. Application
 python3.12 -m venv .venv
 source .venv/bin/activate
 
@@ -61,6 +75,9 @@ pip install -r requirements.txt          # runtime only
 pip install -r requirements-dev.txt      # + pytest, httpx, ruff
 
 cp .env.example .env
+
+# 3. Schema
+alembic upgrade head
 ```
 
 With [uv](https://docs.astral.sh/uv/) instead:
@@ -81,19 +98,60 @@ uvicorn app.main:app --reload --port 8000
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
+Demo accounts are created on startup while `SEED_USERS=true`.
+
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 - OpenAPI JSON: http://localhost:8000/openapi.json
 
 Set `DOCS_ENABLED=false` in production to hide all three.
 
+## Database
+
+PostgreSQL via SQLAlchemy 2.0 (async, asyncpg) with Alembic migrations. No repository
+layer: a service takes an `AsyncSession` and writes queries directly.
+
+```bash
+alembic upgrade head                      # apply migrations
+alembic revision --autogenerate -m "..."  # after changing app/db/models.py
+alembic check                             # fails if models and migrations disagree
+alembic downgrade -1                      # step back one
+```
+
+Transactions:
+
+- `get_session` gives one transaction per request — committed when the handler returns,
+  rolled back if it raises. A service calls `flush()`, never `commit()`.
+- The audit middleware writes through `session_factory` instead, in its own transaction.
+  A record of a failed request must survive that request's rollback.
+- `DB_USE_NULL_POOL=true` stops connections being pooled, for tests (each client runs
+  its own event loop and an asyncpg connection cannot cross loops) and for serverless.
+
+Two probes, deliberately different: `/health` is liveness and touches nothing, so a
+database blip does not turn into a restart loop; `/health/ready` runs `select 1` and
+answers 503 when the database is down, which is what should pull the instance out of
+the load balancer.
+
 ## Tests & lint
+
+Tests run against a real PostgreSQL — the schema uses JSONB, arrays and a functional
+unique index, so SQLite would be testing something we do not ship. Create the test
+database once:
+
+```bash
+docker compose exec db psql -U app -c "create database app_test owner app;"
+```
 
 ```bash
 pytest
 ruff check .
 ruff format .
+alembic check
 ```
+
+Each test truncates and re-seeds rather than rolling back a shared transaction, because
+the audit middleware writes in its own transaction and a rollback-based fixture would
+hide it.
 
 ## Git hooks & commit messages
 
@@ -142,9 +200,15 @@ pre-commit run --all-files
 ## Docker
 
 ```bash
-docker build -t products-api .
-docker run --rm -p 8000:8000 --env-file .env products-api
+docker compose up -d --build     # db + migrations + api on http://localhost:8080
+docker compose logs -f api
+docker compose down              # add -v to drop the data volume
 ```
+
+Compose runs three services: `db`, a one-shot `migrate` that applies `alembic upgrade
+head` and exits, and `api`, which starts only once the migration has succeeded. Keeping
+migrations out of the api start command means several replicas cannot race applying the
+same migration.
 
 The image runs as a non-root user and ships a `HEALTHCHECK` hitting `/health`.
 
@@ -168,6 +232,10 @@ Every variable is read from the environment or `.env` (see `.env.example`).
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
 | `SEED_USERS` | `true` | Create demo accounts; must be `false` in production |
 | `TRUST_PROXY_HEADERS` | `false` | Read `X-Forwarded-For` / `X-Request-ID`; only enable behind a trusted proxy |
+| `DATABASE_URL` | local compose | `postgresql+asyncpg://…` |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `5` / `10` | Connection pool |
+| `DB_ECHO` | `false` | Log every SQL statement |
+| `DB_USE_NULL_POOL` | `false` | Do not pool connections (tests, serverless) |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
 | `CORS_ALLOW_CREDENTIALS` | `true` | Send `Access-Control-Allow-Credentials` |
 
@@ -182,7 +250,8 @@ for one panel carries an `aud` claim the other panel rejects.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/health` | Liveness probe |
+| GET | `/health` | Liveness probe, no dependencies |
+| GET | `/health/ready` | Readiness probe, checks the database |
 | POST | `/api/auth/login` | Customer sign-in, returns access + refresh |
 | POST | `/api/auth/refresh` | Exchange a refresh token for a new pair |
 | POST | `/api/admin/auth/login` | Admin sign-in |
@@ -399,7 +468,7 @@ curl "http://localhost:8000/api/admin/audit?limit=50&before_id=120" -H "Authoriz
 
 - **New resource** — add `app/schemas/<thing>.py`, `app/services/<thing>.py`,
   `app/api/routes/<thing>.py`, then register the router in `app/api/router.py`.
-- **Real database** — replace the dict inside `ProductService` with DB calls. Routes and schemas
-  don't change; they only know schemas and domain exceptions.
+- **Schema change** — edit `app/db/models.py`, run `alembic revision --autogenerate`,
+  read the generated migration before committing it.
 - **New error type** — subclass `AppError` in `app/core/exceptions.py`; it is serialized
   automatically, no handler to write.

@@ -1,25 +1,8 @@
 """Shared pagination: the envelope, the caps, and offset vs cursor behaviour."""
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.api.deps import get_product_service, get_user_service
-from app.main import app
 from app.schemas.pagination import Page, Pagination
-from app.services.audit import AuditService
-from app.services.products import ProductService
-from app.services.users import UserService
 
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
-
-
-@pytest.fixture
-def client():
-    app.dependency_overrides[get_product_service] = lambda: ProductService()
-    app.dependency_overrides[get_user_service] = lambda: UserService()
-    app.state.audit_service = AuditService()
-    yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 def auth(token: str) -> dict:

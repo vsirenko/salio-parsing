@@ -25,9 +25,7 @@ async def list_users(
     role: Annotated[Role | None, Query(description="Filter by role")] = None,
 ) -> Page[UserRead]:
     items, total = await users.list_users(pagination, role=role)
-    return Page[UserRead].of(
-        [UserRead.model_validate(u, from_attributes=True) for u in items], total, pagination
-    )
+    return Page[UserRead].of([UserRead.model_validate(u) for u in items], total, pagination)
 
 
 @router.post(
@@ -39,7 +37,7 @@ async def list_users(
 )
 async def create_user(payload: UserCreate, users: UserServiceDep) -> UserRead:
     user = await users.create_user(payload)
-    return UserRead.model_validate(user, from_attributes=True)
+    return UserRead.model_validate(user)
 
 
 @router.get(
@@ -50,4 +48,4 @@ async def create_user(payload: UserCreate, users: UserServiceDep) -> UserRead:
 )
 async def get_user(user_id: int, users: UserServiceDep) -> UserRead:
     user = await users.get_user(user_id)
-    return UserRead.model_validate(user, from_attributes=True)
+    return UserRead.model_validate(user)

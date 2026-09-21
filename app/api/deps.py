@@ -2,35 +2,36 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.security import AuthError, ForbiddenError, decode_token
+from app.db.session import get_session
 from app.schemas.auth import Audience, TokenType
 from app.schemas.user import Role, UserInDB
 from app.services.audit import AuditService
-from app.services.products import ProductService, product_service
-from app.services.users import UserService, user_service
+from app.services.products import ProductService
+from app.services.users import UserService
 
 # auto_error=False so a missing header raises our own AuthError shape, not Starlette's.
 bearer_scheme = HTTPBearer(auto_error=False)
 
 Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-def get_product_service() -> ProductService:
-    """Indirection kept on purpose: tests override this to inject a fresh service."""
-    return product_service
+def get_product_service(session: SessionDep) -> ProductService:
+    return ProductService(session)
 
 
-def get_user_service() -> UserService:
-    return user_service
+def get_user_service(session: SessionDep) -> UserService:
+    return UserService(session)
 
 
-def get_audit_service(request: Request) -> AuditService:
-    """Read from app.state so routes and the middleware share one instance."""
-    return request.app.state.audit_service
+def get_audit_service(session: SessionDep) -> AuditService:
+    return AuditService(session)
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]

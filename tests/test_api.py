@@ -1,18 +1,4 @@
-import pytest
-from fastapi.testclient import TestClient
-
-from app.api.deps import get_product_service
-from app.main import app
-from app.services.products import ProductService
-
-
-@pytest.fixture
-def client():
-    # One fresh in-memory service per test, shared by every request in that test.
-    service = ProductService()
-    app.dependency_overrides[get_product_service] = lambda: service
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+"""Products and the error envelope. The `client` fixture comes from conftest."""
 
 
 def test_health(client):

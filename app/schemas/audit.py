@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
 class Outcome(StrEnum):
@@ -37,5 +37,7 @@ class AuditEntryCreate(BaseModel):
 
 
 class AuditEntry(AuditEntryCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime

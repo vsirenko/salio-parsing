@@ -1,7 +1,20 @@
-from fastapi import APIRouter
+"""Health probes.
+
+Two endpoints on purpose: an orchestrator restarts a container that fails liveness,
+so liveness must not depend on the database — a database blip would otherwise turn
+into a restart loop. Readiness is what takes the instance out of the load balancer.
+"""
+
+import logging
+
+from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.schemas.common import HealthResponse
+from app.db.session import check_connection
+from app.schemas.common import HealthResponse, ReadinessResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
@@ -14,3 +27,22 @@ async def health() -> HealthResponse:
         version=settings.app_version,
         environment=settings.environment,
     )
+
+
+@router.get(
+    "/health/ready",
+    response_model=ReadinessResponse,
+    summary="Readiness probe",
+    responses={503: {"model": ReadinessResponse, "description": "A dependency is down"}},
+)
+async def ready() -> ReadinessResponse | JSONResponse:
+    try:
+        await check_connection()
+    except Exception:
+        logger.exception("Readiness check failed")
+        body = ReadinessResponse(status="unavailable", database="down")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=body.model_dump()
+        )
+
+    return ReadinessResponse(status="ok", database="up")

@@ -37,6 +37,8 @@ class UserCreate(UserBase):
 
 
 class UserRead(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     role: Role
     is_active: bool
