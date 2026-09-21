@@ -16,21 +16,30 @@ Deliberately flat: routes → service → schemas. No repository pattern, no CQR
 app/
 ├── main.py                 # app factory: CORS, routers, error handlers, lifespan
 ├── api/
-│   ├── deps.py             # shared FastAPI dependencies
-│   ├── router.py           # aggregates every /api route
+│   ├── deps.py             # shared deps + auth guards
+│   ├── router.py           # client routes    -> /api/*
+│   ├── admin_router.py     # admin routes     -> /api/admin/*, guarded at router level
 │   └── routes/
 │       ├── health.py       # GET /health
-│       └── products.py     # GET/POST /api/products
+│       ├── auth.py         # client sign-in
+│       ├── products.py     # GET/POST /api/products
+│       └── admin/
+│           ├── auth.py     # admin sign-in
+│           └── users.py    # admin user management
 ├── core/
 │   ├── config.py           # Settings (pydantic-settings, reads .env)
 │   ├── error_handlers.py   # one consistent error body for every failure
 │   ├── exceptions.py       # AppError / NotFoundError / ConflictError
+│   ├── security.py         # argon2 hashing, JWT minting and verification
 │   └── logging.py
 ├── schemas/
 │   ├── common.py           # ErrorResponse, Page[T], HealthResponse
+│   ├── auth.py             # Audience, TokenPair, LoginRequest
+│   ├── user.py             # Role, UserCreate / UserRead / UserInDB
 │   └── product.py          # ProductCreate / ProductRead
 └── services/
-    └── products.py         # business logic + in-memory storage
+    ├── products.py         # business logic + in-memory storage
+    └── users.py            # lookup, authentication, panel check
 tests/
 .pre-commit-config.yaml     # ruff + commit message linting
 ```
@@ -146,6 +155,11 @@ Every variable is read from the environment or `.env` (see `.env.example`).
 | `HOST` / `PORT` | `0.0.0.0` / `8000` | Bind address |
 | `API_PREFIX` | `/api` | Prefix for business routes |
 | `DOCS_ENABLED` | `true` | Expose `/docs`, `/redoc`, `/openapi.json` |
+| `SECRET_KEY` | dev placeholder | JWT signing key, min 32 chars; must be changed in production |
+| `JWT_ALGORITHM` | `HS256` | JWT algorithm |
+| `ACCESS_TOKEN_TTL_MINUTES` | `15` | Access token lifetime |
+| `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
+| `SEED_USERS` | `true` | Create demo accounts; must be `false` in production |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
 | `CORS_ALLOW_CREDENTIALS` | `true` | Send `Access-Control-Allow-Credentials` |
 
@@ -153,12 +167,66 @@ Use explicit origins whenever `CORS_ALLOW_CREDENTIALS=true` — browsers reject 
 
 ## Endpoints
 
+Two audiences share one `User` entity but are separated at the token level: a JWT minted
+for one panel carries an `aud` claim the other panel rejects.
+
+**Public**
+
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/health` | Liveness probe |
+| POST | `/api/auth/login` | Customer sign-in, returns access + refresh |
+| POST | `/api/auth/refresh` | Exchange a refresh token for a new pair |
+| POST | `/api/admin/auth/login` | Admin sign-in |
+| POST | `/api/admin/auth/refresh` | Refresh the admin session |
+
+**Client token required** (`aud=client`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/auth/me` | Current customer |
+
+**Admin token required** (`aud=admin`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/admin/auth/me` | Current admin |
+| GET | `/api/admin/users` | List users (`limit`, `offset`, `role`) |
+| POST | `/api/admin/users` | Create a user |
+| GET | `/api/admin/users/{id}` | Get one user |
+
+**Open for now** (products are not behind auth yet)
+
+| Method | Path | Description |
+| --- | --- | --- |
 | GET | `/api/products` | List products (`limit`, `offset`, `search`, `in_stock`) |
 | POST | `/api/products` | Create a product |
 | GET | `/api/products/{id}` | Get one product |
+
+### Access model
+
+- One `User` row per account; `role` (`customer` / `admin`) decides which panel it may
+  sign in to. Signing in at the wrong panel fails with `wrong_panel`.
+- `app/api/admin_router.py` carries `Depends(get_current_admin)` on the router itself, so
+  every admin route is protected by default and a new one cannot forget the guard.
+  `admin_public_router` is the single named exception, and holds only sign-in.
+- Access tokens live 15 minutes, refresh tokens 30 days. A refresh token is rejected where
+  an access token is expected (`type` claim).
+- Passwords are hashed with argon2. `UserRead` has no hash on it, so a handler cannot leak
+  one by accident.
+- There is no public registration endpoint. Accounts are created via `/api/admin/users`.
+
+> Refresh tokens are stateless, so signing out everywhere is not possible yet. Add a `jti`
+> denylist (Redis) or rotation when that is needed.
+
+### Demo accounts
+
+Created on startup while `SEED_USERS=true`; startup fails if that is still true in production.
+
+| Email | Password | Role |
+| --- | --- | --- |
+| `admin@example.com` | `admin-password` | admin |
+| `customer@example.com` | `customer-password` | customer |
 
 ### Errors
 
@@ -211,6 +279,34 @@ curl -i http://localhost:8000/api/products/9999
 curl -i -X POST http://localhost:8000/api/products \
   -H "Content-Type: application/json" \
   -d '{"name": "", "price": -5}'
+```
+
+### Auth
+
+```bash
+# customer sign-in
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "customer@example.com", "password": "customer-password"}' \
+  | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+
+curl http://localhost:8000/api/auth/me -H "Authorization: Bearer $TOKEN"
+
+# admin sign-in (separate endpoint, separate audience)
+ADMIN=$(curl -s -X POST http://localhost:8000/api/admin/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "admin-password"}' \
+  | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+
+curl http://localhost:8000/api/admin/users -H "Authorization: Bearer $ADMIN"
+
+# create a user from the admin panel
+curl -X POST http://localhost:8000/api/admin/users \
+  -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"email": "new@example.com", "password": "password123", "role": "customer"}'
+
+# a client token is rejected by the admin API
+curl -i http://localhost:8000/api/admin/users -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Extending

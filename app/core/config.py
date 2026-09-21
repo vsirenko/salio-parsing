@@ -3,8 +3,11 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# HS256 needs >= 32 bytes of key material (RFC 7518).
+DEV_SECRET_KEY = "dev-secret-change-me-before-deploying-anywhere"
 
 
 class Settings(BaseSettings):
@@ -30,6 +33,15 @@ class Settings(BaseSettings):
     # Turn off to hide Swagger/ReDoc in production.
     docs_enabled: bool = True
 
+    # --- Auth ---
+    # Generate a real one with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    secret_key: str = Field(default=DEV_SECRET_KEY, min_length=32)
+    jwt_algorithm: str = "HS256"
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
+    # Dev convenience: create the demo admin/customer accounts on startup.
+    seed_users: bool = True
+
     # --- CORS ---
     # Comma-separated in .env, e.g. CORS_ORIGINS=http://localhost:3000,https://app.example.com
     # NoDecode: keep pydantic-settings from JSON-parsing the value so the validator below
@@ -47,6 +59,17 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @model_validator(mode="after")
+    def _guard_production(self) -> "Settings":
+        """Fail fast instead of shipping dev credentials to production."""
+        if not self.is_production:
+            return self
+        if self.secret_key == DEV_SECRET_KEY:
+            raise ValueError("SECRET_KEY must be set to a real secret in production")
+        if self.seed_users:
+            raise ValueError("SEED_USERS must be false in production")
+        return self
 
 
 @lru_cache

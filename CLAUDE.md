@@ -22,6 +22,21 @@ FastAPI service. Deliberately flat: route → service → schema.
 - Service methods stay `async` even while storage is in-memory, so swapping in a real
   database does not touch the API layer.
 
+## Users and access
+- One `User` entity for both panels; `role` (`customer` / `admin`) decides where an account
+  may sign in. Do not split into separate admin/customer tables.
+- The security boundary is the token audience, not the table. Client tokens carry
+  `aud=client`, admin tokens `aud=admin`; each panel decodes with its own expected audience,
+  so a token from one is rejected by the other before any role check runs.
+- Admin routes go on `admin_router` in `app/api/admin_router.py`, which carries
+  `Depends(get_current_admin)` at router level — never guard admin endpoints one by one.
+  `admin_public_router` exists only for sign-in; do not add anything else to it.
+- Never use `UserInDB` as a `response_model` — it carries `password_hash`. Routes return
+  `UserRead`.
+- `role` is not accepted from any public input. There is no public registration endpoint;
+  accounts are created through `/api/admin/users`.
+- Passwords: argon2 via `app/core/security.py`. Never compare or store raw passwords.
+
 ## Checks
 - After any Python change: `.venv/bin/ruff check .` and `.venv/bin/pytest`.
 - Before pushing: `.venv/bin/pre-commit run --all-files`.
