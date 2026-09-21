@@ -35,6 +35,8 @@ TABLES = (
     "attribute_aliases",
     "category_attributes",
     "attributes",
+    "brand_aliases",
+    "brands",
     "categories",
     "countries",
     "currencies",

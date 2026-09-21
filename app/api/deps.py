@@ -13,6 +13,7 @@ from app.core.security import Audience, AuthError, ForbiddenError, TokenType, de
 from app.db.session import get_session
 from app.features.attributes.service import AttributeService
 from app.features.audit.service import AuditService
+from app.features.brands.service import BrandService
 from app.features.categories.service import CategoryService
 from app.features.countries.service import CountryService
 from app.features.currencies.service import CurrencyService
@@ -66,6 +67,10 @@ def get_attribute_service(session: SessionDep) -> AttributeService:
     return AttributeService(session)
 
 
+def get_brand_service(session: SessionDep) -> BrandService:
+    return BrandService(session)
+
+
 def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
@@ -77,6 +82,7 @@ CountryServiceDep = Annotated[CountryService, Depends(get_country_service)]
 MarketServiceDep = Annotated[MarketService, Depends(get_market_service)]
 CategoryServiceDep = Annotated[CategoryService, Depends(get_category_service)]
 AttributeServiceDep = Annotated[AttributeService, Depends(get_attribute_service)]
+BrandServiceDep = Annotated[BrandService, Depends(get_brand_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 

@@ -51,6 +51,7 @@ and the questions that have to be answered with real data first, are written dow
       explains a price difference between markets.
 - [x] Category tree with cascading visibility, and the canonical attribute registry
       with its aliases and per-category identity flags
+- [x] Brands, their aliases and the resolver the matcher will call
 - [ ] **The candidate queues are not built.** `attribute_candidate`,
       `attribute_value_candidate` and `brand_candidate` are what turns an unknown string
       into a mapping, and they are filled by ingestion — which does not exist yet. Build

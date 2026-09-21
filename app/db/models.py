@@ -391,3 +391,60 @@ class AttributeValueAlias(Base):
         CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
         Index("ix_attribute_value_aliases_normalized", "alias_normalized"),
     )
+
+
+class Brand(Base):
+    """What is written on the box, not who owns the factory.
+
+    Procter & Gamble is not a brand, Ariel is: the string that ends up in a title and in a
+    feed's brand field is the one the matcher has to recognise, so that is what is stored.
+
+    The name is deliberately not unique. Delta is taps, an airline and machine tools —
+    separate companies that happen to share a name, so they are separate rows. The slug is
+    what is unique, which is why one of them ends up as `delta-tools`.
+    """
+
+    __tablename__ = "brands"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    canonical_name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),)
+
+
+class BrandAlias(Base):
+    """Another way a source writes the brand, or a line the brand makes.
+
+    Those are not the same thing, and `kind` is what keeps them apart. `Самсунг` and
+    `Samsungo` *are* Samsung; `iPhone` is a line Apple makes. A feed's brand field saying
+    `iPhone` does mean Apple, but reading it out of a title files "Spigen case for
+    iPhone 15" under Apple — and every catalogue holds more accessories than devices, so
+    that is the main flow of errors rather than an edge case.
+
+    Not unique on the string alone: `Delta` legitimately belongs to two brands. Which one
+    an offer means is settled by the category it landed in, from the brands that already
+    have variants there.
+    """
+
+    __tablename__ = "brand_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    brand_id: Mapped[int] = mapped_column(ForeignKey("brands.id", ondelete="CASCADE"))
+    # Case, punctuation and legal suffixes are computed away rather than stored, so
+    # `SAMSUNG®` and `Samsung` are one row. A declension is not derivable by any rule and
+    # stays a row of its own: Lithuanian declines foreign names as grammar.
+    alias_normalized: Mapped[str] = mapped_column(String(200))
+    alias_raw: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(10), default="spelling", server_default="spelling")
+    origin: Mapped[str] = mapped_column(String(10), default="human", server_default="human")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("brand_id", "alias_normalized", name="uq_alias_per_brand"),
+        CheckConstraint("kind in ('spelling', 'line')", name="kind_known"),
+        CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
+        # The matcher's lookup: one string in, one or more brands out.
+        Index("ix_brand_aliases_normalized", "alias_normalized"),
+    )
