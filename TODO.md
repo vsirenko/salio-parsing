@@ -71,10 +71,16 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **Nothing extracts attributes.** The registry can be filled by hand; pulling
       `256GB` out of a title still needs per-category patterns, and that is what
       `identity_ready` on a category is actually asserting.
-- [ ] **Measure how far a deterministic matcher gets.** Everything else in that document
-      is downstream of this number. 30-50 real offers from both kinds of source, with the
-      same product sold by more than one shop.
-- [ ] **Nothing fetches, normalizes, matches or records a price yet.**
+- [x] Offers, raw observations and versioned readings, with ingestion by POST
+- [ ] **Load a real sample and read `GET /api/admin/offers/coverage`.** The measurement
+      everything else is downstream of, and there is now something to measure it with:
+      30-50 real offers from both kinds of source, with the same product sold by more
+      than one shop. Above roughly 90 per cent deterministic, build the matcher as
+      designed. Around 40, the centre of the work moves to pulling identity out of titles.
+- [ ] **Nothing fetches.** Ingestion takes a payload over HTTP; getting the payload is
+      per-source work that has not started, and `source.base_url` is filled in by nobody.
+- [ ] **Nothing matches or records a price.** `offer_match` and `price_event` are the last
+      two tables of the design and both are shaped by the number above.
 
 ## Features
 

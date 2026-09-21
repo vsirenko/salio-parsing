@@ -805,3 +805,127 @@ class Seller(Base):
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
     __table_args__ = (UniqueConstraint("shop_id", "external_id", name="uq_seller_per_shop"),)
+
+
+class Offer(Base):
+    """One listing, as a thing that persists between crawls.
+
+    Separate from `raw_offers` on purpose: the listing lives across fetches and the raw rows
+    are observations of it. Merge the two and every crawl produces a new offer, so the match
+    has to be made again from nothing each time and the price history restarts with it.
+
+    Price and availability here are the latest reading — derived, recomputable, and kept
+    only so a card does not have to walk the observations to show a number.
+    """
+
+    __tablename__ = "offers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    seller_id: Mapped[int] = mapped_column(ForeignKey("sellers.id", ondelete="CASCADE"))
+    # Which storefront this price is for. A German shop selling to a Latvian buyer charges
+    # Latvian VAT, so the market is the one the price is quoted into, not the shop's own.
+    market_code: Mapped[str] = mapped_column(ForeignKey("markets.code"))
+    # The seller's own id for it. Together with the seller this is the listing's identity,
+    # which is what lets two channels of one shop converge on one row.
+    external_id: Mapped[str] = mapped_column(String(200))
+    url: Mapped[str | None] = mapped_column(String(1000))
+    condition: Mapped[str] = mapped_column(String(12), default="new", server_default="new")
+    # As the source wrote it — "as new", "good". Not normalized, because grades are not
+    # comparable between shops and normalizing them would invent a precision.
+    condition_grade: Mapped[str | None] = mapped_column(String(50))
+    price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency_code: Mapped[str | None] = mapped_column(ForeignKey("currencies.code"))
+    availability: Mapped[str] = mapped_column(
+        String(15), default="unknown", server_default="unknown"
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    # A shop taking a listing down stops this moving. The offer stays, and so does every
+    # price it ever had.
+    last_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("seller_id", "external_id", name="uq_offer_per_seller"),
+        CheckConstraint("condition in ('new', 'refurbished', 'used')", name="condition_known"),
+        CheckConstraint(
+            "availability in ('in_stock', 'out_of_stock', 'preorder', 'unknown')",
+            name="availability_known",
+        ),
+        CheckConstraint("price is null or price >= 0", name="price_not_negative"),
+        Index("ix_offers_market_code", "market_code"),
+        Index("ix_offers_last_seen_at", "last_seen_at"),
+    )
+
+
+class RawOffer(Base):
+    """What the shop actually served, kept verbatim.
+
+    Bytes rather than fields picked out of them: storage is cheap, re-crawling is not, and
+    the field nobody thought to extract in month one is the one the matcher needs in month
+    four. Everything downstream is derived from this and can be thrown away.
+
+    One row per distinct content, not per fetch. An unchanged page bumps `last_seen_at` and
+    writes nothing, which is what keeps the table proportional to how much the world changes
+    rather than to how often we look at it.
+    """
+
+    __tablename__ = "raw_offers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("offers.id", ondelete="CASCADE"))
+    # Which channel saw it. On the observation rather than on the offer, because a shop's
+    # feed and its scraper are two channels onto one listing.
+    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    fetched_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("offer_id", "content_hash", name="uq_raw_per_content"),
+        Index("ix_raw_offers_offer_id", "offer_id"),
+        Index("ix_raw_offers_source_id", "source_id"),
+    )
+
+
+class NormalizedOffer(Base):
+    """Our reading of one raw observation.
+
+    A pure function of the payload and the ruleset version, which is the property the whole
+    pipeline rests on: improving a rule means re-running it over what is already stored and
+    comparing the old reading with the new one before accepting it. Never edited in place.
+
+    Brand and category arrive as the strings a source wrote. Resolving them to rows is
+    matching's job, not normalization's — and the unresolved string is what a candidate
+    queue is filled from.
+    """
+
+    __tablename__ = "normalized_offers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    raw_offer_id: Mapped[int] = mapped_column(ForeignKey("raw_offers.id", ondelete="CASCADE"))
+    ruleset_version: Mapped[str] = mapped_column(String(30))
+    title: Mapped[str | None] = mapped_column(String(1000))
+    brand_raw: Mapped[str | None] = mapped_column(String(200))
+    brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id"))
+    category_raw: Mapped[str | None] = mapped_column(String(500))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    gtin: Mapped[str | None] = mapped_column(String(14))
+    mpn: Mapped[str | None] = mapped_column(String(100))
+    model: Mapped[str | None] = mapped_column(String(200))
+    # Whatever the source called its attributes, before anything is resolved to the
+    # canonical registry. A key nobody has mapped stays here and simply takes no part in
+    # identity — the cost of not mapping it is the slow path, not lost data.
+    attributes: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency_code: Mapped[str | None] = mapped_column(String(3))
+    condition: Mapped[str] = mapped_column(String(12), default="new", server_default="new")
+    availability: Mapped[str] = mapped_column(
+        String(15), default="unknown", server_default="unknown"
+    )
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("raw_offer_id", "ruleset_version", name="uq_reading_per_ruleset"),
+        Index("ix_normalized_offers_gtin", "gtin"),
+        Index("ix_normalized_offers_brand_raw", "brand_raw"),
+    )
