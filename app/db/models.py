@@ -429,3 +429,254 @@ class BrandAlias(Base):
         # The matcher's lookup: one string in, one or more brands out.
         Index("ix_brand_aliases_normalized", "alias_normalized"),
     )
+
+
+class Product(Base):
+    """The family a human searches for: "iPhone 15 Pro".
+
+    A grouping, not a thing you can buy — it has no price and no barcode. It is allowed to
+    contain exactly one variant, which is the normal case for a book or a specific tool;
+    inventing a hierarchy where the category has none would be worse than the duplication.
+    """
+
+    __tablename__ = "products"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Derived from the title with the id appended, because a machine creates these by the
+    # million and nobody can name them by hand. The tail is also what keeps a retitle from
+    # breaking the link.
+    slug: Mapped[str] = mapped_column(String(160), unique=True)
+    brand_id: Mapped[int] = mapped_column(ForeignKey("brands.id"))
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
+    # The marketing designation, and one of the strongest language-neutral signals the
+    # matcher has: a Latvian, Lithuanian and Estonian title share almost nothing except
+    # the brand and this.
+    model: Mapped[str] = mapped_column(String(200))
+    # Generated from brand and model. Kept rather than computed on read so that sorting
+    # and searching have something to work on.
+    title: Mapped[str] = mapped_column(String(400))
+    # Wins over the generated title and survives regeneration. Without it a generated
+    # title could never be corrected.
+    title_override: Mapped[str | None] = mapped_column(String(400))
+    # Declared and deliberately unfilled: nothing writes a description yet, and it is not
+    # yet decided whether anything will.
+    description: Mapped[str | None] = mapped_column(Text)
+    # The manufacturer's own page for this model, when somebody bothers to paste one.
+    manufacturer_url: Mapped[str | None] = mapped_column(String(1000))
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TimestampTZ, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
+        Index("ix_products_brand_id", "brand_id"),
+        Index("ix_products_category_id", "category_id"),
+    )
+
+
+class Variant(Base):
+    """The unit that is bought, and what an offer attaches to.
+
+    The primary entity of the catalogue. An offer linked at product level would put the
+    price of a 128 GB phone in the same history as the 1 TB one.
+
+    `product_id` is nullable: a variant created from an offer that matched nothing does not
+    yet belong to a family, and inventing one from a single data point would be a guess.
+    """
+
+    __tablename__ = "variants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(200), unique=True)
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    brand_id: Mapped[int] = mapped_column(ForeignKey("brands.id"))
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
+    model: Mapped[str] = mapped_column(String(200))
+    # Repeated on the row in its matching form, next to the brand, because a model string
+    # only means something beside its maker.
+    model_normalized: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(400))
+    title_override: Mapped[str | None] = mapped_column(String(400))
+    description: Mapped[str | None] = mapped_column(Text)
+    # Taken from one of the offers. A link to somebody else's CDN, which means it rots when
+    # that shop removes the file — the real answer is to store the image ourselves, and
+    # there is no file storage yet.
+    image_url: Mapped[str | None] = mapped_column(String(1000))
+    image_url_override: Mapped[str | None] = mapped_column(String(1000))
+    kind: Mapped[str] = mapped_column(String(10), default="single", server_default="single")
+    unit_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # Computed from brand, category, model and the identity-bearing attributes — but only
+    # when every one of them is present. Missing a single axis leaves it null and the
+    # variant goes the long way round, because a key built from a partial set would
+    # confidently merge two different things.
+    identity_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TimestampTZ, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
+        CheckConstraint("kind in ('single', 'multipack', 'bundle')", name="kind_known"),
+        CheckConstraint("unit_count > 0", name="unit_count_positive"),
+        # A multipack is N of one thing and nothing else counts more than one.
+        CheckConstraint("(kind = 'multipack') = (unit_count > 1)", name="only_multipacks_count"),
+        Index("ix_variants_product_id", "product_id"),
+        Index("ix_variants_category_id", "category_id"),
+        # The matcher's blocking lookup: a model string is only meaningful beside a brand.
+        Index("ix_variants_brand_model", "brand_id", "model_normalized"),
+    )
+
+
+class VariantAttribute(Base):
+    """One attribute of one variant, reconciled across its offers.
+
+    Typed columns rather than one text field: faceting and range filtering are the
+    storefront — "6 to 7 inches", "256 GB (1 240)" — and casting a text column per query is
+    not a way to serve that.
+    """
+
+    __tablename__ = "variant_attributes"
+
+    variant_id: Mapped[int] = mapped_column(
+        ForeignKey("variants.id", ondelete="CASCADE"), primary_key=True
+    )
+    attribute_id: Mapped[int] = mapped_column(
+        ForeignKey("attributes.id", ondelete="CASCADE"), primary_key=True
+    )
+    value_num: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
+    value_id: Mapped[int | None] = mapped_column(ForeignKey("attribute_values.id"))
+    value_bool: Mapped[bool | None] = mapped_column(Boolean)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    # A param outweighs something cut out of a title when offers disagree.
+    source_kind: Mapped[str] = mapped_column(String(10), default="param", server_default="param")
+    # A value a human set is never overwritten by reconciliation, or a correction lasts
+    # exactly until the next crawl.
+    origin: Mapped[str] = mapped_column(String(10), default="consensus", server_default="consensus")
+
+    __table_args__ = (
+        CheckConstraint("source_kind in ('param', 'title')", name="source_kind_known"),
+        CheckConstraint("origin in ('consensus', 'human')", name="origin_known"),
+        CheckConstraint(
+            "num_nonnulls(value_num, value_id, value_bool, value_text) = 1",
+            name="exactly_one_value",
+        ),
+        Index("ix_variant_attributes_enum", "attribute_id", "value_id"),
+        Index("ix_variant_attributes_number", "attribute_id", "value_num"),
+    )
+
+
+class VariantGtin(Base):
+    """A barcode a variant is known by. Plural on purpose.
+
+    Regional packaging, a change of supplier and a reissue all give one variant another
+    barcode; a single column would look obvious and become a lie within a month.
+    """
+
+    __tablename__ = "variant_gtins"
+
+    variant_id: Mapped[int] = mapped_column(
+        ForeignKey("variants.id", ondelete="CASCADE"), primary_key=True
+    )
+    gtin: Mapped[str] = mapped_column(String(14), primary_key=True)
+    origin: Mapped[str] = mapped_column(String(10), default="rule", server_default="rule")
+    first_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("gtin ~ '^[0-9]{8,14}$'", name="gtin_digits"),
+        CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
+        # The strongest single lookup the matcher has. Not unique: sellers reuse and
+        # mistype barcodes, so a clash is a conflict to record rather than a write to lose.
+        Index("ix_variant_gtins_gtin", "gtin"),
+    )
+
+
+class VariantMpn(Base):
+    """A manufacturer part number, which is only meaningful beside its brand."""
+
+    __tablename__ = "variant_mpns"
+
+    variant_id: Mapped[int] = mapped_column(
+        ForeignKey("variants.id", ondelete="CASCADE"), primary_key=True
+    )
+    mpn_normalized: Mapped[str] = mapped_column(String(100), primary_key=True)
+    # Denormalized from the variant so the blocking index can span the pair: two makers
+    # reuse the same part number string freely.
+    brand_id: Mapped[int] = mapped_column(ForeignKey("brands.id"))
+    mpn_raw: Mapped[str] = mapped_column(String(100))
+    origin: Mapped[str] = mapped_column(String(10), default="rule", server_default="rule")
+    first_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
+        Index("ix_variant_mpns_brand_mpn", "brand_id", "mpn_normalized"),
+    )
+
+
+class VariantComponent(Base):
+    """What is inside a bundle.
+
+    A bundle is different things sold together, so `unit_count` says nothing about it. It
+    stays out of the single item's price comparison — listing a phone-with-case as the
+    cheapest phone would be a lie — and this is how its price could one day be explained.
+    """
+
+    __tablename__ = "variant_components"
+
+    bundle_id: Mapped[int] = mapped_column(
+        ForeignKey("variants.id", ondelete="CASCADE"), primary_key=True
+    )
+    component_variant_id: Mapped[int] = mapped_column(
+        ForeignKey("variants.id", ondelete="CASCADE"), primary_key=True
+    )
+    qty: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+    __table_args__ = (
+        CheckConstraint("qty > 0", name="qty_positive"),
+        CheckConstraint("bundle_id <> component_variant_id", name="not_its_own_component"),
+    )
+
+
+class VariantMerge(Base):
+    """Where a variant went when it turned out to be another one.
+
+    A catalogue built from offers gets identity wrong and then learns better, so an id has
+    to survive being merged away: the old one still resolves, the price history stays with
+    the survivor, and an external link does not rot. Without this, a merge is a destructive
+    write to the one table nothing else can be rebuilt from.
+    """
+
+    __tablename__ = "variant_merges"
+
+    from_id: Mapped[int] = mapped_column(primary_key=True)
+    into_id: Mapped[int] = mapped_column(ForeignKey("variants.id", ondelete="CASCADE"))
+    merged_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    reason: Mapped[str | None] = mapped_column(String(500))
+    decided_by: Mapped[str] = mapped_column(String(10), default="human", server_default="human")
+
+    __table_args__ = (
+        CheckConstraint("from_id <> into_id", name="not_into_itself"),
+        CheckConstraint("decided_by in ('rule', 'judge', 'human')", name="decided_by_known"),
+        Index("ix_variant_merges_into_id", "into_id"),
+    )
+
+
+class ProductMerge(Base):
+    """The same, for a family. Lower stakes: regrouping is mostly moving variants."""
+
+    __tablename__ = "product_merges"
+
+    from_id: Mapped[int] = mapped_column(primary_key=True)
+    into_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"))
+    merged_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    reason: Mapped[str | None] = mapped_column(String(500))
+    decided_by: Mapped[str] = mapped_column(String(10), default="human", server_default="human")
+
+    __table_args__ = (
+        CheckConstraint("from_id <> into_id", name="not_into_itself"),
+        CheckConstraint("decided_by in ('rule', 'judge', 'human')", name="decided_by_known"),
+        Index("ix_product_merges_into_id", "into_id"),
+    )

@@ -14,6 +14,7 @@ from app.db.session import get_session
 from app.features.attributes.service import AttributeService
 from app.features.audit.service import AuditService
 from app.features.brands.service import BrandService
+from app.features.catalog.service import CatalogService
 from app.features.categories.service import CategoryService
 from app.features.countries.service import CountryService
 from app.features.currencies.service import CurrencyService
@@ -66,6 +67,10 @@ def get_brand_service(session: SessionDep) -> BrandService:
     return BrandService(session)
 
 
+def get_catalog_service(session: SessionDep) -> CatalogService:
+    return CatalogService(session)
+
+
 def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
@@ -78,6 +83,7 @@ MarketServiceDep = Annotated[MarketService, Depends(get_market_service)]
 CategoryServiceDep = Annotated[CategoryService, Depends(get_category_service)]
 AttributeServiceDep = Annotated[AttributeService, Depends(get_attribute_service)]
 BrandServiceDep = Annotated[BrandService, Depends(get_brand_service)]
+CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 

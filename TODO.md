@@ -49,6 +49,15 @@ and the questions that have to be answered with real data first, are written dow
 - [x] Category tree with cascading visibility, and the canonical attribute registry
       with its aliases and per-category identity flags
 - [x] Brands, their aliases and the resolver the matcher will call
+- [x] The catalogue: products, variants, their attributes, barcodes and part numbers,
+      with the title, slug and identity key derived
+- [ ] **Merging a variant is not built.** The tables are there so an id survives being
+      merged away, but the operation has to move offers and price history with it and
+      neither exists yet. Until it does, a duplicate found by the identity key can only
+      be reported, not resolved.
+- [ ] **Images are hotlinked.** `variant.image_url` points at a shop's CDN, so it rots
+      when that shop removes the file and we serve it from someone else's server in the
+      meantime. The answer is to store the image, and there is no file storage.
 - [ ] **The candidate queues are not built.** `attribute_candidate`,
       `attribute_value_candidate` and `brand_candidate` are what turns an unknown string
       into a mapping, and they are filled by ingestion — which does not exist yet. Build

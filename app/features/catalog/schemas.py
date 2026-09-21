@@ -1,0 +1,208 @@
+"""Catalogue schemas: the family, the thing that is bought, and what is known about it."""
+
+from datetime import datetime
+from decimal import Decimal
+from enum import StrEnum
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class VariantKind(StrEnum):
+    SINGLE = "single"
+    # N of one thing. Comparable with the single item once divided.
+    MULTIPACK = "multipack"
+    # Different things together. Stays out of the single item's price comparison —
+    # listing a phone-with-case as the cheapest phone would be a lie.
+    BUNDLE = "bundle"
+
+
+class ValueOrigin(StrEnum):
+    CONSENSUS = "consensus"
+    HUMAN = "human"
+
+
+class SourceKind(StrEnum):
+    PARAM = "param"
+    TITLE = "title"
+
+
+class IdentifierOrigin(StrEnum):
+    RULE = "rule"
+    JUDGE = "judge"
+    HUMAN = "human"
+
+
+# --- product ---
+
+
+class ProductCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    brand_id: int
+    category_id: int
+    model: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    manufacturer_url: str | None = Field(default=None, max_length=1000)
+
+
+class ProductUpdate(BaseModel):
+    """`title` and `slug` are absent on purpose — both are derived.
+
+    A generated title is corrected through `title_override`, which survives the next
+    regeneration. Accepting the title itself would let a caller write a value the next
+    model change silently overwrites.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    category_id: int | None = None
+    title_override: str | None = Field(default=None, max_length=400)
+    description: str | None = None
+    manufacturer_url: str | None = Field(default=None, max_length=1000)
+    is_visible: bool | None = None
+
+
+class ProductRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    slug: str
+    brand_id: int
+    category_id: int
+    model: str
+    title: str
+    title_override: str | None
+    description: str | None
+    manufacturer_url: str | None
+    is_visible: bool
+    created_at: datetime
+
+
+# --- variant ---
+
+
+class VariantCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    brand_id: int
+    category_id: int
+    model: str = Field(min_length=1, max_length=200)
+    # Nullable: a variant that matched nothing does not belong to a family yet, and
+    # inventing one from a single data point would be a guess.
+    product_id: int | None = None
+    kind: VariantKind = VariantKind.SINGLE
+    unit_count: int = Field(default=1, ge=1)
+
+    @model_validator(mode="after")
+    def _only_multipacks_count(self) -> "VariantCreate":
+        if (self.kind is VariantKind.MULTIPACK) != (self.unit_count > 1):
+            raise ValueError("unit_count above one means a multipack, and nothing else")
+        return self
+
+
+class VariantUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: int | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    category_id: int | None = None
+    kind: VariantKind | None = None
+    unit_count: int | None = Field(default=None, ge=1)
+    title_override: str | None = Field(default=None, max_length=400)
+    description: str | None = None
+    # Taken from an offer by default; set here it is pinned and survives the next crawl.
+    image_url_override: str | None = Field(default=None, max_length=1000)
+    is_visible: bool | None = None
+
+
+class VariantRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    slug: str
+    product_id: int | None
+    brand_id: int
+    category_id: int
+    model: str
+    model_normalized: str
+    title: str
+    title_override: str | None
+    description: str | None
+    image_url: str | None
+    image_url_override: str | None
+    kind: VariantKind
+    unit_count: int
+    # Null means an identity-bearing attribute of the category is missing, so this variant
+    # takes the long way round through the matcher rather than a hash lookup.
+    identity_key: str | None
+    is_visible: bool
+    created_at: datetime
+
+
+# --- what is known about a variant ---
+
+
+class VariantAttributeSet(BaseModel):
+    """Exactly one value, matching the attribute's type."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attribute_id: int
+    value_num: Decimal | None = None
+    value_id: int | None = None
+    value_bool: bool | None = None
+    value_text: str | None = None
+    source_kind: SourceKind = SourceKind.PARAM
+    origin: ValueOrigin = ValueOrigin.HUMAN
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "VariantAttributeSet":
+        given = [
+            v
+            for v in (self.value_num, self.value_id, self.value_bool, self.value_text)
+            if v is not None
+        ]
+        if len(given) != 1:
+            raise ValueError("give exactly one of value_num, value_id, value_bool, value_text")
+        return self
+
+
+class VariantAttributeRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    variant_id: int
+    attribute_id: int
+    value_num: Decimal | None
+    value_id: int | None
+    value_bool: bool | None
+    value_text: str | None
+    source_kind: SourceKind
+    origin: ValueOrigin
+
+
+class IdentifierCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str = Field(min_length=1, max_length=100)
+    origin: IdentifierOrigin = IdentifierOrigin.HUMAN
+
+
+class VariantGtinRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    variant_id: int
+    gtin: str
+    origin: IdentifierOrigin
+    first_seen_at: datetime
+
+
+class VariantMpnRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    variant_id: int
+    brand_id: int
+    mpn_raw: str
+    mpn_normalized: str
+    origin: IdentifierOrigin
+    first_seen_at: datetime

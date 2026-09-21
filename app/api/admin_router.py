@@ -17,6 +17,7 @@ from app.features.attributes.admin_router import category_router as category_att
 from app.features.attributes.admin_router import router as attributes_router
 from app.features.audit.router import router as audit_router
 from app.features.brands.admin_router import router as brands_router
+from app.features.catalog.admin_router import products_router, variants_router
 from app.features.categories.admin_router import router as categories_router
 from app.features.countries.admin_router import router as countries_router
 from app.features.currencies.admin_router import router as currencies_router
@@ -33,6 +34,8 @@ admin_router.include_router(markets_router)
 admin_router.include_router(categories_router)
 admin_router.include_router(attributes_router)
 admin_router.include_router(brands_router)
+admin_router.include_router(products_router)
+admin_router.include_router(variants_router)
 admin_router.include_router(category_attributes_router)
 
 # Sign-in cannot require a token. Keep this router to the routes that mint one.
