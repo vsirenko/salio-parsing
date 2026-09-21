@@ -95,10 +95,22 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **A worker takes the first of a shop's markets.** Right while a shop is shown in one,
       a fudge the moment it is shown in two: the offers of a Latvian and a Lithuanian
       storefront would all be filed under whichever market sorted first.
-- [ ] **Nothing fetches.** The scheduler starts runs, spawns workers and records verdicts;
-      `worker.py` has an empty `CHANNELS` registry, so every run ends as a failure naming
-      the channel it could not collect. Adding a channel is adding an entry — the run
-      lifecycle does not change. `source.base_url` is still filled in by nobody.
+- [x] The first channel: `ksenukai-phones`, through the shop's search index. 520 phones
+      collected end to end — discovered, snapshotted, handed over, contract passed
+- [ ] **Nothing reads a shop's shape into ours.** `generic-1` finds a title, a brand and a
+      price in what a channel hands over and nothing else, so the 520 real phones landed
+      with no barcode, no part number and no model: `alternative_codes` sits unread and
+      `Modelis` sits in the attributes untouched. This is the designed order — collect,
+      measure, then write the rules against the bytes — and it is the next thing to build.
+      `RULESET_VERSION` is a single global constant today, and per-source rules make it one
+      per source, which `MatchingService._reading` filters on and will have to stop doing.
+- [ ] **The brand registry is empty.** 599 of 600 real offers queued as `brand_unknown`,
+      which is not a matcher problem: no brand has been entered, so every brand string
+      resolves to nothing. Filling it is the cheapest large win there is.
+- [ ] **Two more channels.** `bigbox-phones` (Next.js embedded state) and `rdveikals-phones`
+      (markup, the only one needing lxml) — chosen so that each proves a different decode
+      path holds the same contract. `1a.lv` is nearly free after ksenukai: same engine,
+      different index, and it settles whether its product page carries a barcode at all.
 - [x] Batch ingestion, gzipped, partial on failure, one audit entry per batch, carrying
       the run that collected it
 - [x] A collector audience: `aud=worker`, its own account, five routes and no more, so a

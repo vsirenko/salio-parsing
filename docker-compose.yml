@@ -56,6 +56,12 @@ services:
       # Workers it spawns reach the service by name inside the compose network, not
       # through the host port.
       API_BASE_URL: http://api:8000
+      SNAPSHOT_DIR: /snapshots
+    # The bytes a shop served, kept so a parser can be fixed against the page that broke
+    # it. On a volume because a container's own disk goes away with it, and losing them
+    # turns every parser fix back into a crawl.
+    volumes:
+      - snapshots:/snapshots
     command: ["python", "-m", "app.features.runs.scheduler"]
     restart: unless-stopped
     depends_on:
@@ -68,3 +74,4 @@ services:
 
 volumes:
   pgdata:
+  snapshots:

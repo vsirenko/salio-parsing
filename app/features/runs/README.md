@@ -147,12 +147,45 @@ listing belonged to — facts the crawl had and the page does not state. Without
 reparse of a marketplace channel would fail on every item for want of something it already
 knew. The worker fills them from the listing, so a channel does not have to remember to.
 
+## Channels
+
+One module per source slug in `channels/`, registering itself on import. Adding a shop is
+adding a module and a line in `channels/__init__.py`; nothing about the scheduler or the run
+lifecycle changes.
+
+| slug | shop | access | decode |
+|---|---|---|---|
+| `ksenukai-phones` | ksenukai.lv | wholesale | private_api |
+
+**`ksenukai-phones`** reads the shop's own search index. The site is behind Cloudflare —
+catalogue pages answer with a challenge and its API is disallowed — so there are no product
+pages and no images for a robot, and everything usable is in the third-party index its front
+end queries. A few requests return the whole category, which is what `wholesale` means: no
+listing-then-card split, and therefore no cheap pass, which the source's constraints already
+refuse to let anyone configure. `fetch` is a no-op that writes the record into a snapshot, so
+a re-read works exactly as it does for a shop whose cards are fetched one at a time.
+
+Two things it taught us, both found by measuring rather than by reading code:
+
+- **The model is only in the encoded columns.** The index keeps attributes in two places —
+  an `attributes` list with five names and units, and `attributes_lv_*` columns whose name is
+  base64 inside the field key. Ten names live only in the columns, and one of them is
+  `Modelis`, on 100% of products. Reading only the list, as the first attempt did, threw away
+  the one field brand-and-model matching stands on.
+- **A repeated name is not a duplicate.** About a third of these products list
+  `Aizmugurējā kamera` more than once; keeping the last would quietly drop half of what the
+  shop said about their cameras. The values are joined instead.
+
+**The barcode is handed over untouched.** `alternative_codes` mixes barcodes with the shop's
+internal numbering, and picking between them is a reading decision — check digits and
+reserved prefixes are a standard, not something this shop invented. A parser that chose here
+would bake one interpretation into the only copy of the bytes there is, and every other
+channel would then make the same decision separately and differently.
+
 ## Not built yet
 
-**No channel is implemented.** `worker.py` has an empty registry, so every run ends as a
-failure naming the channel it could not collect. That is the honest state: the machinery
-around collecting is built and the collecting is not. Adding a channel is adding an entry to
-`CHANNELS`; nothing about the scheduler or the run lifecycle changes.
-
-**Ingestion is still one offer per request**, so a worker that did collect something has no
-cheap way to hand it over.
+**Nothing reads the shop's shape into ours.** `generic-1` finds a title, a brand and a price
+in what this channel hands over and nothing else, so a real pass of 520 phones lands with no
+barcode, no part number and no model. That is the designed order — collect, measure, then
+write the rules against the bytes rather than against a guess — and the coverage on the run
+says it out loud.

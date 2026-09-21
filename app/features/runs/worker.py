@@ -19,6 +19,7 @@ from dataclasses import replace
 
 from app.core.config import settings
 from app.features.runs import channel as channels
+from app.features.runs import channels as _registered  # noqa: F401 - registers them
 from app.features.runs.channel import Channel, Listing
 from app.features.runs.client import Collector, CollectorError
 from app.features.runs.fetching import Fetcher

@@ -1,0 +1,892 @@
+{
+ "total": 5,
+ "limit": 3,
+ "offset": 0,
+ "items": [
+  {
+   "id": 1102611,
+   "add_to_cart_id": 1107255,
+   "minimum_order_quantity": null,
+   "maximum_order_quantity": null,
+   "url": {
+    "lv": "/p/telefons-ar-pogam-myphone-hammer-rock-32-mb-melns-kras/nms3",
+    "ru": "/ru/p/knopochnyy-telefon-myphone-hammer-rock-32-mb-chernyy-tsv/nms3"
+   },
+   "title": {
+    "lv": "Telefons ar pogām MyPhone Hammer Rock, 32 MB, melns krās.",
+    "ru": "Кнопочный телефон MyPhone Hammer Rock, 32 MB, черный цв."
+   },
+   "product_code": "1226772",
+   "measurement_unit": {
+    "lv": "gab.",
+    "ru": "шт."
+   },
+   "measurement_units": {
+    "current": [
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": null
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     }
+    ],
+    "original": [
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": null
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     }
+    ]
+   },
+   "alternative_codes": [
+    "1226772",
+    "590298361774",
+    "5902983617747",
+    "Y00001210299"
+   ],
+   "article_number": "Y00001210299",
+   "tags": [
+    "online-only",
+    "in-warehouse"
+   ],
+   "prices": [
+    {
+     "compare_at_price": 0,
+     "price": 42.9,
+     "minimum_value": 42.9,
+     "discount": 0,
+     "price_group_id": 1
+    },
+    {
+     "promotion_discount_percent": null,
+     "compare_at_price": 42.9,
+     "price": 34.9,
+     "minimum_value": 34.9,
+     "discount": 19,
+     "price_group_id": 2
+    }
+   ],
+   "min_price_active": false,
+   "price_groups": {
+    "default": {
+     "price": 42.9
+    },
+    "loyalty": {
+     "price": 34.9,
+     "savings": 8,
+     "savings_percent": 19,
+     "promotion_discount_percent": null
+    }
+   },
+   "attributes": [
+    {
+     "name": {
+      "lv": "Ekrāna izmērs",
+      "ru": "Размер экрана"
+     },
+     "value": {
+      "lv": "2.4",
+      "ru": "2.4"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "metric",
+     "unit": {
+      "lv": "\"",
+      "ru": "″"
+     }
+    },
+    {
+     "name": {
+      "lv": "Ekrāna izšķirtspēja",
+      "ru": "Разрешение дисплея"
+     },
+     "value": {
+      "lv": "240 x 320",
+      "ru": "240 x 320"
+     },
+     "is_filterable": false,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Operatīvā atmiņa (RAM)",
+      "ru": "Оперативная память (RAM)"
+     },
+     "value": {
+      "lv": "32 MB",
+      "ru": "32 MB"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Atmiņas ietilpība",
+      "ru": "Объем памяти"
+     },
+     "value": {
+      "lv": "32 MB",
+      "ru": "32 MB"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Aizmugurējā kamera",
+      "ru": "Задняя камера"
+     },
+     "value": {
+      "lv": "0.3 MP",
+      "ru": "0.3 MP"
+     },
+     "is_filterable": false,
+     "is_priority": true,
+     "value_type": "multiselect",
+     "unit": null
+    }
+   ],
+   "in_stock": true,
+   "image": "/display/aikido/store/cd9102e52c9274438396c6a45e04ad3a.jpeg",
+   "images": [
+    "/display/aikido/store/cd9102e52c9274438396c6a45e04ad3a.jpeg",
+    "/display/aikido/store/2cb44185a0038b9693c9ad8ccef69d43.jpeg",
+    "/display/aikido/store/ddcb6c0e3764d833698dfe359c02af71.jpeg",
+    "/display/aikido/store/a38d123c755794e3ae9e554aa1952f48.jpeg",
+    "/display/aikido/store/1b6224308434f38a6f6d00bb3a3fc0ac.jpeg",
+    "/display/aikido/store/1007f53051efe7caf989d8b7abad8a3f.jpeg"
+   ],
+   "score": "0.8310215029",
+   "stock_priority": "A",
+   "margin_priority": "D",
+   "rating_count": null,
+   "rating_value": null,
+   "online_sales": 2,
+   "energy_label_data": null,
+   "tyres_energy_label_data": null,
+   "data_sheet_data": [
+    {
+     "data_sheet_path": "aikido/file_store/5c2e955fa057f2386040f82dc2a7c477.pdf",
+     "data_sheet_locales": [
+      "en"
+     ]
+    }
+   ],
+   "delivery_methods": [
+    "COURIER",
+    "COLLECT_IN_STORE",
+    "PARCEL_TERMINAL"
+   ],
+   "is_loyalty_filter": true,
+   "coupons": {},
+   "title_lv": "Telefons ar pogām MyPhone Hammer Rock, 32 MB, melns krās.",
+   "description_lv": "HAMMER Rock ir tālrunis ar 2,4 collu ekrānu un izturīgu dizainu, kas iztur elementu un kritumu ietekmi. Tā ir kā neaizvietojams rīks darbam – tā atvieglo sazināšanos, uzdevumu organizēšanu, un pateicoties jaudīgajai lukturim un 1800 mAh baterijai, tā ir noderīga daudzos dažādos apstākļos. Iespējams, labākais tālrunis būvlaukumā, darbnīcā, ražošanas zālē.<br /><br /><strong>Skaidrs 2,4 collu displejs</strong><br />HAMMER Rock ir kompakts, izturīgs dizains. Tas darbojas perfekti, un lielais 2,4 collu ekrāns nodrošina pietiekamu lasāmību un labu kvalitāti. Tajā pašā laikā tas ir ērts un labi iederas jebkurā kabatā.<br /><br /><strong>Jūs varat visu izmēģināt</strong><br />Aizmirstiet par telefona pārāk biežu nomaiņu. HAMMER Rock iztur labāk darba apstākļus būvlaukumā, darbnīcā vai ražošanas vietā nekā parastais modelis. Tas ir izturīgāks pret triecieniem un kritumiem, un tam ir IP68 sertifikāts ūdens un putekļu izturībai*.<br />*(pārbaudīts iegremdējot līdz 1,5 metru dziļumam ūdenī 30 minūtes, kad USB un mini ligzdas ir aizvērtas).<br /><br /><strong>Jaudīgs lukturis</strong><br />Tālrunim, kas paredzēts darbam sarežģītos apstākļos, jābūt ne tikai izturīgam un viegli lietojam. Tam jābūt arī kaut kam citam – lukturim. Un Rock lukturis ir jaudīgs un noderīgs. Vai ir nepieciešams apgaismot grūti sasniedzamu vietu? Vai ir nepieciešams tikt galā ar ierobežotu apgaismojumu? Tagad tas nav problēma.<br /><br /><strong>Nekad nav par daudz enerģijas</strong><br />Līdz 15 dienām gaidīšanas režīmā vai līdz 14 stundām sarunām? Tagad tas ir iespējams. Šis tālrunis nekad nešķiet izlādēts, un tas viss pateicoties tā 1800 mAh baterijai.<br /><br /><strong>Oriģinālais dizains</strong><br />HAMMER Rock telefonu atšķir oriģinālais dizains, kas uzsver tā āra raksturu. Tam ir lieli salasveida taustiņi, kas paredzēti drošai lietošanai, tāpēc to var vadīt pat ar cimdiem.<br /><br /><strong>Papildu funkcijas</strong><br />HAMMER Rock ir kā Šveices armijas nazis. Tam ir daudzas papildu funkcijas: jūs varat klausīties iecienītās radio programmas bez austiņu pievienošanas. Jūs varat arī ierakstīt atlasītos sarunas.",
+   "url_lv": "/p/telefons-ar-pogam-myphone-hammer-rock-32-mb-melns-kras/nms3",
+   "categories_lv_hierarchy": [
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Citi telefonu ražotāji",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Podziņu telefoni"
+   ],
+   "categories_lv_hierarchy_steps": [
+    "Telefoni, viedpulksteņi, Apple preces",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Citi telefonu ražotāji",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Podziņu telefoni"
+   ],
+   "categories_lv_flat": [
+    "Telefoni, viedpulksteņi, Apple preces",
+    "Mobilie telefoni",
+    "Citi telefonu ražotāji",
+    "Podziņu telefoni"
+   ],
+   "categories_lv_last": [
+    "Mobilie telefoni",
+    "Citi telefonu ražotāji",
+    "Podziņu telefoni"
+   ],
+   "category_ids": [
+    "16425",
+    "16427",
+    "30841",
+    "30842"
+   ],
+   "price_default": 42.9,
+   "price_loyalty": 34.9,
+   "price_min": 34.9,
+   "attributes_lv_str_TW9kZWxpcw==": [
+    "Hammer Rock"
+   ],
+   "attributes_lv_str_TW9iaWzEgSB0ZWxlZm9uYSB2ZWlkcw==": [
+    "Klasisks"
+   ],
+   "attributes_lv_str_U0lNIGthcsWhdSBza2FpdHM=": [
+    "2"
+   ],
+   "attributes_lv_str_T3BlcsSTdMSBanNpc3TEk21h": [
+    "Nav"
+   ],
+   "attributes_lv_num_RWtyxIFuYSBpem3Ek3JzLCAi": [
+    "2.4"
+   ],
+   "attributes_lv_str_T3BlcmF0xKt2xIEgYXRtacWGYSAoUkFNKQ==": [
+    "32 MB"
+   ],
+   "attributes_lv_str_QXRtacWGYXMgaWV0aWxwxKtiYQ==": [
+    "32 MB"
+   ],
+   "attributes_lv_str_M0cgc2F2aWVub2p1bXM=": [
+    "Nē"
+   ],
+   "attributes_lv_str_NEcgc2F2aWVub2p1bXM=": [
+    "Nē"
+   ],
+   "attributes_lv_str_QmV6dmFkdSB1emzEgWRl": [
+    "Nē"
+   ],
+   "product_type_lv": [
+    "Spiedpogu telefoni"
+   ],
+   "brand_lv": [
+    "MyPhone"
+   ],
+   "tags_lv": [
+    "Tikai tiešsaistē"
+   ],
+   "delivery_methods_lv": [
+    "Piegāde uz mājām",
+    "Izņemšana veikalā",
+    "Izņemšana pakomātā"
+   ],
+   "priority": 8310.215028999999,
+   "category_priority": 1000
+  },
+  {
+   "id": 1268710,
+   "add_to_cart_id": 1273157,
+   "minimum_order_quantity": null,
+   "maximum_order_quantity": null,
+   "url": {
+    "lv": "/p/mobilais-telefons-apple-iphone-15-mtp03px-a-128-gb-melns-kras/r6xy",
+    "ru": "/ru/p/mobil-nyy-telefon-apple-iphone-15-mtp03px-a-128-gb-chernyy-tsv/r6xy"
+   },
+   "title": {
+    "lv": "Mobilais telefons Apple iPhone 15 MTP03PX/A, 128 GB, melns krās.",
+    "ru": "Мобильный телефон Apple iPhone 15 MTP03PX/A, 128 GB, черный цв."
+   },
+   "product_code": "000101100597",
+   "measurement_unit": {
+    "lv": "gab.",
+    "ru": "шт."
+   },
+   "measurement_units": {
+    "current": [
+     {
+      "measurement_unit": 1,
+      "measurement_label": "gab.",
+      "value": 1,
+      "value_label": "gab."
+     },
+     {
+      "measurement_unit": 1,
+      "measurement_label": "gab.",
+      "value": 739,
+      "value_label": "€"
+     },
+     {
+      "measurement_unit": 1,
+      "measurement_label": "gab.",
+      "value": 739,
+      "value_label": "€"
+     }
+    ],
+    "original": [
+     {
+      "measurement_unit": 1,
+      "measurement_label": "gab.",
+      "value": 1,
+      "value_label": "gab."
+     },
+     {
+      "measurement_unit": 1,
+      "measurement_label": "gab.",
+      "value": 832,
+      "value_label": "€"
+     },
+     {
+      "measurement_unit": 1,
+      "measurement_label": "gab.",
+      "value": 832,
+      "value_label": "€"
+     }
+    ]
+   },
+   "alternative_codes": [
+    "000101100597",
+    "019594903598",
+    "0195949035982",
+    "101100597",
+    "1451654",
+    "195949035982",
+    "1959490359824",
+    "195949036033",
+    "1959490360646",
+    "219000264424",
+    "2190002644246",
+    "2190003909641",
+    "Y00001448782"
+   ],
+   "article_number": "Y00001448782",
+   "tags": [
+    "in-warehouse",
+    "smart-3-leasing"
+   ],
+   "prices": [
+    {
+     "price_group_id": 1,
+     "price": 832,
+     "minimum_value": 729,
+     "compare_at_price": 0,
+     "discount": 0
+    },
+    {
+     "price_group_id": 2,
+     "price": 739,
+     "minimum_value": 705,
+     "compare_at_price": 832,
+     "discount": 11,
+     "promotion_discount_percent": null
+    }
+   ],
+   "min_price_active": false,
+   "price_groups": {
+    "default": {
+     "price": 832
+    },
+    "loyalty": {
+     "price": 739,
+     "savings": 93,
+     "savings_percent": 11,
+     "promotion_discount_percent": null
+    }
+   },
+   "attributes": [
+    {
+     "name": {
+      "lv": "Ekrāna izmērs",
+      "ru": "Размер экрана"
+     },
+     "value": {
+      "lv": "6.1",
+      "ru": "6.1"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "metric",
+     "unit": {
+      "lv": "\"",
+      "ru": "″"
+     }
+    },
+    {
+     "name": {
+      "lv": "Ekrāna izšķirtspēja",
+      "ru": "Разрешение дисплея"
+     },
+     "value": {
+      "lv": "2556 x 1179",
+      "ru": "2556 x 1179"
+     },
+     "is_filterable": false,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Operatīvā atmiņa (RAM)",
+      "ru": "Оперативная память (RAM)"
+     },
+     "value": {
+      "lv": "6 GB",
+      "ru": "6 GB"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Atmiņas ietilpība",
+      "ru": "Объем памяти"
+     },
+     "value": {
+      "lv": "128 GB",
+      "ru": "128 GB"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Aizmugurējā kamera",
+      "ru": "Задняя камера"
+     },
+     "value": {
+      "lv": "48 MP",
+      "ru": "48 MP"
+     },
+     "is_filterable": false,
+     "is_priority": true,
+     "value_type": "multiselect",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Aizmugurējā kamera",
+      "ru": "Задняя камера"
+     },
+     "value": {
+      "lv": "12 MP",
+      "ru": "12 MP"
+     },
+     "is_filterable": false,
+     "is_priority": true,
+     "value_type": "multiselect",
+     "unit": null
+    }
+   ],
+   "in_stock": true,
+   "image": "/display/aikido/store/d120351a7f57345f77ae103fcadc6207.jpeg",
+   "images": [
+    "/display/aikido/store/d120351a7f57345f77ae103fcadc6207.jpeg",
+    "/display/aikido/store/564b4fa2b5b0d7847a4faffc02de1efa.jpeg",
+    "/display/aikido/store/9040019df05085e7b66f461f020622ec.jpeg",
+    "/display/aikido/store/53f1f05df3d2a37a7714cf2d2fcdecdc.jpeg",
+    "/display/aikido/store/7ed500eb35aa0ee77bfd0aca4848657e.jpeg",
+    "/display/aikido/store/bdea1cb7b39125d4d86d9863e63938be.jpeg",
+    "/display/aikido/store/88d717490f7176f4bd4a68e3b09f39b6.jpeg",
+    "/display/aikido/store/74cfb76c7820e5152e63241bb603a5a7.jpeg",
+    "/display/aikido/store/978f45800819dc0537ea016b258c1e5f.jpeg"
+   ],
+   "score": "0.8277496314",
+   "stock_priority": "A",
+   "margin_priority": "A",
+   "rating_count": null,
+   "rating_value": null,
+   "online_sales": 2,
+   "energy_label_data": null,
+   "tyres_energy_label_data": null,
+   "data_sheet_data": [],
+   "delivery_methods": [
+    "COURIER",
+    "COLLECT_IN_STORE",
+    "PARCEL_TERMINAL"
+   ],
+   "is_loyalty_filter": true,
+   "coupons": {},
+   "title_lv": "Mobilais telefons Apple iPhone 15 MTP03PX/A, 128 GB, melns krās.",
+   "description_lv": "<strong>MOBILAIS TELEFONS APPLE IPHONE 15, 128 GB, MELNA</strong><br /><br />\n<div style=\"text-align: justify;\"><strong>Dinamiskā sala.Gadījumiem, kad kaut kas vienkārši uzrodas.</strong><br />Dinamiskā sala uzrāda brīdinājumus un tiešraides aktivitātes, lai jūs tās nepalaistu garām, kamēr darāt kaut ko citu. Varat izsekot nākamajam braucienam, redzēt, kas zvana, pārbaudīt lidojuma statusu un daudz ko citu.<br /><br /><br /><strong>Krāsains un krāsains.</strong> <strong>Izturīgs visapkārt.</strong><br />Inovatīvajam jaunajam dizainam ir aizmugurējais stikls, kura materiālam ir iestrādāta krāsa. Pielāgotais dubultās jonu apmaiņas process stiklam un aviācijas un kosmosa klases alumīnija korpuss palīdz padarīt iPhone 15 neticami izturīgu.<br /><br /><strong>Pilnīgi jauna 48 MP galvenā kamera.</strong> <strong>Elpu aizraujošiem, smaidus raisošiem kadriem.</strong><br />Tagad galvenā kamera uzņem ar īpaši augstu izšķirtspēju. Tāpēc ir vieglāk nekā jebkad agrāk uzņemt izcilus fotoattēlus ar pārsteidzošu detalizāciju - no momentuzņēmumiem līdz satriecošām ainavām.<br /><br /><br /><strong>Fokusa fokuss, maģiski jauni portreti.</strong><br />Vairāk detaļu un bagātīgākas krāsas būtiski izceļ jūsu portretus. Un tagad varat pieskarties, lai mainītu fokusu starp objektiem - pat pēc uzņemšanas. Presto chango.<br />Vēlaties ātri iemūžināt mirkli, pirms tas ir pagājis? Jums vairs nav jāpārslēdz portreta režīms. Ja jūsu objekts ir cilvēks, suns vai kaķis, iPhone 15 automātiski fiksē informāciju par dziļumu. Tādējādi jūs varat uzreiz izvēlēties, vai jūsu fotoattēls ir portrets ar mākslinieciski izplūduša attēla efektu. Vai arī vēlāk lietotnē Photos.<br /><br /><strong>Akumulatora darbības laiks visas dienas garumā.</strong> <strong>Visām lietām, ko vēlies darīt.</strong><br /><br /><br /><strong>A16 Bionic procesors.</strong> <strong>Pārbaudīta jauda.</strong><br />A16 Bionic nodrošina visu veidu uzlabotas funkcijas. Piemēram, 24 MP fotogrāfiju un nākamās paaudzes portretu uzņemšanai izmantotā skaitļošanas fotogrāfija. Balss izolācija tālruņa zvaniem. Un vienmērīga veiktspēja grafikas ietilpīgās spēlēs. Tas viss ar neticamu efektivitāti, kas nodrošina lielisku akumulatora darbības laiku. Nav brīnums, ka tas sākās kā Pro čips.<br /><br /><br /><strong>Saderīgs ar USB.</strong><br />Jaunais USB-C savienotājs ļauj uzlādēt Mac vai iPad ar to pašu kabeli, ar kuru uzlādē iPhone 15. Ar iPhone 15 vari pat uzlādēt Apple Watch vai AirPods.6 Ardievas, kabeļu juceklim.</div>",
+   "url_lv": "/p/mobilais-telefons-apple-iphone-15-mtp03px-a-128-gb-melns-kras/r6xy",
+   "categories_lv_hierarchy": [
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni",
+    "Telefoni, viedpulksteņi, Apple preces > Apple veikals > iPhone"
+   ],
+   "categories_lv_hierarchy_steps": [
+    "Telefoni, viedpulksteņi, Apple preces",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni",
+    "Telefoni, viedpulksteņi, Apple preces > Apple veikals",
+    "Telefoni, viedpulksteņi, Apple preces > Apple veikals > iPhone"
+   ],
+   "categories_lv_flat": [
+    "Telefoni, viedpulksteņi, Apple preces",
+    "Mobilie telefoni",
+    "Apple veikals",
+    "iPhone"
+   ],
+   "categories_lv_last": [
+    "Mobilie telefoni",
+    "iPhone"
+   ],
+   "category_ids": [
+    "16425",
+    "16427",
+    "16451",
+    "16460"
+   ],
+   "price_default": 832,
+   "price_loyalty": 739,
+   "price_min": 739,
+   "attributes_lv_str_TW9kZWxpcw==": [
+    "iPhone 15"
+   ],
+   "attributes_lv_str_VXpsxIFkZXMgaWVyxKtjZQ==": [
+    "-"
+   ],
+   "attributes_lv_str_TW9iaWzEgSB0ZWxlZm9uYSB2ZWlkcw==": [
+    "Skārienjūtīgs"
+   ],
+   "attributes_lv_str_U0lNIGthcsWhdSBza2FpdHM=": [
+    "2"
+   ],
+   "attributes_lv_str_T3BlcsSTdMSBanNpc3TEk21h": [
+    "iOS"
+   ],
+   "attributes_lv_num_RWtyxIFuYSBpem3Ek3JzLCAi": [
+    "6.1"
+   ],
+   "attributes_lv_str_T3BlcmF0xKt2xIEgYXRtacWGYSAoUkFNKQ==": [
+    "6 GB"
+   ],
+   "attributes_lv_str_QXRtacWGYXMgaWV0aWxwxKtiYQ==": [
+    "128 GB"
+   ],
+   "attributes_lv_str_M0cgc2F2aWVub2p1bXM=": [
+    "Jā"
+   ],
+   "attributes_lv_str_NEcgc2F2aWVub2p1bXM=": [
+    "Jā"
+   ],
+   "attributes_lv_str_NUcgc2F2aWVub2p1bXM=": [
+    "Jā"
+   ],
+   "attributes_lv_str_QmV6dmFkdSB1emzEgWRl": [
+    "Jā"
+   ],
+   "product_type_lv": [
+    "Mobilie telefoni"
+   ],
+   "brand_lv": [
+    "Apple"
+   ],
+   "tags_lv": [],
+   "delivery_methods_lv": [
+    "Piegāde uz mājām",
+    "Izņemšana veikalā",
+    "Izņemšana pakomātā"
+   ],
+   "priority": 8277.496314,
+   "category_priority": 1000
+  },
+  {
+   "id": 1074594,
+   "add_to_cart_id": 1079281,
+   "minimum_order_quantity": null,
+   "maximum_order_quantity": null,
+   "url": {
+    "lv": "/p/telefons-ar-pogam-myphone-halo-3-32-mb-sarkana-kras/n15u",
+    "ru": "/ru/p/knopochnyy-telefon-myphone-halo-3-32-mb-krasnyy-tsv/n15u"
+   },
+   "title": {
+    "lv": "Telefons ar pogām MyPhone Halo 3, 32 MB, sarkana krās.",
+    "ru": "Кнопочный телефон MyPhone Halo 3, 32 MB, красный цв."
+   },
+   "product_code": "1226776",
+   "measurement_unit": {
+    "lv": "gab.",
+    "ru": "шт."
+   },
+   "measurement_units": {
+    "current": [
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": null
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     }
+    ],
+    "original": [
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": null
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     },
+     {
+      "measurement_unit": null,
+      "measurement_label": null,
+      "value": 0,
+      "value_label": "€"
+     }
+    ]
+   },
+   "alternative_codes": [
+    "1226776",
+    "590298361771",
+    "5902983617716",
+    "Y00001210302"
+   ],
+   "article_number": "Y00001210302",
+   "tags": [
+    "online-only",
+    "in-warehouse"
+   ],
+   "prices": [
+    {
+     "compare_at_price": 0,
+     "price": 38.9,
+     "minimum_value": 38.9,
+     "discount": 0,
+     "price_group_id": 1
+    },
+    {
+     "promotion_discount_percent": null,
+     "compare_at_price": 38.9,
+     "price": 33.52,
+     "minimum_value": 33.52,
+     "discount": 14,
+     "price_group_id": 2
+    }
+   ],
+   "min_price_active": false,
+   "price_groups": {
+    "default": {
+     "price": 38.9
+    },
+    "loyalty": {
+     "price": 33.52,
+     "savings": 5.38,
+     "savings_percent": 14,
+     "promotion_discount_percent": null
+    }
+   },
+   "attributes": [
+    {
+     "name": {
+      "lv": "Ekrāna izmērs",
+      "ru": "Размер экрана"
+     },
+     "value": {
+      "lv": "2.31",
+      "ru": "2.31"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "metric",
+     "unit": {
+      "lv": "\"",
+      "ru": "″"
+     }
+    },
+    {
+     "name": {
+      "lv": "Ekrāna izšķirtspēja",
+      "ru": "Разрешение дисплея"
+     },
+     "value": {
+      "lv": "240 x 320",
+      "ru": "240 x 320"
+     },
+     "is_filterable": false,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Operatīvā atmiņa (RAM)",
+      "ru": "Оперативная память (RAM)"
+     },
+     "value": {
+      "lv": "32 MB",
+      "ru": "32 MB"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Atmiņas ietilpība",
+      "ru": "Объем памяти"
+     },
+     "value": {
+      "lv": "32 MB",
+      "ru": "32 MB"
+     },
+     "is_filterable": true,
+     "is_priority": true,
+     "value_type": "select",
+     "unit": null
+    },
+    {
+     "name": {
+      "lv": "Aizmugurējā kamera",
+      "ru": "Задняя камера"
+     },
+     "value": {
+      "lv": "0.3 MP",
+      "ru": "0.3 MP"
+     },
+     "is_filterable": false,
+     "is_priority": true,
+     "value_type": "multiselect",
+     "unit": null
+    }
+   ],
+   "in_stock": true,
+   "image": "/display/aikido/store/bbf193500336c9172a1d70ae7dfe9485.jpeg",
+   "images": [
+    "/display/aikido/store/bbf193500336c9172a1d70ae7dfe9485.jpeg",
+    "/display/aikido/store/8b7f0b9dcceaed9bcb10f91df4854807.jpeg",
+    "/display/aikido/store/bc9377368a0e6fd589a30b2432d9ac03.jpeg",
+    "/display/aikido/store/daed94d79489d008f769528f83cc5b3a.jpeg"
+   ],
+   "score": "0.99455355",
+   "stock_priority": "A",
+   "margin_priority": "C",
+   "rating_count": null,
+   "rating_value": null,
+   "online_sales": 1,
+   "energy_label_data": {
+    "image_path": null,
+    "value": "-",
+    "scale_min": null,
+    "scale_max": "-",
+    "color": null
+   },
+   "tyres_energy_label_data": null,
+   "data_sheet_data": [],
+   "delivery_methods": [
+    "COURIER",
+    "COLLECT_IN_STORE",
+    "PARCEL_TERMINAL"
+   ],
+   "is_loyalty_filter": true,
+   "coupons": {},
+   "title_lv": "Telefons ar pogām MyPhone Halo 3, 32 MB, sarkana krās.",
+   "description_lv": "<div class=\"segment-one -style-dark -isSlick -isLoaded\">\n<div class=\"segment-one__box\">\n<div class=\"segment-one__details\">\n<div class=\"segment-one__textbox\">\n<div class=\"segment-one__header\">\n<h2 style=\"text-align: left;\">myPhone Halo 3</h2>\n<h3 style=\"text-align: left;\">A versatile classic</h3>\n</div>\n<div class=\"segment-one__footer\" style=\"text-align: left;\">\n<div class=\"text\">\n<p>Klasisks telefons ar skaidru, krāsainu 2,3 collu displeju, ar lieliem, apgaismotiem taustiņiem un lielu, jaudīgu LED lukturi. Tam ir uzlādes pamatne, fotokontaktu funkcija, radio, kas darbojas bez austiņām, SOS ārkārtas poga un 1000 mAh akumulators, kas nodrošina ilgu darbības laiku ar vienu uzlādes ciklu. Ieteicams cilvēkiem ar dzirdes traucējumiem (Hearing Aid Compatible Phone (HAC)).</p>\n</div>\n</div>\n</div>\n</div>\n</div>\n</div>\n<div class=\"content -white-background\">\n<div id=\"features\" class=\"segment-two -stickedToBottom -left -isSlick -isLoaded -style-dark\" style=\"text-align: left;\" data-slider-rotate=\"500\">\n<div class=\"segment-two__box\">\n<div class=\"segment-two__details\">\n<div class=\"segment-two__textbox\" data-aos=\"fade-up\">\n<h2>Clear display</h2>\n<p>myPhone Halo 3 ir aprīkots ar 2,3 collu IPS krāsu displeju ar lielu un viegli salasāmu fontu, kas nenogurdina redzi. Attēls ir asāks un skaidrāks. Tajā pašā laikā tālrunis ir ērts un sver tikai 86 g. Tādēļ tā lietošana ir vienkārša un ērta ikvienam.</p>\n</div>\n</div>\n</div>\n</div>\n<div class=\"segment-two -stickedToBottom -right -isSlick -isLoaded -style-dark\" style=\"text-align: left;\" data-slider-rotate=\"500\">\n<div class=\"segment-two__box\">\n<div class=\"segment-two__details\">\n<div class=\"segment-two__textbox\" data-aos=\"fade-up\">\n<h2>Large LED flashlight</h2>\n<p>Vai jums ir nepieciešams tālrunis ar jaudīgu lukturi? Šim tālrunim tas ir, kas atvieglos pārvietošanos tumsā, pazudušo lietu meklēšanu un grūti pieejamu vietu apgaismošanu. Lukturi var viegli ieslēgt un izslēgt, izmantojot slīdni telefona korpusa sānos.</p>\n</div>\n</div>\n</div>\n</div>\n<div class=\"segment-two -stickedToBottom -left -isSlick -isLoaded -style-dark\" style=\"text-align: left;\" data-slider-rotate=\"500\">\n<div class=\"segment-two__box\">\n<div class=\"segment-two__details\">\n<div class=\"segment-two__textbox\" data-aos=\"fade-up\">\n<h2>The radio works without headphones</h2>\n<p>Klausies radio un savas iecienītās raidījuma, neatkarīgi no tā, kur tu esi. Tagad tas ir vēl vieglāk, jo myPhone Halo 3 ir iebūvēta antena, tāpēc, lai klausītos radio, nav nepieciešamas austiņas.</p>\n</div>\n</div>\n</div>\n</div>\n<div class=\"segment-two -stickedToBottom -right -isSlick -isLoaded -style-dark\" style=\"text-align: left;\" data-slider-rotate=\"500\">\n<div class=\"segment-two__box\">\n<div class=\"segment-two__details\">\n<div class=\"segment-two__textbox\" data-aos=\"fade-up\">\n<h2>Photocontacts and camera</h2>\n<p>Šis mobilais tālrunis ir aprīkots ar kameru, pateicoties kurai jūs uztversiet svarīgākos brīžus. Baudiet draugu tuvumu un izmantojiet viņu fotogrāfijas, lai iestatītu fotokontaktus.</p>\n</div>\n</div>\n</div>\n</div>\n<div class=\"segment-two -stickedToBottom -left -isSlick -isLoaded -style-dark\" style=\"text-align: left;\" data-slider-rotate=\"500\">\n<div class=\"segment-two__box\">\n<div class=\"segment-two__details\">\n<div class=\"segment-two__textbox\" data-aos=\"fade-up\">\n<h2>Large, backlit keys</h2>\n<p>Halo 3 ir tālrunis ar lieliem taustiņiem, kas ir apgaismoti. Pateicoties tam, telefona darbība ir vienkārša, intuitīva un ērta. Komfortu palielina Braila raksta zīmes uz taustiņiem.</p>\n</div>\n</div>\n</div>\n</div>\n<div class=\"segment-two -stickedToBottom -right -isSlick -isLoaded -style-dark\" style=\"text-align: left;\" data-slider-rotate=\"500\">\n<div class=\"segment-two__box\">\n<div class=\"segment-two__details\">\n<div class=\"segment-two__textbox\" data-aos=\"fade-up\">\n<h2>Long talk time</h2>\n<p>Tālrunis nodrošina stabilitāti un pārliecību komunikācijā ar mīļajiem. Halo 3 modelis piedāvā līdz 15 dienām gatavības režīmā - viss pateicoties lielas ietilpības 1000 mAh akumulatoram.</p>\n</div>\n</div>\n</div>\n</div>\n<div class=\"segment-two -stickedToBottom -left -isSlick -isLoaded -style-dark\" data-slider-rotate=\"500\">\n<div class=\"segment-two__box\">\n<div class=\"segment-two__details\">\n<div class=\"segment-two__textbox\" data-aos=\"fade-up\">\n<h2 style=\"text-align: left;\">SOS button</h2>\n<p style=\"text-align: left;\">Mobilais telefons ir aprīkots ar SOS funkcionālo pogu, kas ļauj ar vienu klikšķi izveidot savienojumu / nosūtīt īsziņu uz iepriekš programmētu numuru. Tādēļ lietotājs ir drošāks jebkurā situācijā.</p>\n</div>\n</div>\n</div>\n</div>\n</div>",
+   "url_lv": "/p/telefons-ar-pogam-myphone-halo-3-32-mb-sarkana-kras/n15u",
+   "categories_lv_hierarchy": [
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Citi telefonu ražotāji",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Podziņu telefoni"
+   ],
+   "categories_lv_hierarchy_steps": [
+    "Telefoni, viedpulksteņi, Apple preces",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Citi telefonu ražotāji",
+    "Telefoni, viedpulksteņi, Apple preces > Mobilie telefoni > Podziņu telefoni"
+   ],
+   "categories_lv_flat": [
+    "Telefoni, viedpulksteņi, Apple preces",
+    "Mobilie telefoni",
+    "Citi telefonu ražotāji",
+    "Podziņu telefoni"
+   ],
+   "categories_lv_last": [
+    "Mobilie telefoni",
+    "Citi telefonu ražotāji",
+    "Podziņu telefoni"
+   ],
+   "category_ids": [
+    "16425",
+    "16427",
+    "30841",
+    "30842"
+   ],
+   "price_default": 38.9,
+   "price_loyalty": 33.52,
+   "price_min": 33.52,
+   "attributes_lv_str_TW9kZWxpcw==": [
+    "Halo 3"
+   ],
+   "attributes_lv_str_TW9iaWzEgSB0ZWxlZm9uYSB2ZWlkcw==": [
+    "Klasisks"
+   ],
+   "attributes_lv_str_T3BlcsSTdMSBanNpc3TEk21h": [
+    "Standarta rūpnieciskais"
+   ],
+   "attributes_lv_num_RWtyxIFuYSBpem3Ek3JzLCAi": [
+    "2.31"
+   ],
+   "attributes_lv_str_T3BlcmF0xKt2xIEgYXRtacWGYSAoUkFNKQ==": [
+    "32 MB"
+   ],
+   "attributes_lv_str_QXRtacWGYXMgaWV0aWxwxKtiYQ==": [
+    "32 MB"
+   ],
+   "attributes_lv_str_M0cgc2F2aWVub2p1bXM=": [
+    "Nē"
+   ],
+   "attributes_lv_str_NEcgc2F2aWVub2p1bXM=": [
+    "Nē"
+   ],
+   "attributes_lv_str_NUcgc2F2aWVub2p1bXM=": [
+    "Nē"
+   ],
+   "attributes_lv_str_QmV6dmFkdSB1emzEgWRl": [
+    "Nē"
+   ],
+   "product_type_lv": [
+    "Spiedpogu telefoni"
+   ],
+   "brand_lv": [
+    "MyPhone"
+   ],
+   "tags_lv": [
+    "Tikai tiešsaistē"
+   ],
+   "delivery_methods_lv": [
+    "Piegāde uz mājām",
+    "Izņemšana veikalā",
+    "Izņemšana pakomātā"
+   ],
+   "priority": 9945.5355,
+   "category_priority": 1000
+  }
+ ]
+}
