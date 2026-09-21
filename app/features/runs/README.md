@@ -23,8 +23,21 @@ disagree in silence. Seventy channels recomputed on every tick costs nothing.
 **Everything the scheduler decides is an ordinary query**, which is why `GET /runs/due`
 exists: what the process would start can be read, and asserted, without starting it.
 
-**Two kinds, `full` and `quick`.** A dedicated stock endpoint is not a third — it is another
-channel into the same shop whose full pass happens to carry availability and nothing else.
+**Two kinds that collect, `full` and `quick`,** and one that does not. A dedicated stock
+endpoint is not a fourth — it is another channel into the same shop whose full pass happens
+to carry availability and nothing else.
+
+**`reparse` re-reads the snapshots already on disk** with the parser as it is now. No
+network, no cron, never due: started by hand, after a parser is changed, which is the only
+way a fix can be judged without crawling the shop again — and crawling again would measure
+the site as it is today rather than as it was when the parser broke. It reads both areas,
+and the failed one is the reason to run it at all: a product that would not parse is
+exactly what the fix was for. One that parses now moves out of `failed/`; one that used to
+parse and no longer does moves in.
+
+A reparse must never earn the absence inference. It sees whatever happens to be in the
+snapshot store, which is a subset by construction, so what it did not see means nothing.
+Only a collecting run that ended `ok` may conclude a product is gone.
 
 **A slot is read backwards, not projected forwards.** The most recent slot at or before now,
 compared against the last start. Projecting forward from the last run means a channel that
@@ -128,6 +141,11 @@ that. What a run collected is recorded on the run, which is where somebody would
 
 **A 401 mid-pass is retried once** through a fresh sign-in. A slow channel can outlive an
 access token, and losing a completed crawl to an expiry would be absurd.
+
+**A snapshot carries more than bytes.** The URL and, on a marketplace, which trader the
+listing belonged to — facts the crawl had and the page does not state. Without them a
+reparse of a marketplace channel would fail on every item for want of something it already
+knew. The worker fills them from the listing, so a channel does not have to remember to.
 
 ## Not built yet
 

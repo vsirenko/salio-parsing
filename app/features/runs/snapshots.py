@@ -41,6 +41,8 @@ class SnapshotStore:
         document = {
             "external_id": snapshot.external_id,
             "fetched_at": snapshot.fetched_at.isoformat(),
+            "url": snapshot.url,
+            "seller_external_id": snapshot.seller_external_id,
             "parts": [
                 {"role": p.role, "url": p.url, "status": p.status, "body": p.body}
                 for p in snapshot.parts
@@ -57,6 +59,8 @@ class SnapshotStore:
         return Snapshot(
             external_id=document["external_id"],
             fetched_at=datetime.fromisoformat(document["fetched_at"]).astimezone(UTC),
+            url=document.get("url"),
+            seller_external_id=document.get("seller_external_id"),
             parts=[Part(**part) for part in document["parts"]],
         )
 

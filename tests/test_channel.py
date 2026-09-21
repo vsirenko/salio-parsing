@@ -281,6 +281,120 @@ def test_discovery_failing_fails_the_run(client, event_loop, shop, collector):
 # --- the snapshot store ---
 
 
+# --- reading the bytes again ---
+
+
+def test_a_reparse_reads_the_store_and_never_the_network(client, event_loop, shop, collector):
+    """A parser is judged against the bytes that were served, not the site as it is now."""
+    from app.features.runs.worker import collect
+
+    made, served, fetcher, store = shop
+    admin = admin_token(client)
+    source = make_channel(client, admin, cron_full=None, cron_quick=None)
+
+    crawl = start(client, admin, source["id"])
+    job = event_loop.run_until_complete(collector.job(crawl["id"]))
+    event_loop.run_until_complete(collect(job, collector, fetcher=fetcher(), store=store))
+    client.post(
+        f"/api/admin/runs/{crawl['id']}/finish",
+        headers=auth(admin),
+        json={"items_seen": 3, "items_ingested": 3},
+    )
+    crawled = served["requests"]
+
+    again = start(client, admin, source["id"], "reparse")
+    job = event_loop.run_until_complete(collector.job(again["id"]))
+    result = event_loop.run_until_complete(collect(job, collector, store=store))
+
+    assert (result.items_seen, result.items_ingested, result.items_failed) == (3, 3, 0)
+    # Not one request. That is the point.
+    assert served["requests"] == crawled
+
+
+def test_a_fix_is_judged_by_reparsing(client, event_loop, shop, collector):
+    """The reason the failed area exists: the broken example is what the fix was for."""
+    from app.features.runs.worker import collect
+
+    made, _, fetcher, store = shop
+    made.breaks = {"P-2"}
+    admin = admin_token(client)
+    source = make_channel(client, admin, cron_full=None, cron_quick=None)
+
+    crawl = start(client, admin, source["id"])
+    job = event_loop.run_until_complete(collector.job(crawl["id"]))
+    event_loop.run_until_complete(collect(job, collector, fetcher=fetcher(), store=store))
+    client.post(
+        f"/api/admin/runs/{crawl['id']}/finish",
+        headers=auth(admin),
+        json={"items_seen": 3, "items_ingested": 2},
+    )
+    assert store.stored(made.slug, failed=True) == ["P-2"]
+
+    # The parser is fixed, and the question is whether it helped.
+    made.breaks = set()
+    again = start(client, admin, source["id"], "reparse")
+    job = event_loop.run_until_complete(collector.job(again["id"]))
+    result = event_loop.run_until_complete(collect(job, collector, store=store))
+
+    assert (result.items_seen, result.items_ingested, result.items_failed) == (3, 3, 0)
+    assert store.stored(made.slug, failed=True) == []
+    assert store.stored(made.slug) == ["P-1", "P-2", "P-3"]
+
+
+def test_a_fix_that_made_things_worse_says_so(client, event_loop, shop, collector):
+    from app.features.runs.worker import collect
+
+    made, _, fetcher, store = shop
+    admin = admin_token(client)
+    source = make_channel(client, admin, cron_full=None, cron_quick=None)
+
+    crawl = start(client, admin, source["id"])
+    job = event_loop.run_until_complete(collector.job(crawl["id"]))
+    event_loop.run_until_complete(collect(job, collector, fetcher=fetcher(), store=store))
+    client.post(
+        f"/api/admin/runs/{crawl['id']}/finish",
+        headers=auth(admin),
+        json={"items_seen": 3, "items_ingested": 3},
+    )
+
+    # A "fix" that breaks one that used to work.
+    made.breaks = {"P-1"}
+    again = start(client, admin, source["id"], "reparse")
+    job = event_loop.run_until_complete(collector.job(again["id"]))
+    result = event_loop.run_until_complete(collect(job, collector, store=store))
+
+    assert result.items_failed == 1
+    # Its bytes move in with the other broken examples, ready for the next attempt.
+    assert store.stored(made.slug, failed=True) == ["P-1"]
+
+
+def test_a_reparse_restates_what_the_crawl_knew(client, event_loop, shop, collector, tmp_path):
+    """A snapshot carrying only bytes could not say which trader a listing belonged to."""
+    from app.features.runs.snapshots import SnapshotStore
+
+    _, _, fetcher, store = shop
+    admin = admin_token(client)
+    source = make_channel(client, admin, cron_full=None, cron_quick=None)
+    run = start(client, admin, source["id"])
+
+    from app.features.runs.worker import collect
+
+    job = event_loop.run_until_complete(collector.job(run["id"]))
+    event_loop.run_until_complete(collect(job, collector, fetcher=fetcher(), store=store))
+
+    reloaded = SnapshotStore(store.root).load("rd-site", "P-1")
+    assert reloaded.url == "https://shop.test/p/P-1"
+
+
+def test_a_reparse_is_never_due(client):
+    """It has no cron and is started by hand — which is also when it is wanted."""
+    admin = admin_token(client)
+    make_channel(client, admin, cron_full="* * * * *", cron_quick=None)
+
+    due = client.get("/api/admin/runs/due", headers=auth(admin)).json()
+    assert {item["kind"] for item in due} == {"full"}
+
+
 def test_a_snapshot_round_trips(tmp_path):
     from app.features.runs.snapshots import SnapshotStore
 

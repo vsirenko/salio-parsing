@@ -7,21 +7,26 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Kind(StrEnum):
-    """Two, and only two.
+    """Two that collect, and one that does not.
 
-    A dedicated stock endpoint is not a third: it is another channel into the same shop
+    A dedicated stock endpoint is not a fourth: it is another channel into the same shop
     whose full pass happens to carry availability and nothing else, which the channel
     model already covers.
     """
 
     FULL = "full"
     QUICK = "quick"
+    # Re-reads the bytes already on disk with the parser as it is now. No network, no
+    # schedule — started by hand, after a parser is changed, to find out whether the change
+    # helped. It is the only way a parser fix can be judged without crawling a shop again.
+    REPARSE = "reparse"
 
 
 class Status(StrEnum):
     RUNNING = "running"
-    # Finished, contract passed. The only status that earns the right to treat what was
-    # not seen as gone.
+    # Finished, contract passed. Together with a collecting kind, the only thing that earns
+    # the right to treat what was not seen as gone — a reparse sees whatever happens to be
+    # in the snapshot store, so its absences mean nothing at all.
     OK = "ok"
     # Finished, contract failed. What it saw is still written — those observations are
     # real. What it did not see means nothing.

@@ -86,7 +86,9 @@ class RunService:
             market_codes=list(markets),
             # Chosen here rather than by the worker: the pass and the facts it is expected
             # to bring back are one decision, and splitting it invites them to disagree.
-            delivers=list(source.delivers_full if kind is Kind.FULL else source.delivers_quick),
+            # A reparse re-reads full snapshots, so it is expected to bring back what a
+            # full pass brings back.
+            delivers=list(source.delivers_quick if kind is Kind.QUICK else source.delivers_full),
         )
 
     # --- finishing ---
@@ -144,6 +146,8 @@ class RunService:
                 )
             )
 
+        # Compared within a kind: a reparse sees the snapshot store and a crawl sees the
+        # shop, so holding one against the other would reject whichever ran second.
         baseline = await self._last_ok_items(source.id, run.kind, before=run.id)
         if baseline is None or baseline == 0:
             checks.append(
@@ -163,7 +167,7 @@ class RunService:
                 )
             )
 
-        delivers = source.delivers_full if run.kind == Kind.FULL.value else source.delivers_quick
+        delivers = source.delivers_quick if run.kind == Kind.QUICK.value else source.delivers_full
         if "price" in delivers:
             got = float(run.coverage.get("price", 0.0))
             checks.append(

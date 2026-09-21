@@ -65,6 +65,12 @@ class Snapshot:
     external_id: str
     parts: list[Part]
     fetched_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Carried so a re-read can produce the same observation the crawl did. A snapshot with
+    # only bytes in it cannot say which trader on a marketplace the listing belonged to,
+    # and a reparse of one would fail on every item for want of a fact it already had. A
+    # channel does not have to set these: the worker fills them from the listing.
+    url: str | None = None
+    seller_external_id: str | None = None
 
     def part(self, role: str) -> Part | None:
         return next((part for part in self.parts if part.role == role), None)

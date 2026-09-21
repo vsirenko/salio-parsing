@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import logging
 from collections import Counter
+from dataclasses import replace
 
 from app.core.config import settings
 from app.features.runs import channel as channels
@@ -49,27 +50,81 @@ async def collect(
         )
 
     store = store or SnapshotStore()
-    async with fetcher or Fetcher() as session:
-        try:
-            listings = await channel.discover(session, job)
-        except Exception as error:  # noqa: BLE001 - discovery failing is the whole run failing
-            # Unlike one product failing, this leaves nothing to collect. Reported rather
-            # than raised, so the run carries the reason instead of an exit code.
-            return RunResult(
-                items_seen=0, items_ingested=0, error=f"discover: {type(error).__name__}: {error}"
-            )
 
-        log.info("run %d: %d listing(s)", job.run_id, len(listings))
-        payloads, failed = await _read_all(job, channel, session, store, listings)
+    if job.kind is Kind.REPARSE:
+        # No network at all. That is the whole point: a parser is judged against the bytes
+        # that were already served, not against the site as it is today.
+        seen, payloads, failed = _reparse(job, channel, store)
+    else:
+        async with fetcher or Fetcher() as session:
+            try:
+                listings = await channel.discover(session, job)
+            except Exception as error:  # noqa: BLE001 - discovery failing is the whole run
+                # Unlike one product failing, this leaves nothing to collect. Reported
+                # rather than raised, so the run carries the reason instead of an exit code.
+                return RunResult(
+                    items_seen=0,
+                    items_ingested=0,
+                    error=f"discover: {type(error).__name__}: {error}",
+                )
+
+            log.info("run %d: %d listing(s)", job.run_id, len(listings))
+            seen = len(listings)
+            payloads, failed = await _read_all(job, channel, session, store, listings)
 
     ingested, coverage, handover_error = await _hand_over(job, collector, payloads)
     return RunResult(
-        items_seen=len(listings),
+        items_seen=seen,
         items_ingested=ingested,
         items_failed=failed,
         coverage=coverage,
         error=handover_error,
     )
+
+
+def _reparse(job: Job, channel: Channel, store: SnapshotStore) -> tuple[int, list[dict], int]:
+    """Read every snapshot this channel has with the parser as it is now.
+
+    Both areas, and the failed one is the reason to run this at all: a product that would
+    not parse last time is exactly what a fix was for, and one that parses now stops being
+    a broken example.
+    """
+    good = store.stored(job.source_slug)
+    broken = store.stored(job.source_slug, failed=True)
+
+    payloads: list[dict] = []
+    failed = 0
+    for external_id in sorted(set(good) | set(broken)):
+        was_broken = external_id in broken
+        snapshot = store.load(job.source_slug, external_id, failed=was_broken)
+        if snapshot is None:  # pragma: no cover - listed and then removed
+            continue
+
+        try:
+            fields = channel.parse(snapshot)
+        except Exception as error:  # noqa: BLE001 - a parser may raise anything at all
+            failed += 1
+            if not was_broken:
+                # It parsed before and does not now: the new parser is worse for this one,
+                # and the bytes belong with the other broken examples.
+                store.save(job.source_slug, snapshot, failed=True)
+            log.warning("run %d: %s: %s", job.run_id, external_id, error)
+            continue
+
+        if was_broken:
+            store.save(job.source_slug, snapshot)
+            store.forget_failure(job.source_slug, external_id)
+
+        payloads.append(
+            {
+                "external_id": external_id,
+                "payload": fields,
+                "url": snapshot.url,
+                "seller_external_id": snapshot.seller_external_id,
+            }
+        )
+
+    return len(good) + len(broken), payloads, failed
 
 
 async def _read_all(
@@ -94,6 +149,13 @@ async def _read_all(
                 fields = channel.read_listing(listing)
             else:
                 snapshot = await channel.fetch(fetcher, listing)
+                # Filled here rather than in every channel: the worker has the listing and
+                # a parser should not have to remember to carry it.
+                snapshot = replace(
+                    snapshot,
+                    url=snapshot.url or listing.url,
+                    seller_external_id=snapshot.seller_external_id or listing.seller_external_id,
+                )
                 try:
                     fields = channel.parse(snapshot)
                 except Exception:

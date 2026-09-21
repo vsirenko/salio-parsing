@@ -90,6 +90,11 @@ and the questions that have to be answered with real data first, are written dow
       gates the absence inference rather than the writes
 - [x] The scheduler process: advisory lock, startup sweep, one subprocess per run, bounded
       concurrency, timeout
+- [x] Snapshots on the worker's disk, and a `reparse` run that re-reads them with the
+      parser as it is now — the only way a parser fix is judged without crawling again
+- [ ] **A worker takes the first of a shop's markets.** Right while a shop is shown in one,
+      a fudge the moment it is shown in two: the offers of a Latvian and a Lithuanian
+      storefront would all be filed under whichever market sorted first.
 - [ ] **Nothing fetches.** The scheduler starts runs, spawns workers and records verdicts;
       `worker.py` has an empty `CHANNELS` registry, so every run ends as a failure naming
       the channel it could not collect. Adding a channel is adding an entry — the run

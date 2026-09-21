@@ -1243,7 +1243,7 @@ class Run(Base):
     error: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
-        CheckConstraint("kind in ('full', 'quick')", name="kind_known"),
+        CheckConstraint("kind in ('full', 'quick', 'reparse')", name="kind_known"),
         CheckConstraint(
             "status in ('running', 'ok', 'rejected', 'failed', 'interrupted')",
             name="status_known",
