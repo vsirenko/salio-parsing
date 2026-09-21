@@ -68,8 +68,10 @@ recompute; losing the raw table costs a re-crawl of the whole corpus.
 
 ### Some attributes carry identity, most do not
 
-In a mixed catalogue the variant axes are data, not schema. Each attribute definition
-carries a flag: does changing it make this a different thing to buy?
+In a mixed catalogue the variant axes are data, not schema. Each attribute a category uses
+carries a flag: does changing it make this a different thing to buy? The flag sits on the
+pairing rather than on the attribute, because the answer differs by category — see
+[One canon](#one-canon-and-everything-normalized-onto-it).
 
 - 256 GB instead of 128 GB — different variant.
 - Size 42 instead of 40 — different variant.
@@ -256,6 +258,99 @@ and component names inside a bundle title are described worse than ordinary offe
 Marking a variant as a bundle is cheap and enough; linking components is done later and
 only where they are obvious.
 
+### One canon, and everything normalized onto it
+
+Sources name the same thing differently — `Цвет`, `Color`, `Krāsa`, `Spalva` — and half
+the time do not send it as a field at all, leaving `256GB` to be pulled out of the title.
+So there is one canonical registry of attributes, and everything is normalized onto it.
+
+That is what makes the two extraction paths interchangeable. Once a param and a phrase cut
+out of a title both resolve to `capacity = 256 GB`, where the value came from stops
+mattering to everything downstream.
+
+**The attribute is global, its use is per category.** `value_type`, the unit dimension and
+the rounding scale belong to the attribute itself: capacity is measured in gigabytes
+wherever it appears. Whether it *carries identity* belongs to the pair, because that genuinely
+differs: weight is an axis for food — 500 g and 1 kg are different products — and a
+specification for a washing machine.
+
+**One attribute, or two?** Only if the values mean the same thing everywhere. Size 42 in
+shoes and size 42 in clothing are different scales, so they are `shoe_size` and
+`clothing_size`, and nothing is lost by saying so.
+
+**Inheritance down the category tree is deliberately absent.** With a hand-managed tree it
+is a handful of rows per category, created by a button. More to the point, inheritance is
+a read rule rather than a storage one: if the tree grows enough to want it, it can be
+added without touching a stored row.
+
+### Filling it: lookup, parse, and a queue that drains
+
+Two different mechanisms, and the difference decides how much manual work there is:
+
+- a **key** (`Atmiņa`) and an **enum value** (`Melns`) are *looked up* in the alias tables;
+  no match means a row in a candidate queue;
+- a **number** (`256 GB`) is *parsed* — value, unit, conversion to the base unit, rounded
+  to the attribute's scale. It either parses or it does not, and it never queues.
+
+So capacity, weight, screen size and power — most of what a spec sheet holds — generate no
+queue at all. Only enumerations do: colour, material, connector type.
+
+**The queue is the data-entry tool, not an error log.** The registry starts empty and
+nothing resolves, which is the normal beginning. Someone opens the queue for a category
+once and sees what the data actually says, ordered by how often it says it:
+
+```
+Krāsa      8 142   -> create `color`
+Цвет       6 907   -> alias of color
+Color      3 220   -> alias of color
+Atmiņa     7 880   -> create `capacity`
+Garantija  5 120   -> skip, a warranty is not an axis
+```
+
+Nobody invents a specification sheet up front; they pick out of what arrived. `identity_ready`
+on a category therefore means "we chose the two or three that separate variants", not "we
+described every characteristic" — an order of magnitude less work.
+
+**The judge proposes, the alias table remembers.** `Atmiņa → capacity` and `melns → black`
+are translation, which an LLM does reliably, so the judge pre-fills the queue and a human
+confirms in batches. After that the next eight thousand offers saying `Krāsa` never reach
+it. Attributes are where that loop pays best: the language variants are many but finite.
+
+**And the queue drains.** Distinct keys in a category are a handful; distinct colour names
+across every source are a few hundred and dry up quickly. New products never stop arriving;
+new attribute names do, within weeks of opening a category.
+
+**Nothing unmapped is lost.** An unresolved key stays in `normalized_offer.attributes` as it
+arrived. It simply takes no part in identity, so the price of not having mapped it yet is
+the slow path rather than missing data, and the pipeline never blocks on a word nobody has
+classified.
+
+### A variant's attributes are a consensus, not a copy
+
+They live in `variant_attribute`, one row per attribute, with the value in a typed column:
+a number in its base unit, or a foreign key to a canonical enum value. Typed columns rather
+than one text field, because faceting and range filtering are the storefront — "6 to 7
+inches", "256 GB (1 240)" — and casting a text column per query is not a way to serve that.
+
+There is no `identity_attrs` blob beside it. Specifications need a home regardless, and
+keeping the identity-bearing ones somewhere else would be two mechanisms for one thing.
+`identity_key` stays on the variant, computed once at write time from the rows whose
+`category_attribute.identity_bearing` is set.
+
+**Ten offers for one variant do not agree.** One says the colour is black, another
+graphite, a third says nothing. So the variant holds a *reconciled* value, by weighted
+majority: a feed outweighs a scrape, and a param outweighs something cut out of a title —
+which is what `source_kind` is for. The rule improves on its own as offers accumulate.
+
+A value set by a human carries `origin = human` and is never overwritten by that
+reconciliation. Otherwise a correction survives exactly until the next crawl.
+
+**Flipping `identity_bearing` invalidates every key in that category.** The key is computed
+from the identity-bearing set, so changing the set means recomputing and re-matching all of
+it. That is not forbidden, but it is an operation the size of a migration rather than a
+checkbox, and the admin panel should say so — or somebody will one day untick it out of
+curiosity.
+
 ### A brand alias is not one kind of thing
 
 A brand is what is written on the box, not who owns the factory. Procter & Gamble is not
@@ -371,10 +466,22 @@ seller         id, shop_id, external_id, name
 category       id, parent_id NULL, slug UNIQUE, name,
                is_visible, is_visible_effective, identity_ready
 category_market_stats  category_id, market_code, offer_count, refreshed_at
-attribute_def  id, category_id, key, name, value_type,
-               unit_dimension NULL, identity_bearing
-attribute_value        id, attribute_def_id, canonical, position
-attribute_value_alias  attribute_value_id, alias, language NULL, origin
+attribute      id, key UNIQUE, name, value_type(enum|number|bool|text),
+               unit_dimension NULL, scale NULL
+                             -- one canonical registry: color, capacity, screen_size
+attribute_alias        id, attribute_id, alias_normalized, language NULL, origin
+                             -- Цвет, Krāsa, Colour -> color
+category_attribute     category_id, attribute_id, identity_bearing, position
+               PK (category_id, attribute_id)
+                             -- which attributes a category has, and which carry identity
+attribute_value        id, attribute_id, canonical, position
+attribute_value_alias  attribute_value_id, alias_normalized, language NULL, origin
+attribute_candidate    id, alias_normalized, alias_raw, category_id NULL,
+               seen_count, first_seen_at, resolved_attribute_id NULL, resolved_by
+               UNIQUE (alias_normalized, category_id)
+attribute_value_candidate  id, attribute_id, alias_normalized, alias_raw,
+               seen_count, first_seen_at, resolved_value_id NULL, resolved_by
+               UNIQUE (attribute_id, alias_normalized)
 source_category_map    source_id, source_path, category_id, mapped_by, mapped_at
                UNIQUE (source_id, source_path)
 
@@ -396,8 +503,18 @@ product        id, slug UNIQUE, brand_id, category_id, title, is_visible
 product_merge  from_id, into_id, merged_at, reason, decided_by
 variant        id, slug UNIQUE, product_id NULL, brand_id, category_id, title,
                kind(single|multipack|bundle), unit_count,
-               identity_attrs JSONB, identity_key NULL UNIQUE
+               identity_key NULL UNIQUE
                CHECK (kind = 'multipack') = (unit_count > 1)
+variant_attribute      variant_id, attribute_id,
+               value_num NULL,          -- base unit, rounded to the attribute's scale
+               value_id NULL,           -- -> attribute_value, for enums
+               value_bool NULL,
+               value_text NULL,         -- never identity-bearing
+               source_kind(param|title), origin(consensus|human)
+               PK (variant_id, attribute_id)
+               CHECK exactly one value_* is set
+               INDEX (attribute_id, value_id)     -- facet by enum
+               INDEX (attribute_id, value_num)    -- facet and range by number
 variant_gtin   variant_id, gtin, origin, first_seen_at        -- INDEX (gtin)
 variant_mpn    variant_id, brand_id, mpn_normalized, origin, first_seen_at
                                                               -- INDEX (brand_id, mpn)
