@@ -1,6 +1,7 @@
 """Offers behind the admin panel.
 
-    POST /api/admin/sources/{id}/offers    submit one observation
+    POST /api/admin/sources/{id}/offers        submit one observation
+    POST /api/admin/sources/{id}/offers/batch  submit many, gzipped
     GET  /api/admin/offers                 the listings
     GET  /api/admin/offers/{id}/raw        every observation of one
     GET  /api/admin/raw-offers/{id}/reading
@@ -19,10 +20,12 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.deps import OfferServiceDep
 from app.api.pagination import pagination_params
 from app.features.offers.schemas import (
+    BatchResult,
     Coverage,
     IngestResult,
     NormalizedOfferRead,
     OfferRead,
+    RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
 )
@@ -54,6 +57,31 @@ async def ingest(source_id: int, payload: RawOfferIngest, service: OfferServiceD
     how much the world changes rather than to how often we look at it.
     """
     return await service.ingest(source_id, payload)
+
+
+@sources_router.post(
+    "/{source_id}/offers/batch",
+    response_model=BatchResult,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Submit many observations",
+    responses={
+        404: {"model": ErrorResponse, "description": "Source or run not found"},
+        422: {"model": ErrorResponse, "description": "Unknown market, or the batch is too large"},
+    },
+)
+async def ingest_batch(
+    source_id: int, batch: RawOfferBatch, service: OfferServiceDep
+) -> BatchResult:
+    """One request, one transaction, one audit entry.
+
+    Post it with `Content-Encoding: gzip` — product JSON compresses by roughly an order of
+    magnitude, and the difference is paid on every pass of every channel.
+
+    Partial on purpose. One malformed card does not throw away the pass that collected the
+    other eight hundred and ninety-nine; each failure comes back named, because a batch
+    that reports "two failed" is a batch nobody can fix.
+    """
+    return await service.ingest_batch(source_id, batch)
 
 
 @router.get("/coverage", response_model=Coverage, summary="How far determinism gets")

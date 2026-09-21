@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin_router import admin_public_router, admin_router
 from app.api.router import api_router
+from app.core.compression import GzipRequestMiddleware
 from app.core.config import settings
 from app.core.error_handlers import register_error_handlers
 from app.core.logging import configure_logging
@@ -55,6 +56,12 @@ def create_app() -> FastAPI:
         AuditMiddleware,
         path_prefix=f"{settings.api_prefix}/admin",
         trust_proxy_headers=settings.trust_proxy_headers,
+    )
+
+    # Added last, so it runs first: the body has to be readable before anything else
+    # looks at it, the audit trail included.
+    app.add_middleware(
+        GzipRequestMiddleware, max_bytes=settings.max_decompressed_body_mb * 1024 * 1024
     )
 
     app.add_middleware(

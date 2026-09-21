@@ -10,6 +10,7 @@ Everything downstream is derived from them and can be thrown away.
 | | |
 |---|---|
 | `POST /api/admin/sources/{source_id}/offers` | submit one observation |
+| `POST /api/admin/sources/{source_id}/offers/batch` | submit many, gzipped |
 | `GET /api/admin/offers` | the listings — filter by `seller_id`, `market_code` |
 | `GET /api/admin/offers/coverage` | how far a deterministic matcher could get |
 | `GET /api/admin/offers/{offer_id}` | one listing |
@@ -20,6 +21,41 @@ Everything downstream is derived from them and can be thrown away.
 Ingestion is a POST because there is no fetcher yet, and that is the point rather than a
 placeholder: a sample can be loaded by hand and measured before a line of crawling exists,
 and the measurement decides what the matcher should be.
+
+## Ingesting in batches
+
+A pass over a nine-hundred-product shop is, one at a time, nine hundred requests, nine
+hundred transactions and nine hundred audit entries. The last is the real objection: the
+trail exists to show what an administrator did, and a crawl would bury that under a wall of
+"an offer arrived". A batch is one request, one transaction and **one** audit entry, whose
+changes carry the numbers that matter — how many arrived, how many were accepted, how many
+failed, and which run brought them.
+
+**Post it gzipped.** `Content-Encoding: gzip` on the request is decompressed by
+`app/core/compression.py`, because Starlette compresses responses and does not decompress
+requests. Product JSON compresses by roughly an order of magnitude and the difference is
+paid on every pass of every channel. Expansion is capped as it happens, not checked
+afterwards: a few kilobytes of gzip expand to gigabytes of zeros, so an uncapped
+decompressor turns any endpoint taking a body into a way to exhaust the machine from
+outside.
+
+**Partial on purpose.** One malformed card does not throw away the pass that collected the
+other eight hundred and ninety-nine — exactly the case `runs.items_failed` exists to
+record. Each item is written inside a savepoint, so a failure undoes that item and leaves
+the batch standing; a plain flush would abort the whole transaction on the first bad row.
+Failures come back **named**, because a batch reporting "two failed" is a batch nobody can
+fix.
+
+**The market is on the batch, not on each item.** Every observation in one pass comes from
+one channel showing one market, and repeating it per item only invites them to disagree.
+
+**`run_id` is carried through to `raw_offers`.** Null when a sample is loaded by hand. It
+earns its column because when a run is rejected, or its coverage falls off a cliff, the
+question is always "show me what that run actually saw" — and a timestamp narrows that to a
+window rather than to a set of rows. `SET NULL` on delete: the observations are facts about
+a shop, and the run is only how they arrived.
+
+The single-observation endpoint stays. It is what a person uses to check one card by hand.
 
 ## How it works
 

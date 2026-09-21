@@ -930,6 +930,11 @@ class RawOffer(Base):
     # Which channel saw it. On the observation rather than on the offer, because a shop's
     # feed and its scraper are two channels onto one listing.
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"))
+    # Which run brought it in. Null for anything submitted by hand, which is how a sample
+    # is loaded. Worth the column: when a run is rejected or its coverage falls off a
+    # cliff, the question is always "show me what that run actually saw", and a timestamp
+    # only narrows it to a window.
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("runs.id", ondelete="SET NULL"))
     payload: Mapped[dict] = mapped_column(JSONB)
     content_hash: Mapped[str] = mapped_column(String(64))
     fetched_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
@@ -937,6 +942,7 @@ class RawOffer(Base):
 
     __table_args__ = (
         UniqueConstraint("offer_id", "content_hash", name="uq_raw_per_content"),
+        Index("ix_raw_offers_run_id", "run_id"),
         Index("ix_raw_offers_offer_id", "offer_id"),
         Index("ix_raw_offers_source_id", "source_id"),
     )

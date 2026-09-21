@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     login_lock_seconds: int = 60
     login_max_lock_seconds: int = 3600
 
+    # --- Ingestion ---
+    # A batch is posted gzipped: product JSON compresses by roughly an order of magnitude
+    # and the difference is paid on every pass of every channel. The cap is a safety
+    # limit, not a tuning knob — a few kilobytes of gzip can expand to gigabytes.
+    max_decompressed_body_mb: int = Field(default=32, ge=1, le=512)
+    # How many observations one request may carry. Above this the worker splits, which
+    # keeps one request's memory bounded no matter how large a catalogue is.
+    max_batch_offers: int = Field(default=500, ge=1, le=5000)
+
     # --- Collection scheduler ---
     # Its own process: inside the API it would duplicate per uvicorn worker and die with
     # it. Single instance is a Postgres advisory lock, not a row — a lock in a table needs

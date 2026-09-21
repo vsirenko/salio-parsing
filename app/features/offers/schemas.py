@@ -42,6 +42,69 @@ class RawOfferIngest(BaseModel):
     condition_grade: str | None = Field(default=None, max_length=50)
 
 
+class RawOfferBatch(BaseModel):
+    """Many observations of one channel, in one request.
+
+    One at a time, a full pass of a nine-hundred-product shop is nine hundred requests,
+    nine hundred transactions and nine hundred audit entries — and that last one is the
+    real objection: the trail exists to show what an administrator did, and a crawl would
+    bury that under a wall of "an offer arrived".
+
+    Post it gzipped. Product JSON compresses by roughly an order of magnitude, and the
+    difference is paid on every pass of every channel.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # On the batch rather than on each item: every observation in one pass comes from one
+    # channel showing one market, and repeating it per item invites them to disagree.
+    market_code: str = Field(min_length=2, max_length=2)
+    offers: list["BatchOffer"] = Field(min_length=1)
+    # The run that collected these, when a run did. Absent when a sample is loaded by hand.
+    run_id: int | None = None
+
+
+class BatchOffer(BaseModel):
+    """One observation inside a batch. The same thing as a single ingest, less the market."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    external_id: str = Field(min_length=1, max_length=200)
+    payload: dict[str, Any]
+    seller_external_id: str | None = Field(default=None, max_length=200)
+    url: str | None = Field(default=None, max_length=1000)
+    condition: Condition = Condition.NEW
+    condition_grade: str | None = Field(default=None, max_length=50)
+
+
+class BatchFailure(BaseModel):
+    """One observation that did not go in, and why.
+
+    Named rather than counted: a batch reporting "two failed" is a batch nobody can fix.
+    """
+
+    external_id: str
+    code: str
+    message: str
+
+
+class BatchResult(BaseModel):
+    """What a batch did, in the terms the run's own counters are kept in.
+
+    Partial on purpose. One malformed card in nine hundred should not throw away the pass
+    that collected the other eight hundred and ninety-nine — that is exactly the case
+    `runs.items_failed` exists to record.
+    """
+
+    accepted: int
+    failed: int
+    # Observations that were genuinely new. The rest hashed to something already on file,
+    # so they bumped a timestamp and wrote nothing.
+    stored: int
+    offers_created: int
+    failures: list[BatchFailure]
+
+
 class IngestResult(BaseModel):
     """What the observation did.
 
@@ -80,6 +143,7 @@ class RawOfferRead(BaseModel):
     id: int
     offer_id: int
     source_id: int
+    run_id: int | None
     content_hash: str
     payload: dict[str, Any]
     fetched_at: datetime

@@ -3,15 +3,18 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.config import settings
+from app.core.exceptions import AppError, NotFoundError, ValidationError
 from app.db.models import (
     Market,
     NormalizedOffer,
     Offer,
     RawOffer,
+    Run,
     Seller,
     Shop,
     Source,
@@ -19,10 +22,14 @@ from app.db.models import (
 from app.db.query import paginated
 from app.features.offers.normalization import RULESET_VERSION, content_hash, read
 from app.features.offers.schemas import (
+    BatchFailure,
+    BatchOffer,
+    BatchResult,
     Coverage,
     IngestResult,
     NormalizedOfferRead,
     OfferRead,
+    RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
 )
@@ -43,9 +50,92 @@ class OfferService:
         source = await self._source(source_id)
         shop = await self._shop(source.shop_id)
         await self._market(payload.market_code)
+
+        result = await self._ingest_one(source, shop, payload.market_code, payload, run_id=None)
+        audit.set_target("offer", result.offer_id)
+        audit.record_changes(
+            source_id=source.id, external_id=payload.external_id, stored=result.stored
+        )
+        return result
+
+    async def ingest_batch(self, source_id: int, batch: RawOfferBatch) -> BatchResult:
+        """Many observations of one channel, in one transaction and one audit entry.
+
+        Partial on purpose: one malformed card should not throw away the pass that
+        collected the other eight hundred and ninety-nine. Each item is written inside a
+        savepoint, so a failure undoes that item and leaves the rest of the batch standing
+        — a plain flush would abort the whole transaction on the first bad row.
+        """
+        if len(batch.offers) > settings.max_batch_offers:
+            raise ValidationError(
+                f"A batch carries at most {settings.max_batch_offers} observations;"
+                f" this one has {len(batch.offers)}. Split it.",
+                code="batch_too_large",
+            )
+
+        source = await self._source(source_id)
+        shop = await self._shop(source.shop_id)
+        await self._market(batch.market_code)
+        if batch.run_id is not None and await self.session.get(Run, batch.run_id) is None:
+            raise NotFoundError(f"Run {batch.run_id} not found")
+
+        accepted = stored = created = 0
+        failures: list[BatchFailure] = []
+        for item in batch.offers:
+            try:
+                async with self.session.begin_nested():
+                    result = await self._ingest_one(
+                        source, shop, batch.market_code, item, run_id=batch.run_id
+                    )
+            except AppError as error:
+                failures.append(
+                    BatchFailure(external_id=item.external_id, code=error.code, message=str(error))
+                )
+                continue
+            except IntegrityError as error:
+                failures.append(
+                    BatchFailure(
+                        external_id=item.external_id,
+                        code="conflict",
+                        message=type(error.orig).__name__ if error.orig else "conflict",
+                    )
+                )
+                continue
+
+            accepted += 1
+            stored += result.stored
+            created += result.offer_created
+
+        # One entry for the batch, not one per observation. The trail exists to show what
+        # an administrator did, and a crawl would bury that under a wall of arrivals.
+        audit.set_target("source", source.id)
+        audit.record_changes(
+            ingested_batch=len(batch.offers),
+            run_id=batch.run_id,
+            accepted=accepted,
+            failed=len(failures),
+            stored=stored,
+        )
+        return BatchResult(
+            accepted=accepted,
+            failed=len(failures),
+            stored=stored,
+            offers_created=created,
+            failures=failures,
+        )
+
+    async def _ingest_one(
+        self,
+        source: Source,
+        shop: Shop,
+        market_code: str,
+        payload: RawOfferIngest | BatchOffer,
+        *,
+        run_id: int | None,
+    ) -> IngestResult:
         seller = await self._seller_for(shop, payload.seller_external_id)
 
-        offer, created = await self._offer_for(seller.id, payload)
+        offer, created = await self._offer_for(seller.id, market_code, payload)
         digest = content_hash(payload.payload)
 
         existing = await self.session.scalar(
@@ -72,6 +162,7 @@ class OfferService:
         raw = RawOffer(
             offer_id=offer.id,
             source_id=source.id,
+            run_id=run_id,
             payload=payload.payload,
             content_hash=digest,
             fetched_at=now,
@@ -85,8 +176,6 @@ class OfferService:
         await self._record_series(offer, reading, source_id=source.id)
         await self.session.flush()
 
-        audit.set_target("offer", offer.id)
-        audit.record_changes(source_id=source.id, external_id=payload.external_id, stored=True)
         return IngestResult(
             offer_id=offer.id,
             raw_offer_id=raw.id,
@@ -225,7 +314,9 @@ class OfferService:
             await self.session.flush()
         return seller
 
-    async def _offer_for(self, seller_id: int, payload: RawOfferIngest) -> tuple[Offer, bool]:
+    async def _offer_for(
+        self, seller_id: int, market_code: str, payload: RawOfferIngest | BatchOffer
+    ) -> tuple[Offer, bool]:
         offer = await self.session.scalar(
             select(Offer).where(
                 Offer.seller_id == seller_id, Offer.external_id == payload.external_id
@@ -236,7 +327,7 @@ class OfferService:
 
         offer = Offer(
             seller_id=seller_id,
-            market_code=payload.market_code.upper(),
+            market_code=market_code.upper(),
             external_id=payload.external_id,
             url=payload.url,
             condition=payload.condition.value,

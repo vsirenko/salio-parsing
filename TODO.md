@@ -94,9 +94,8 @@ and the questions that have to be answered with real data first, are written dow
       `worker.py` has an empty `CHANNELS` registry, so every run ends as a failure naming
       the channel it could not collect. Adding a channel is adding an entry — the run
       lifecycle does not change. `source.base_url` is still filled in by nobody.
-- [ ] **Ingestion is one offer per request.** A worker that collected nine hundred listings
-      has no cheap way to hand them over; on the legacy corpus that is forty-eight thousand
-      HTTP calls per pass. Needed before the first channel, not after.
+- [x] Batch ingestion, gzipped, partial on failure, one audit entry per batch, carrying
+      the run that collected it
 - [ ] **A worker reaches the database directly.** It was spawned locally by the scheduler,
       so it shares the engine. The boundary that was designed is HTTP — a worker posts
       offers to the ingestion endpoint — and moving workers off this machine needs a
