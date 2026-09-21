@@ -61,7 +61,48 @@ is asking, and the next one is along shortly.
   stops that channel in silence: nothing fails, it simply never becomes due, and the first
   symptom is stale prices nobody can explain.
 
+## The scheduler
+
+```bash
+python -m app.features.runs.scheduler          # the daemon; compose runs this
+python -m app.features.runs.scheduler --once   # one tick and exit
+```
+
+Its own process rather than a thread inside the API, where it would be started once per
+uvicorn worker and die with whichever one held it. Being the only one is a Postgres
+advisory lock taken on a connection of its own — a pooled connection would be recycled and
+take the lock with it, which is the quiet version of running two schedulers. A second copy
+exits immediately, so scaling the service by accident costs nothing.
+
+```
+start   take the lock, or exit
+        sweep: anything still running has no process behind it
+
+tick    reap finished workers
+        ask due(), start what there is room for, spawn one process per run
+
+stop    wait for what is running, then reap so each one keeps its own verdict
+```
+
+**One process per run**, so a parser that leaks or wedges takes down its own process and
+nothing else. `RUN_TIMEOUT_MINUTES` kills one that stopped answering; without it a hung
+channel would hold its own live-run slot forever.
+
+**The scheduler finishes a run its worker did not**, because it is the only thing that knows
+the worker is gone. It never overwrites one that reported for itself: the attempt conflicts
+and is dropped, so the worker's own reason survives — which is also why shutdown reaps
+rather than closing everything as "scheduler stopped".
+
+**`SCHEDULER_MAX_RUNNING` defaults to 1.** Two concurrent crawls on a small box is how the
+memory limit gets found, and a channel collects far faster with a couple of neighbours than
+with a dozen.
+
 ## Not built yet
 
-The scheduler process itself. Everything above is reachable by hand or by a query; nothing
-runs on a clock.
+**No channel is implemented.** `worker.py` has an empty registry, so every run ends as a
+failure naming the channel it could not collect. That is the honest state: the machinery
+around collecting is built and the collecting is not. Adding a channel is adding an entry to
+`CHANNELS`; nothing about the scheduler or the run lifecycle changes.
+
+**Ingestion is still one offer per request**, so a worker that did collect something has no
+cheap way to hand it over.

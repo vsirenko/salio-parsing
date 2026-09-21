@@ -63,6 +63,22 @@ class Settings(BaseSettings):
     login_lock_seconds: int = 60
     login_max_lock_seconds: int = 3600
 
+    # --- Collection scheduler ---
+    # Its own process: inside the API it would duplicate per uvicorn worker and die with
+    # it. Single instance is a Postgres advisory lock, not a row — a lock in a table needs
+    # a TTL, a heartbeat and a way to steal a stale one, and an advisory lock is released
+    # when the connection drops, which is the same semantics with none of the machinery.
+    scheduler_tick_seconds: int = Field(default=20, ge=1, le=600)
+    # Deliberately low. Two concurrent crawls on a small box is how the memory limit is
+    # found, and a channel collects far faster with a few neighbours than with a dozen.
+    scheduler_max_running: int = Field(default=1, ge=1, le=16)
+    # What the scheduler spawns for one run. `{run_id}`, `{source_id}` and `{kind}` are
+    # substituted; the process is expected to finish the run itself.
+    worker_command: str = "python -m app.features.runs.worker --run-id {run_id}"
+    # A worker still going after this is killed and its run recorded as failed. Without it
+    # one hung channel holds its own live-run slot forever.
+    run_timeout_minutes: int = Field(default=60, ge=1, le=1440)
+
     # --- The judge (TypeSafe) ---
     # Judging is off unless a key is set. There is deliberately no separate "enabled"
     # flag: a flag and a key can disagree, and then the panel offers a button that

@@ -84,8 +84,23 @@ and the questions that have to be answered with real data first, are written dow
       30-50 real offers from both kinds of source, with the same product sold by more
       than one shop. Above roughly 90 per cent deterministic, build the matcher as
       designed. Around 40, the centre of the work moves to pulling identity out of titles.
-- [ ] **Nothing fetches.** Ingestion takes a payload over HTTP; getting the payload is
-      per-source work that has not started, and `source.base_url` is filled in by nobody.
+- [x] A source describes a channel — `access`, `decode`, what each pass delivers — rather
+      than a format, with its schedule and contract thresholds beside it
+- [x] `runs`: one execution of one channel, its measured coverage, and a contract that
+      gates the absence inference rather than the writes
+- [x] The scheduler process: advisory lock, startup sweep, one subprocess per run, bounded
+      concurrency, timeout
+- [ ] **Nothing fetches.** The scheduler starts runs, spawns workers and records verdicts;
+      `worker.py` has an empty `CHANNELS` registry, so every run ends as a failure naming
+      the channel it could not collect. Adding a channel is adding an entry — the run
+      lifecycle does not change. `source.base_url` is still filled in by nobody.
+- [ ] **Ingestion is one offer per request.** A worker that collected nine hundred listings
+      has no cheap way to hand them over; on the legacy corpus that is forty-eight thousand
+      HTTP calls per pass. Needed before the first channel, not after.
+- [ ] **A worker reaches the database directly.** It was spawned locally by the scheduler,
+      so it shares the engine. The boundary that was designed is HTTP — a worker posts
+      offers to the ingestion endpoint — and moving workers off this machine needs a
+      service account and a claim endpoint first.
 - [x] Price history and availability history, two series keyed by the listing rather
       than the variant, both partitioned by month
 - [ ] **Availability has only one way in.** It is read out of whatever the main source

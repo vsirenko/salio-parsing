@@ -35,6 +35,7 @@ TABLES = (
     "category_attributes",
     "attributes",
     "judge_verdicts",
+    "runs",
     "match_queue",
     "offer_matches",
     "price_events",
