@@ -256,6 +256,87 @@ and component names inside a bundle title are described worse than ordinary offe
 Marking a variant as a bundle is cheap and enough; linking components is done later and
 only where they are obvious.
 
+### A brand alias is not one kind of thing
+
+A brand is what is written on the box, not who owns the factory. Procter & Gamble is not
+a brand, Ariel is; the string that ends up in a title and in a feed's brand field is the
+one the matcher has to recognise, so that is what is modelled. A manufacturer entity
+would never take part in deciding whether two offers are the same thing.
+
+**Two kinds of alias, because they may be read from different places.**
+
+`Самсунг`, `Samsungo`, `Samsung Electronics Co., Ltd.` are the same brand spelled
+differently. `iPhone` is not Apple — it is a line Apple makes. The difference is not
+philosophical, it breaks things:
+
+```
+title:  "Spigen case for iPhone 15 Pro"
+brand:  Spigen
+```
+
+With `iphone` sitting among Apple's aliases like any other, reading the brand out of the
+title yields Apple, and a Spigen case is filed under the wrong maker. Any catalogue holds
+more accessories than devices, so that is the main flow of errors rather than an edge
+case — while a feed's brand field saying `iPhone` does mean Apple, reliably.
+
+So `kind` answers "where may this be read from", not "how sure are we":
+
+- `spelling` — another way of writing the same brand. Safe anywhere: the brand field and
+  the title alike.
+- `line` — a product line. The brand field only, never inferred from a title.
+
+**Normalization is a function; declension is a row.** Case, punctuation, `®` and legal
+suffixes — `Co., Ltd.`, `GmbH`, and in the Baltics `SIA`, `UAB`, `OÜ` — are computed away,
+so `SAMSUNG®` and `Samsung` are one row rather than two. Uniqueness is on the normalized
+form. What no rule derives is a row: `Samsungo → Samsung` is a fact somebody established,
+not something a function can work out, and Lithuanian declines foreign names as a matter
+of grammar.
+
+**Two brands can own the same string, and that is not a duplicate.** Delta is taps, an
+airline and machine tools; Nova, Atlas, Titan and Elite are ordinary words a dozen makers
+have registered. Those are separate companies that happen to share a name, so they are
+separate rows — the brand's *name* is not unique, its *slug* is, and `delta` and
+`delta-tools` is what every catalogue ends up doing anyway. Collapsing them into one row
+to avoid the appearance of a duplicate would be the actual bug.
+
+Tying the brand itself to a category is the tempting fix and the worse one. Samsung sells
+phones, televisions, washing machines, monitors and drives; scoping brands to categories
+would give it a row per category and every alias would have to be repeated against each.
+It fixes Delta by breaking Samsung.
+
+**The ambiguity is resolved from data, not from a mapping.** When `delta` leads to two
+brands, the question to ask is which of them already has variants in the category this
+offer landed in — and `variant.brand_id` and `variant.category_id` already answer it. No
+column, nobody to maintain it, and it corrects itself as the catalogue grows.
+
+An earlier draft of this put a category on the alias instead. It would have had to be
+filled in by hand, and it would only ever have been filled in after somebody was bitten.
+
+Cold start is the one case the data cannot settle: two Deltas, neither with a variant yet.
+That is not a guess to make, it is a `brand_candidate` for a human to resolve once — which
+is the mechanism that already exists rather than another column.
+
+**Unknown brand strings queue rather than become brands.** A feed sending a string we do
+not know must not create a brand, or one seller's typo is canon forever.
+`brand_candidate` holds it with a count of how often it has been seen, and the count is
+what sorts the queue by usefulness: `Samsng` from a single offer does not compete with a
+real brand seen a thousand times. This is the same shape as unmapped source categories,
+and for the same reason.
+
+**No confidence column.** What would `0.7` on an alias mean — who compares it to a
+threshold, and what happens either side? `offer_match` keeps one because something reads
+it — the decision policy refuses to link below a threshold — and that is exactly the test
+a number has to pass. Trust here is already carried by `origin`: a rule, the judge, a
+human. The "not sure yet" case is not a low number on an alias, it is a row still
+sitting in `brand_candidate`. Keeping the line between known and suspected at the boundary
+between two tables makes it one that cannot be quietly blurred.
+
+**Deliberately not an entity: the product line.** `iPhone`, `Galaxy` and `MacBook` could
+be a table of their own, which would give the storefront a grouping and help pull a model
+out of a title. For matching, `kind = line` does the same work far more cheaply, and the
+storefront that would want the grouping does not exist. If it ever does, the type becomes
+a table without losing anything stored.
+
 ### The full shape
 
 Four groups. The taxonomy and the catalogue are what identity is decided against; markets
@@ -299,8 +380,18 @@ source_category_map    source_id, source_path, category_id, mapped_by, mapped_at
 
 -- Catalogue ------------------------------------------------------------------
 
-brand          id, slug UNIQUE, canonical_name
-brand_alias    id, brand_id, alias UNIQUE, origin(rule|judge|human), confidence
+brand          id, slug UNIQUE, canonical_name      -- the name is NOT unique
+brand_alias    id, brand_id,
+               alias_normalized,         -- case, punctuation and legal suffix removed
+               alias_raw,                -- as seen, for display and provenance
+               kind(spelling|line),      -- where this alias may be read from
+               origin(rule|judge|human)
+               UNIQUE (alias_normalized, brand_id)
+               INDEX (alias_normalized)
+brand_candidate        id, alias_normalized, alias_raw, source_id NULL,
+               seen_count, first_seen_at, last_seen_at,
+               resolved_brand_id NULL, resolved_by, resolved_at
+               UNIQUE (alias_normalized)
 product        id, slug UNIQUE, brand_id, category_id, title, is_visible
 product_merge  from_id, into_id, merged_at, reason, decided_by
 variant        id, slug UNIQUE, product_id NULL, brand_id, category_id, title,
