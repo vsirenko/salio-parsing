@@ -35,6 +35,7 @@ TABLES = (
     "category_attributes",
     "attributes",
     "price_events",
+    "availability_events",
     "normalized_offers",
     "raw_offers",
     "offers",
@@ -101,12 +102,13 @@ def schema(event_loop):
                 # insert into price_events fails with "no partition found for row". One
                 # default partition is enough here; that the monthly ones are right is the
                 # migration's business, not this fixture's.
-                await conn.execute(
-                    text(
-                        "create table if not exists price_events_default"
-                        " partition of price_events default"
+                for parent in ("price_events", "availability_events"):
+                    await conn.execute(
+                        text(
+                            f"create table if not exists {parent}_default"
+                            f" partition of {parent} default"
+                        )
                     )
-                )
         finally:
             await engine.dispose()
 

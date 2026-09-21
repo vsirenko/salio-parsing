@@ -12,10 +12,11 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import PriceServiceDep
 from app.api.pagination import cursor_pagination_params
-from app.features.prices.schemas import PriceEventRead
+from app.features.prices.schemas import AvailabilityEventRead, PriceEventRead
 from app.schemas.pagination import Page, Pagination
 
 router = APIRouter(prefix="/price-history", tags=["admin: prices"])
+availability_router = APIRouter(prefix="/availability-history", tags=["admin: prices"])
 
 CursorParams = Annotated[Pagination, Depends(cursor_pagination_params())]
 
@@ -37,7 +38,7 @@ async def history(
     uses the hint carried alongside, which is rewritten when a match changes; the row itself
     never moves, because what it records stayed true.
     """
-    items, total = await service.history(
+    items, total = await service.price_history(
         pagination,
         offer_id=offer_id,
         variant_id=variant_id,
@@ -46,3 +47,33 @@ async def history(
         until=until,
     )
     return Page[PriceEventRead].of(items, total, pagination)
+
+
+@availability_router.get(
+    "", response_model=Page[AvailabilityEventRead], summary="Read the availability history"
+)
+async def availability_history(
+    service: PriceServiceDep,
+    pagination: CursorParams,
+    offer_id: Annotated[int | None, Query(description="One listing")] = None,
+    variant_id: Annotated[int | None, Query(description="Everything matched to a variant")] = None,
+    condition: Annotated[str | None, Query(description="new, refurbished or used")] = None,
+    since: Annotated[datetime | None, Query()] = None,
+    until: Annotated[datetime | None, Query()] = None,
+) -> Page[AvailabilityEventRead]:
+    """Its own series, not a column on the price.
+
+    Availability arrives through channels that carry no price — a stock ping, a webhook, a
+    faster poll of the same page — and recording one of those as a price event would mean
+    repeating the last known price and calling it an observation. They also move at
+    different rates: stock flips several times a day where a price changes in a week.
+    """
+    items, total = await service.availability_history(
+        pagination,
+        offer_id=offer_id,
+        variant_id=variant_id,
+        condition=condition,
+        since=since,
+        until=until,
+    )
+    return Page[AvailabilityEventRead].of(items, total, pagination)

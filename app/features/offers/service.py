@@ -82,12 +82,7 @@ class OfferService:
 
         reading = await self._store_reading(raw)
         self._apply_reading_to_offer(offer, reading)
-        await self.prices.record(
-            offer,
-            price=reading.price,
-            currency_code=reading.currency_code,
-            availability=reading.availability,
-        )
+        await self._record_series(offer, reading, source_id=source.id)
         await self.session.flush()
 
         audit.set_target("offer", offer.id)
@@ -116,14 +111,9 @@ class OfferService:
         offer = await self.session.get(Offer, raw.offer_id)
         self._apply_reading_to_offer(offer, reading)
         if offer is not None:
-            # A re-read can change what we think the price was. If it does, that is a
-            # change in the series like any other.
-            await self.prices.record(
-                offer,
-                price=reading.price,
-                currency_code=reading.currency_code,
-                availability=reading.availability,
-            )
+            # A re-read can change what we think was quoted. If it does, that is a change
+            # in the series like any other.
+            await self._record_series(offer, reading, source_id=raw.source_id)
         await self.session.flush()
         audit.record_changes(raw_offer_id=raw_offer_id, ruleset_version=RULESET_VERSION)
         return NormalizedOfferRead.model_validate(reading)
@@ -276,6 +266,20 @@ class OfferService:
         await self.session.flush()
         await self.session.refresh(reading)
         return reading
+
+    async def _record_series(
+        self, offer: Offer, reading: NormalizedOffer, *, source_id: int
+    ) -> None:
+        """Two series, because they are two facts arriving at two rates."""
+        await self.prices.record_price(
+            offer,
+            price=reading.price,
+            currency_code=reading.currency_code,
+            source_id=source_id,
+        )
+        await self.prices.record_availability(
+            offer, availability=reading.availability, source_id=source_id
+        )
 
     @staticmethod
     def _apply_reading_to_offer(offer: Offer | None, reading: NormalizedOffer) -> None:

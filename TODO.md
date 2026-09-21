@@ -79,15 +79,21 @@ and the questions that have to be answered with real data first, are written dow
       designed. Around 40, the centre of the work moves to pulling identity out of titles.
 - [ ] **Nothing fetches.** Ingestion takes a payload over HTTP; getting the payload is
       per-source work that has not started, and `source.base_url` is filled in by nobody.
-- [x] Price history, keyed by the listing rather than the variant, partitioned by month
-- [ ] **Nothing rolls new price partitions.** Fourteen months were created by the
+- [x] Price history and availability history, two series keyed by the listing rather
+      than the variant, both partitioned by month
+- [ ] **Availability has only one way in.** It is read out of whatever the main source
+      served, alongside the price. A stock ping, a webhook or a faster poll would each be
+      its own source writing only to `availability_events` — the table is shaped for that
+      and nothing does it yet.
+- [ ] **Nothing rolls new partitions.** Both event tables got fourteen months from their
+      migration and a default partition catches anything past them, so inserts keep Fourteen months were created by the
       migration and a default partition catches anything past them, so inserts keep
       working — but rows piling up in a default partition cannot later be moved into a
       real one without rewriting them. A job has to create the next month before the last
       declared one runs out.
-- [ ] **A fresh schema built from the models has no price partitions.** `create_all`
-      builds the partitioned parent and nothing else, so every insert fails with "no
-      partition found". The test fixture creates a default one; anything else that
+- [ ] **A fresh schema built from the models has no partitions.** `create_all` builds the
+      partitioned parent and nothing else, so every insert fails with "no partition
+      found". The test fixture creates a default one for each; anything else that
       bootstraps without migrations has to as well.
 - [ ] **Nothing matches.** `offer_match` is the last table of the design, and its shape is
       decided by the coverage number above. `price_event.variant_id` stays null until it

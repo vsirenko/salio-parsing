@@ -1,12 +1,14 @@
 # prices
 
-What a listing cost, and when. The one table in the system that is pure record.
+Two records of a listing over time: what it cost, and whether it could be bought. The only
+tables in the system that are pure record.
 
 ## Endpoints
 
 | | |
 |---|---|
 | `GET /api/admin/price-history` | newest first, by cursor — `offer_id`, `variant_id`, `condition`, `since`, `until` |
+| `GET /api/admin/availability-history` | the same filters, its own series |
 
 Read-only. Rows are written by ingestion; nothing edits or deletes one. A price that was
 charged was charged, and a history that can be edited stops being evidence of anything.
@@ -39,9 +41,22 @@ fact must not carry an opinion inside it.
 changes. That touches one listing's rows rather than the table, and the row itself never
 moves.
 
+**Two series, not one table with two columns.** Availability arrives through channels that
+carry no price — a stock ping, a webhook, a faster poll of the same page. Recording one of
+those as a price event would mean repeating the last known price and calling it an
+observation, which asserts something nobody quoted at that moment.
+
+They also move at different rates: stock can flip several times a day where a price changes
+in a week, so keeping them together would multiply the larger table by the churn of the
+smaller fact.
+
 **Changes, never snapshots.** A million offers photographed daily are some 365 million rows
-a year, almost all repeating the row before. A row is written when the price moves *or* the
-availability does — going out of stock is a gap that means as much on a chart as a number.
+a year, almost all repeating the row before. A price row is written when the price moves, a
+stock row when the stock state does, and neither writes for the other.
+
+**`source_id` says which channel reported it.** Two channels of one shop can disagree about
+both a price and a stock state, and a series that cannot say which one said what is a series
+nobody can explain.
 
 **Partitioned by month from the first migration**, with a default partition so an insert
 never fails for a range nobody created. Retrofitting partitioning onto a table this size is

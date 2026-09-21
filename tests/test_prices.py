@@ -12,6 +12,10 @@ def history(client, token, **params) -> dict:
     return client.get("/api/admin/price-history", headers=auth(token), params=params).json()
 
 
+def stock(client, token, **params) -> dict:
+    return client.get("/api/admin/availability-history", headers=auth(token), params=params).json()
+
+
 def priced(payload: dict, price: str) -> dict:
     return {**payload, "price": price}
 
@@ -36,6 +40,8 @@ def test_the_first_observation_starts_the_series(client):
     assert rows[0]["currency_code"] == "EUR"
     # Nothing is matched yet, and the row does not need it to be.
     assert rows[0]["variant_id"] is None
+    # The stock state is recorded too, in its own series.
+    assert stock(client, token)["items"][0]["availability"] == "in_stock"
 
 
 def test_an_unchanged_price_writes_nothing(client):
@@ -72,8 +78,9 @@ def test_a_moved_price_is_a_new_row(client):
     assert [r["price"] for r in rows] == ["1049.00", "999.00", "1179.00"]
 
 
-def test_going_out_of_stock_is_a_change(client):
-    """A gap means as much on a chart as a number."""
+def test_stock_is_its_own_series(client):
+    """Availability arrives through channels that carry no price, so recording it as a
+    price event would mean repeating the last known price and calling it an observation."""
     token = admin_token(client)
     _, source = setup_source(client, token)
     body = {"external_id": "SKU-1", "market_code": "LV", "payload": FEED_ROW}
@@ -86,9 +93,38 @@ def test_going_out_of_stock_is_a_change(client):
         {**body, "payload": {**FEED_ROW, "available": "false"}},
     )
 
-    rows = history(client, token)["items"]
-    assert [r["availability"] for r in rows] == ["out_of_stock", "in_stock"]
-    assert rows[0]["price"] == rows[1]["price"]
+    # The stock flipped twice and the price never moved.
+    assert [r["availability"] for r in stock(client, token)["items"]] == [
+        "out_of_stock",
+        "in_stock",
+    ]
+    assert history(client, token)["total"] == 1
+
+
+def test_a_price_move_does_not_write_a_stock_row(client):
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    body = {"external_id": "SKU-1", "market_code": "LV", "payload": FEED_ROW}
+
+    ingest(client, token, source["id"], body)
+    ingest(client, token, source["id"], {**body, "payload": priced(FEED_ROW, "999,00")})
+
+    assert history(client, token)["total"] == 2
+    assert stock(client, token)["total"] == 1
+
+
+def test_both_series_say_which_channel_reported(client):
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    ingest(
+        client,
+        token,
+        source["id"],
+        {"external_id": "SKU-1", "market_code": "LV", "payload": FEED_ROW},
+    )
+
+    assert history(client, token)["items"][0]["source_id"] == source["id"]
+    assert stock(client, token)["items"][0]["source_id"] == source["id"]
 
 
 def test_the_row_carries_what_a_chart_groups_by(client):

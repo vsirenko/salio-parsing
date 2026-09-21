@@ -958,9 +958,11 @@ class PriceEvent(Base):
     market_code: Mapped[str] = mapped_column(String(2), nullable=False)
     condition: Mapped[str] = mapped_column(String(12), nullable=False)
     variant_id: Mapped[int | None] = mapped_column(Integer)
+    # Which channel quoted it. Two channels of one shop can disagree, and a series that
+    # cannot say which one said what is a series nobody can explain.
+    source_id: Mapped[int | None] = mapped_column(Integer)
     price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     currency_code: Mapped[str | None] = mapped_column(String(3))
-    availability: Mapped[str] = mapped_column(String(15), nullable=False)
 
     __table_args__ = (
         CheckConstraint("price is null or price >= 0", name="price_not_negative"),
@@ -970,5 +972,41 @@ class PriceEvent(Base):
         # size is its own project, and there are no foreign keys out of it for the same
         # reason: a partitioned table cannot be referenced, and the rows are facts that
         # should outlive anything that might be deleted.
+        {"postgresql_partition_by": "RANGE (at)"},
+    )
+
+
+class AvailabilityEvent(Base):
+    """Whether a listing could be bought, and when.
+
+    Its own table rather than a column on the price, because availability arrives through
+    channels that carry no price — a stock ping, a webhook, a faster poll of the same page.
+    Recording one of those as a price event would mean repeating the last known price and
+    calling it an observation, which asserts something nobody quoted at that moment.
+
+    They also move at different rates: stock can flip several times a day while a price
+    changes in a week, so keeping them together would multiply the larger table by the
+    churn of the smaller fact.
+    """
+
+    __tablename__ = "availability_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(TimestampTZ, primary_key=True, server_default=func.now())
+    offer_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    seller_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    market_code: Mapped[str] = mapped_column(String(2), nullable=False)
+    condition: Mapped[str] = mapped_column(String(12), nullable=False)
+    variant_id: Mapped[int | None] = mapped_column(Integer)
+    source_id: Mapped[int | None] = mapped_column(Integer)
+    availability: Mapped[str] = mapped_column(String(15), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "availability in ('in_stock', 'out_of_stock', 'preorder', 'unknown')",
+            name="availability_known",
+        ),
+        Index("ix_availability_events_offer_at", "offer_id", "at"),
+        Index("ix_availability_events_variant_at", "variant_id", "condition", "at"),
         {"postgresql_partition_by": "RANGE (at)"},
     )
