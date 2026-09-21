@@ -184,3 +184,48 @@ class Country(Base):
         ),
         Index("ix_countries_is_eu", "is_eu"),
     )
+
+
+class Market(Base):
+    """A storefront we run, in one country.
+
+    Not the same thing as a country: `countries` holds every country we have to be able
+    to describe — a German shop delivering to Riga needs a row there — while a market is
+    a country we have decided to sell in. One storefront per country, which is why the
+    country code is the key rather than a column next to one: two markets in the same
+    country are impossible by construction rather than by convention.
+
+    Not seeded. Countries and currencies are facts about the world and belong in a
+    migration; opening a market is a decision, and it is made through the admin panel so
+    that adding one is data rather than a release.
+    """
+
+    __tablename__ = "markets"
+
+    # Primary key and foreign key at once, and what `offer` and `price_event` will carry
+    # — two characters instead of an eight-byte id is worth a couple of gigabytes there.
+    code: Mapped[str] = mapped_column(String(2), ForeignKey("countries.code"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    # The path segment: /lv/, or /latvija/ if that reads better locally. Kept separate
+    # from the code rather than derived from it, because the URL is a product decision
+    # and the ISO code is not, and moving a URL after launch costs search ranking.
+    #
+    # Entered, never generated from the name: deriving it would mean a rename silently
+    # moves the URL. And this is the one slug in the system where a change moves every
+    # page of a storefront rather than a single one, so it needs a redirect story before
+    # it is ever edited, not after.
+    slug: Mapped[str] = mapped_column(String(32), unique=True)
+    # ISO 639-1, ordered, the first one is the default. A language is not a market: the
+    # prices, the shops and the delivery are the same whichever one the page is read in,
+    # so Russian in Latvia is a toggle here, not a second storefront.
+    languages: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    # Created, wired into the parsers, mapped, and only then shown. Adding a market is a
+    # process, and this is what makes it one.
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    __table_args__ = (
+        CheckConstraint("code = upper(code)", name="code_upper"),
+        CheckConstraint("cardinality(languages) > 0", name="has_a_language"),
+        # A malformed slug is a 404 that looks like an application bug.
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
+    )

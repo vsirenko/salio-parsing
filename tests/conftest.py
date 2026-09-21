@@ -24,7 +24,15 @@ TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL", "postgresql+asyncpg://app:app@localhost:55432/app_test"
 )
 
-TABLES = ("audit_entries", "login_attempts", "products", "users", "countries", "currencies")
+TABLES = (
+    "audit_entries",
+    "login_attempts",
+    "products",
+    "users",
+    "markets",
+    "countries",
+    "currencies",
+)
 
 # Reference data. Duplicated from the migration on purpose: a migration has to stay
 # self-contained and keep working against the code of its own day, so it cannot import

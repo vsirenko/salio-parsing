@@ -14,6 +14,7 @@ from app.db.session import get_session
 from app.features.audit.service import AuditService
 from app.features.countries.service import CountryService
 from app.features.currencies.service import CurrencyService
+from app.features.markets.service import MarketService
 from app.features.products.service import ProductService
 from app.features.rate_limit.service import LoginRateLimiter
 from app.features.users.schemas import Role, UserInDB
@@ -55,10 +56,15 @@ def get_country_service(session: SessionDep) -> CountryService:
     return CountryService(session)
 
 
+def get_market_service(session: SessionDep) -> MarketService:
+    return MarketService(session)
+
+
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 CurrencyServiceDep = Annotated[CurrencyService, Depends(get_currency_service)]
 CountryServiceDep = Annotated[CountryService, Depends(get_country_service)]
+MarketServiceDep = Annotated[MarketService, Depends(get_market_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 
