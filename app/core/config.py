@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # Dev convenience: create the demo admin/customer accounts on startup.
     seed_users: bool = True
 
+    # --- Audit ---
+    # Trust X-Forwarded-For / X-Request-ID. Only enable behind a proxy that rewrites them.
+    trust_proxy_headers: bool = False
+
     # --- CORS ---
     # Comma-separated in .env, e.g. CORS_ORIGINS=http://localhost:3000,https://app.example.com
     # NoDecode: keep pydantic-settings from JSON-parsing the value so the validator below

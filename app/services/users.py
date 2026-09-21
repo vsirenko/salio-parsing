@@ -7,6 +7,7 @@ API layer stays untouched.
 import asyncio
 from datetime import UTC, datetime
 
+from app.core import audit
 from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import AuthError, hash_password, verify_password
@@ -77,10 +78,17 @@ class UserService:
         async with self._lock:
             if await self.get_by_email(payload.email):
                 raise ConflictError(f"User '{payload.email}' already exists")
-            return self._insert(payload)
+            user = self._insert(payload)
+
+        audit.set_target("user", user.id)
+        audit.record_changes(**payload.model_dump(exclude={"password"}))
+        return user
 
     async def authenticate(self, email: str, password: str, audience: Audience) -> UserInDB:
         """Verify credentials and that this account belongs to the requested panel."""
+        # Recorded even when the attempt fails — failed admin sign-ins are exactly
+        # what an audit trail is read for.
+        audit.set_actor(email=email.strip().lower())
         user = await self.get_by_email(email)
 
         # Hash a throwaway value for unknown emails so response time does not reveal
@@ -96,6 +104,7 @@ class UserService:
             raise AuthError("This account cannot sign in here", code="wrong_panel")
 
         user.last_login_at = datetime.now(UTC)
+        audit.set_actor(actor_id=user.id)
         return user
 
 

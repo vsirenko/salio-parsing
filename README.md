@@ -25,21 +25,26 @@ app/
 │       ├── products.py     # GET/POST /api/products
 │       └── admin/
 │           ├── auth.py     # admin sign-in
-│           └── users.py    # admin user management
+│           ├── users.py    # admin user management
+│           └── audit.py    # audit trail, read-only
 ├── core/
 │   ├── config.py           # Settings (pydantic-settings, reads .env)
 │   ├── error_handlers.py   # one consistent error body for every failure
 │   ├── exceptions.py       # AppError / NotFoundError / ConflictError
 │   ├── security.py         # argon2 hashing, JWT minting and verification
+│   ├── audit.py            # per-request audit context + redaction
+│   ├── audit_middleware.py # writes one audit record per admin request
 │   └── logging.py
 ├── schemas/
 │   ├── common.py           # ErrorResponse, Page[T], HealthResponse
 │   ├── auth.py             # Audience, TokenPair, LoginRequest
+│   ├── audit.py            # AuditEntry, Outcome
 │   ├── user.py             # Role, UserCreate / UserRead / UserInDB
 │   └── product.py          # ProductCreate / ProductRead
 └── services/
     ├── products.py         # business logic + in-memory storage
-    └── users.py            # lookup, authentication, panel check
+    ├── users.py            # lookup, authentication, panel check
+    └── audit.py            # append-only audit storage
 tests/
 .pre-commit-config.yaml     # ruff + commit message linting
 ```
@@ -160,6 +165,7 @@ Every variable is read from the environment or `.env` (see `.env.example`).
 | `ACCESS_TOKEN_TTL_MINUTES` | `15` | Access token lifetime |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
 | `SEED_USERS` | `true` | Create demo accounts; must be `false` in production |
+| `TRUST_PROXY_HEADERS` | `false` | Read `X-Forwarded-For` / `X-Request-ID`; only enable behind a trusted proxy |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
 | `CORS_ALLOW_CREDENTIALS` | `true` | Send `Access-Control-Allow-Credentials` |
 
@@ -194,6 +200,7 @@ for one panel carries an `aud` claim the other panel rejects.
 | GET | `/api/admin/users` | List users (`limit`, `offset`, `role`) |
 | POST | `/api/admin/users` | Create a user |
 | GET | `/api/admin/users/{id}` | Get one user |
+| GET | `/api/admin/audit` | Read the audit trail |
 
 **Open for now** (products are not behind auth yet)
 
@@ -218,6 +225,34 @@ for one panel carries an `aud` claim the other panel rejects.
 
 > Refresh tokens are stateless, so signing out everywhere is not possible yet. Add a `jti`
 > denylist (Redis) or rotation when that is needed.
+
+### Audit trail
+
+Every request under `/api/admin` produces one audit record, including reads, rejected
+requests and failed sign-ins. This is a business record, not an application log: it is
+queryable and append-only, and lives in its own store.
+
+- `AuditMiddleware` writes the envelope — actor, method, path, status, outcome, client IP,
+  user agent, duration, request id. Middleware rather than a dependency, so a new admin
+  route cannot silently escape the trail and so the final status code is known.
+- The service layer adds meaning through `app/core/audit.py`: `set_target("user", id)` and
+  `record_changes(...)`. Services have no request object, so the context travels in a
+  ContextVar.
+- `record_changes` redacts anything that looks like a credential (`password`, `token`,
+  `secret`, `api_key`, …), recursing into nested structures. Callers are expected to pass
+  clean data; this is the second line of defence.
+- Failed sign-ins are recorded with the attempted email and no actor id.
+- Each response carries `X-Request-ID`, matching `request_id` on the record, so an entry
+  can be tied back to the application logs.
+- `GET /api/admin/audit` supports `actor_id`, `method`, `path`, `outcome`, `since`,
+  `until`, `limit`, `offset`, newest first. There is no write, update or delete endpoint.
+
+Client traffic is not audited — the middleware is scoped by path prefix. Widen the prefix
+in `app/main.py` when that changes.
+
+> A failed audit write is logged and swallowed rather than failing the request. If the
+> trail ever becomes a compliance requirement, invert that in `AuditMiddleware` so the
+> action fails when it cannot be recorded.
 
 ### Demo accounts
 
@@ -307,6 +342,20 @@ curl -X POST http://localhost:8000/api/admin/users \
 
 # a client token is rejected by the admin API
 curl -i http://localhost:8000/api/admin/users -H "Authorization: Bearer $TOKEN"
+```
+
+### Audit trail
+
+```bash
+# everything the admins did, newest first
+curl "http://localhost:8000/api/admin/audit?limit=20" -H "Authorization: Bearer $ADMIN"
+
+# only what failed (rejected requests, bad sign-ins)
+curl "http://localhost:8000/api/admin/audit?outcome=failure" -H "Authorization: Bearer $ADMIN"
+
+# one admin, writes only, since a point in time
+curl "http://localhost:8000/api/admin/audit?actor_id=1&method=POST&since=2026-01-01T00:00:00Z" \
+  -H "Authorization: Bearer $ADMIN"
 ```
 
 ## Extending

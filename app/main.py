@@ -9,9 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.admin_router import admin_public_router, admin_router
 from app.api.router import api_router
 from app.api.routes import health
+from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
 from app.core.error_handlers import register_error_handlers
 from app.core.logging import configure_logging
+from app.services.audit import audit_service
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,16 @@ def create_app() -> FastAPI:
         docs_url="/docs" if settings.docs_enabled else None,
         redoc_url="/redoc" if settings.docs_enabled else None,
         openapi_url="/openapi.json" if settings.docs_enabled else None,
+    )
+
+    # Shared by the audit middleware and the audit routes.
+    app.state.audit_service = audit_service
+
+    # Added before CORS so it ends up inside it: CORS preflight is not an admin action.
+    app.add_middleware(
+        AuditMiddleware,
+        path_prefix=f"{settings.api_prefix}/admin",
+        trust_proxy_headers=settings.trust_proxy_headers,
     )
 
     app.add_middleware(

@@ -2,12 +2,14 @@
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core import audit
 from app.core.security import AuthError, ForbiddenError, decode_token
 from app.schemas.auth import Audience, TokenType
 from app.schemas.user import Role, UserInDB
+from app.services.audit import AuditService
 from app.services.products import ProductService, product_service
 from app.services.users import UserService, user_service
 
@@ -26,7 +28,13 @@ def get_user_service() -> UserService:
     return user_service
 
 
+def get_audit_service(request: Request) -> AuditService:
+    """Read from app.state so routes and the middleware share one instance."""
+    return request.app.state.audit_service
+
+
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 
 
 async def _authenticate(
@@ -41,6 +49,8 @@ async def _authenticate(
     user = await users.get_by_id_or_none(payload.sub)
     if user is None or not user.is_active:
         raise AuthError("Account is no longer active")
+
+    audit.set_actor(actor_id=user.id, email=user.email)
     return user
 
 

@@ -37,6 +37,18 @@ FastAPI service. Deliberately flat: route → service → schema.
   accounts are created through `/api/admin/users`.
 - Passwords: argon2 via `app/core/security.py`. Never compare or store raw passwords.
 
+## Audit trail
+- Every `/api/admin` request is recorded by `AuditMiddleware`. Do not add per-route audit
+  calls for the envelope — it is captured already.
+- Add meaning from the service layer with `audit.set_target(...)` and
+  `audit.record_changes(...)` from `app/core/audit.py`. Never pass raw credentials in;
+  `record_changes` redacts known secret keys, but that is a safety net, not the contract.
+- Only `open_context` may call `ContextVar.set`. Downstream code mutates the existing
+  `AuditContext` object — re-binding the var inside the endpoint task would not propagate
+  back to the middleware.
+- The trail is append-only. Never add an endpoint or service method that updates or
+  deletes an entry.
+
 ## Checks
 - After any Python change: `.venv/bin/ruff check .` and `.venv/bin/pytest`.
 - Before pushing: `.venv/bin/pre-commit run --all-files`.
