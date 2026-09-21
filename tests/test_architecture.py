@@ -20,13 +20,13 @@ ALLOWED_CROSS_FEATURE = {
         "ingestion records a price change but does not decide when one counts;"
         " that rule belongs with the table it writes to"
     ),
-    # The three below are one reason wearing three hats: a lookup has to canonicalise a
+    # The two below are one reason wearing two hats: a lookup has to canonicalise a
     # value exactly as whoever stored it did, or it misses and reports the catalogue as
     # incomplete. Copying the function would be the bug, so the dependency is deliberate
     # and belongs where it can be seen.
     ("matching", "brands"): "a brand string has to be normalized as brand aliases were",
+    ("offers", "brands"): "a brand ruleset is keyed by the brand as the alias table spells it",
     ("matching", "catalog"): "a model string has to be normalized as variants were",
-    ("matching", "offers"): "the matcher reads the ruleset version that produced a reading",
     # The second feature that exists to serve another, and the same shape as rate_limit
     # under users: the judge knows nothing about offers or the queue, it answers a
     # question and remembers the answer. Which questions are worth asking is the

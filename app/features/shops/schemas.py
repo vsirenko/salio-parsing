@@ -196,6 +196,7 @@ class SourceCreate(BaseModel):
     decode: Decode
     delivers_full: list[Fact] = Field(min_length=1)
     delivers_quick: list[Fact] = Field(default_factory=list)
+    category_id: int | None = None
     trust: Trust = Trust.MEDIUM
     base_url: str | None = Field(default=None, max_length=1000)
     is_enabled: bool = False
@@ -223,6 +224,7 @@ class SourceUpdate(BaseModel):
     decode: Decode | None = None
     delivers_full: list[Fact] | None = Field(default=None, min_length=1)
     delivers_quick: list[Fact] | None = None
+    category_id: int | None = None
     trust: Trust | None = None
     base_url: str | None = Field(default=None, max_length=1000)
     is_enabled: bool | None = None
@@ -248,6 +250,7 @@ class SourceRead(BaseModel):
     decode: Decode
     delivers_full: list[Fact]
     delivers_quick: list[Fact]
+    category_id: int | None
     trust: Trust
     base_url: str | None
     is_enabled: bool

@@ -790,6 +790,13 @@ class Source(Base):
     # decides whether fresh availability costs a full crawl.
     delivers_full: Mapped[list[str]] = mapped_column(ARRAY(Text))
     delivers_quick: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
+    # What this channel collects, when it collects one thing. Null for a feed that carries
+    # the whole shop, where the category comes from the data instead. It is what selects
+    # the category's reading rules: the same shape of code means different things to a
+    # laptop and a monitor, and reading one by the other's rules is a silent wrong answer.
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL")
+    )
     trust: Mapped[str] = mapped_column(String(10), default="medium", server_default="medium")
     base_url: Mapped[str | None] = mapped_column(String(1000))
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
@@ -977,6 +984,12 @@ class NormalizedOffer(Base):
     # canonical registry. A key nobody has mapped stays here and simply takes no part in
     # identity — the cost of not mapping it is the slow path, not lost data.
     attributes: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    # Canonical, parsed, and scoped to the category: `{"storage_gb": 128, "color": "black"}`.
+    # Apart from `attributes` because that one is the shop's own names untouched, and
+    # mixing our vocabulary into it would leave no way to tell which is which. This is what
+    # an identity key is computed from, and its being empty is why that rung has no
+    # producer yet.
+    identity: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     currency_code: Mapped[str | None] = mapped_column(String(3))
     condition: Mapped[str] = mapped_column(String(12), default="new", server_default="new")

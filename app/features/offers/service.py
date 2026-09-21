@@ -11,6 +11,7 @@ from app.core import audit
 from app.core.config import settings
 from app.core.exceptions import AppError, NotFoundError, ValidationError
 from app.db.models import (
+    Category,
     Market,
     NormalizedOffer,
     Offer,
@@ -21,7 +22,7 @@ from app.db.models import (
     Source,
 )
 from app.db.query import paginated
-from app.features.offers.normalization import RULESET_VERSION, content_hash, read
+from app.features.offers.normalization import content_hash, read
 from app.features.offers.schemas import (
     BatchFailure,
     BatchOffer,
@@ -189,7 +190,7 @@ class OfferService:
         self.session.add(raw)
         await self.session.flush()
 
-        reading = await self._store_reading(raw)
+        reading = await self._store_reading(raw, source=source)
         self._apply_reading_to_offer(offer, reading)
         await self._record_series(offer, reading, source_id=source.id)
         await self.session.flush()
@@ -215,7 +216,8 @@ class OfferService:
             raise NotFoundError(f"Raw offer {raw_offer_id} not found")
 
         audit.set_target("offer", raw.offer_id)
-        reading = await self._store_reading(raw)
+        source = await self._source(raw.source_id)
+        reading = await self._store_reading(raw, source=source)
         offer = await self.session.get(Offer, raw.offer_id)
         self._apply_reading_to_offer(offer, reading)
         if offer is not None:
@@ -223,7 +225,7 @@ class OfferService:
             # in the series like any other.
             await self._record_series(offer, reading, source_id=raw.source_id)
         await self.session.flush()
-        audit.record_changes(raw_offer_id=raw_offer_id, ruleset_version=RULESET_VERSION)
+        audit.record_changes(raw_offer_id=raw_offer_id, ruleset_version=reading.ruleset_version)
         return NormalizedOfferRead.model_validate(reading)
 
     # --- reading it back ---
@@ -259,9 +261,7 @@ class OfferService:
     async def get_reading(self, raw_offer_id: int) -> NormalizedOfferRead:
         reading = await self._current_reading(raw_offer_id)
         if reading is None:
-            raise NotFoundError(
-                f"Raw offer {raw_offer_id} has no reading under ruleset '{RULESET_VERSION}'"
-            )
+            raise NotFoundError(f"Raw offer {raw_offer_id} has not been read yet")
         return NormalizedOfferRead.model_validate(reading)
 
     async def coverage(self) -> Coverage:
@@ -273,9 +273,19 @@ class OfferService:
         to pulling identity out of free text and the matcher is the wrong thing to build
         first.
         """
-        has_gtin = NormalizedOffer.gtin.is_not(None)
-        has_mpn = NormalizedOffer.mpn.is_not(None)
-        has_brand = NormalizedOffer.brand_raw.is_not(None)
+        # The newest reading of each observation, rather than every reading under one
+        # version: a ruleset is per source now, so filtering on a single constant would
+        # silently drop every shop that has rules of its own — which is to say, the ones
+        # read best.
+        current = (
+            select(NormalizedOffer)
+            .distinct(NormalizedOffer.raw_offer_id)
+            .order_by(NormalizedOffer.raw_offer_id, NormalizedOffer.id.desc())
+            .subquery()
+        )
+        has_gtin = current.c.gtin.is_not(None)
+        has_mpn = current.c.mpn.is_not(None)
+        has_brand = current.c.brand_raw.is_not(None)
 
         row = (
             await self.session.execute(
@@ -287,7 +297,7 @@ class OfferService:
                     func.count()
                     .filter(~has_gtin, case((has_brand, False), else_=True))
                     .label("nothing"),
-                ).where(NormalizedOffer.ruleset_version == RULESET_VERSION)
+                ).select_from(current)
             )
         ).one()
 
@@ -356,8 +366,12 @@ class OfferService:
         await self.session.flush()
         return offer, True
 
-    async def _store_reading(self, raw: RawOffer) -> NormalizedOffer:
-        fields = read(raw.payload)
+    async def _store_reading(self, raw: RawOffer, *, source: Source) -> NormalizedOffer:
+        fields = read(
+            raw.payload,
+            source_slug=source.slug,
+            category=await self._category_slug(source),
+        )
         reading = await self.session.scalar(
             select(NormalizedOffer).where(
                 NormalizedOffer.raw_offer_id == raw.id,
@@ -401,12 +415,32 @@ class OfferService:
         offer.currency_code = reading.currency_code
         offer.availability = reading.availability
 
-    async def _current_reading(self, raw_offer_id: int) -> NormalizedOffer | None:
+    async def _category_slug(self, source: Source) -> str | None:
+        """What this channel collects, when it collects one thing.
+
+        Null for a feed carrying a whole shop, and then the category's rules simply do not
+        apply — which is honest rather than a gap: reading a monitor by a phone's rules is
+        a confident wrong answer, and no rules at all is only a quiet one.
+        """
+        if source.category_id is None:
+            return None
         return await self.session.scalar(
-            select(NormalizedOffer).where(
-                NormalizedOffer.raw_offer_id == raw_offer_id,
-                NormalizedOffer.ruleset_version == RULESET_VERSION,
-            )
+            select(Category.slug).where(Category.id == source.category_id)
+        )
+
+    async def _current_reading(self, raw_offer_id: int) -> NormalizedOffer | None:
+        """The most recently computed reading of these bytes.
+
+        Not "the one under version X": a ruleset is per source now, so no single constant
+        names the right one. Re-reading always writes the current ruleset, so the newest
+        row is the current one by construction — and that stays true when a source gets
+        rules it did not have before.
+        """
+        return await self.session.scalar(
+            select(NormalizedOffer)
+            .where(NormalizedOffer.raw_offer_id == raw_offer_id)
+            .order_by(NormalizedOffer.id.desc())
+            .limit(1)
         )
 
     async def _offer(self, offer_id: int) -> Offer:

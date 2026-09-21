@@ -110,10 +110,14 @@ decode     json-ld | embedded-state | graphql | private-api | xml | markup
 
 delivers   full:   [catalogue, price, availability]
            quick:  [price]
+
+category   what it collects, when it collects one thing
 ```
 
 `access` decides cost and therefore the schedule. `decode` is a function, swappable
-without touching anything else. `delivers` is the one that is easy to get wrong.
+without touching anything else. `category` selects the rules that read what comes back,
+and is null for a channel carrying a whole shop. `delivers` is the one that is easy to get
+wrong.
 
 **What a cheap pass carries is a property of the channel, not a general rule.** Some
 listings show price and stock; some show price only; a wholesale feed has no cheap pass at

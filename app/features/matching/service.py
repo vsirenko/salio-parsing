@@ -39,7 +39,6 @@ from app.features.matching.schemas import (
     Reason,
     RunReport,
 )
-from app.features.offers.normalization import RULESET_VERSION
 from app.schemas.pagination import Pagination
 
 # How much each rung is worth. A barcode is proof; a model string that agreed is a guess
@@ -85,8 +84,7 @@ class MatchingService:
         reading = await self._reading(offer_id)
         if reading is None:
             raise ValidationError(
-                f"Offer {offer_id} has no reading under ruleset '{RULESET_VERSION}'",
-                code="nothing_to_match",
+                f"Offer {offer_id} has not been read yet", code="nothing_to_match"
             )
 
         audit.set_target("offer", offer_id)
@@ -534,10 +532,7 @@ class MatchingService:
         return await self.session.scalar(
             select(NormalizedOffer)
             .join(RawOffer, RawOffer.id == NormalizedOffer.raw_offer_id)
-            .where(
-                RawOffer.offer_id == offer_id,
-                NormalizedOffer.ruleset_version == RULESET_VERSION,
-            )
+            .where(RawOffer.offer_id == offer_id)
             .order_by(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc())
             .limit(1)
         )

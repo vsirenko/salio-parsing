@@ -1,0 +1,195 @@
+"""Layered reading: what generic finds, what a shop's own rules add, and the seam between.
+
+The rules for a source are asserted by name rather than only by effect: the point of
+declaring them as objects is that the set an offer will get can be read before any of them
+has run, and a test that only checks the output would not notice one going missing.
+"""
+
+import json
+import pathlib
+
+import pytest
+
+from app.features.offers.normalization import barcodes, read, rules_for, version_for
+from app.features.offers.normalization.rules import BRAND, CATEGORY, FINISH, PRODUCT, SOURCE
+
+KSENUKAI = "ksenukai-phones"
+PHONES = "phones"
+FIXTURE = json.loads((pathlib.Path(__file__).parent / "fixtures/ksenukai_phones.json").read_text())
+
+
+def item(external_id: str = "1102611") -> dict:
+    """One real index record, flattened the way the channel hands it over."""
+    from app.features.runs.channels.ksenukai import _fields
+
+    return _fields(next(i for i in FIXTURE["items"] if str(i["id"]) == external_id))
+
+
+# --- the rules are readable before anything runs ---
+
+
+def test_a_key_with_no_rules_is_read_by_what_is_more_general():
+    """Not a failure: it is how a sample gets loaded and measured before rules exist."""
+    assert rules_for() == ()
+    assert rules_for("nobody-has-written-this-one") == ()
+    assert version_for("nobody-has-written-this-one") == "generic-1"
+    assert version_for(category="televisions") == "generic-1"
+
+
+def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
+    """The whole reason rules are objects rather than a chain of conditionals."""
+    rules = rules_for(KSENUKAI, category=PHONES)
+    assert [rule.id for rule in rules] == [
+        "phones-color",
+        "phones-storage",
+        "ksenukai-barcode",
+        "ksenukai-model",
+        "ksenukai-article-is-not-a-part-number",
+    ]
+    # General to specific: the category before the shop, canonicalisation last.
+    assert [rule.layer for rule in rules] == [CATEGORY, CATEGORY, SOURCE, SOURCE, FINISH]
+
+
+def test_the_layers_run_general_to_specific():
+    """A brand is scoped to a category, and a line cannot be known until both are read."""
+    assert CATEGORY < SOURCE < BRAND < PRODUCT < FINISH
+
+
+def test_every_rule_says_why_it_exists():
+    """A reason that restates the code explains nothing; one from the data can be argued."""
+    for rule in rules_for(KSENUKAI, category=PHONES):
+        assert len(rule.why) > 80, rule.id
+
+
+def test_a_rule_can_be_declared_and_not_written():
+    """A gap that is visible beats one that is not.
+
+    Colour splits a phone into variants and takes 61 forms across 520 products — Latvian
+    declension, plain English, and the maker's own marketing — which is three problems and
+    two of them are not a category's business. Half-canonicalising it would split one
+    product into several, confidently.
+    """
+    colour = next(r for r in rules_for(KSENUKAI, category=PHONES) if r.id == "phones-color")
+    assert colour.pending
+    assert "61 distinct forms" in colour.why
+
+
+def test_the_version_names_what_was_applied():
+    """Composed rather than opaque, so a row can be attributed without a lookup."""
+    assert version_for() == "generic-1"
+    assert version_for(KSENUKAI) == "generic-1+ksenukai-1"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-1+ksenukai-1"
+    assert (
+        read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
+        == "generic-1+phones-1+ksenukai-1"
+    )
+
+
+def test_the_capacity_is_read_as_an_exact_number():
+    """Megabytes, not gigabytes: a 32 MB feature phone would otherwise be 0.03125 GB, and
+    an identity axis that is a fraction is one that gets compared wrongly eventually."""
+    fields = read(item(), source_slug=KSENUKAI, category=PHONES)
+    assert fields["identity"]["storage_mb"] == 32
+
+    big = read(item("1268710"), source_slug=KSENUKAI, category=PHONES)
+    assert big["identity"]["storage_mb"] == 128 * 1024
+
+
+def test_the_category_alone_reads_capacity_from_any_shop():
+    """It is a property of the kind of product, not of where the listing came from."""
+    fields = read({"name": "Some phone, 256 GB, black"}, category=PHONES)
+    assert fields["identity"]["storage_mb"] == 256 * 1024
+    # And the shop's own rules are what find the barcode, so they are still missing.
+    assert fields["gtin"] is None
+
+
+# --- what generic alone gets from this shop ---
+
+
+def test_generic_alone_misses_what_matching_needs(client=None):
+    """The measurement that says a source ruleset is needed at all."""
+    fields = read(item())
+    assert fields["title"].startswith("Telefons ar pogām MyPhone")
+    assert fields["brand_raw"] == "MyPhone"
+    assert fields["price"] is not None
+    # The three that matter, and none of them found.
+    assert fields["gtin"] is None
+    assert fields["model"] is None
+    assert fields["mpn"] is None
+
+
+# --- what the shop's own rules add ---
+
+
+def test_the_barcode_is_found_among_the_other_numbers():
+    fields = read(item(), source_slug=KSENUKAI, category=PHONES)
+    assert fields["gtin"] == "5902983617747"
+
+
+def test_the_model_is_found_in_the_attribute_table():
+    fields = read(item(), source_slug=KSENUKAI, category=PHONES)
+    assert fields["model"] == "Hammer Rock"
+
+
+def test_an_internal_article_number_is_not_a_part_number():
+    """541 of 541 began `Y0000`, and the old system reported 100% MPN coverage for it."""
+    fields = read({**item(), "mpn": "Y00001210299"}, source_slug=KSENUKAI, category=PHONES)
+    assert fields["mpn"] is None
+    # A real one is left alone.
+    kept = read({**item(), "mpn": "SM-A576BLB"}, source_slug=KSENUKAI, category=PHONES)
+    assert kept["mpn"] == "SM-A576BLB"
+
+
+def test_a_rule_that_finds_nothing_erases_nothing():
+    """A missing model must not wipe one generic happened to find."""
+    payload = {**item(), "model": "Galaxy S24", "attributes": {}}
+    assert read(payload, source_slug=KSENUKAI, category=PHONES)["model"] == "Galaxy S24"
+
+
+def test_every_real_phone_in_the_fixture_reads(client=None):
+    for record in FIXTURE["items"]:
+        fields = read(item(str(record["id"])), source_slug=KSENUKAI, category=PHONES)
+        assert fields["title"]
+        assert fields["brand_raw"]
+        assert fields["model"], record["id"]
+
+
+# --- choosing a barcode ---
+
+
+@pytest.mark.parametrize(
+    "code, ok",
+    [
+        ("5902983617747", True),  # EAN-13
+        ("590298361774", False),  # the same with its check digit lopped off
+        ("036000291452", True),  # UPC-A
+        # Used as a stand-in barcode all over this suite, and not a real one: its check
+        # digit should be 6. Length alone never told us that.
+        ("194253000001", False),
+        ("4006381333931", True),  # EAN-13
+        ("4006381333930", False),  # one digit wrong
+        ("1226772", False),  # the shop's own product code
+        ("Y00001210299", False),  # the shop's own article number
+        ("", False),
+    ],
+)
+def test_a_check_digit_decides(code, ok):
+    assert barcodes.valid(code) is ok
+
+
+def test_a_number_a_shop_assigned_itself_is_refused():
+    """GS1 reserves these for in-store numbering: it can never agree with another shop."""
+    assert barcodes.valid("2001234567893")
+    assert barcodes.restricted("2001234567893")
+    assert barcodes.pick(["2001234567893"]) is None
+
+
+def test_the_longer_of_two_forms_wins():
+    """A shop listing both is listing an EAN and the same number without its check digit."""
+    assert barcodes.pick(["590298361774", "5902983617747"]) == "5902983617747"
+
+
+def test_nothing_valid_is_nothing():
+    assert barcodes.pick(["1226772", "Y00001210299"]) is None
+    assert barcodes.pick(None) is None
+    assert barcodes.pick([]) is None

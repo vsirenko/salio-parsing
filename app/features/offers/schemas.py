@@ -172,7 +172,8 @@ class NormalizedOfferRead(BaseModel):
     gtin: str | None
     mpn: str | None
     model: str | None
-    attributes: dict[str, Any]
+    attributes: dict
+    identity: dict[str, Any]
     price: Decimal | None
     currency_code: str | None
     condition: Condition

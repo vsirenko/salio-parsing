@@ -97,16 +97,26 @@ and the questions that have to be answered with real data first, are written dow
       storefront would all be filed under whichever market sorted first.
 - [x] The first channel: `ksenukai-phones`, through the shop's search index. 520 phones
       collected end to end — discovered, snapshotted, handed over, contract passed
-- [ ] **Nothing reads a shop's shape into ours.** `generic-1` finds a title, a brand and a
-      price in what a channel hands over and nothing else, so the 520 real phones landed
-      with no barcode, no part number and no model: `alternative_codes` sits unread and
-      `Modelis` sits in the attributes untouched. This is the designed order — collect,
-      measure, then write the rules against the bytes — and it is the next thing to build.
-      `RULESET_VERSION` is a single global constant today, and per-source rules make it one
-      per source, which `MatchingService._reading` filters on and will have to stop doing.
-- [ ] **The brand registry is empty.** 599 of 600 real offers queued as `brand_unknown`,
-      which is not a matcher problem: no brand has been entered, so every brand string
-      resolves to nothing. Filling it is the cheapest large win there is.
+- [x] Layered reading: generic → category → source → brand → product → finish, each layer
+      selected by a key that deepens down the list. On ksenukai's 520 phones it took
+      `gtin 0 → 99.6%`, `model 0 → 100%`, `storage 0 → 97.9%`
+- [ ] **The brand and product layers are empty.** Declared, selectable, and with nothing
+      registered. The first thing owed to them is already measured: colour takes 61 forms
+      across 520 phones, of which the maker's marketing names (`obsidian`, `glacier`) are
+      brand knowledge and the plain-English ones need a language table. `phones-color` is
+      declared `pending` and says so.
+- [ ] **Nothing resolves an attribute name to the registry.** `attribute_aliases` exists for
+      exactly that — `Atmiņas ietilpība` → an attribute row — and nothing calls it, so
+      `identity` is filled only by what a category's rules parse themselves. That resolution
+      cannot live in `read()`, which is pure; it is a second step over a stored reading.
+- [ ] **The brand registry and the catalogue are both empty.** All 520 real offers queue,
+      and there is nothing to match them against: zero brands, zero variants. Filling the
+      brand registry is the cheapest large win there is.
+- [ ] **A queued offer can be given the wrong reason.** With a barcode present on 99.6% of
+      them, all 520 came back `brand_unknown` — but the barcode was tried first, needs no
+      brand, and missed because the catalogue is empty. `_why` lets the brand's state
+      outrank a signal that was actually used, which routes the work to brand aliases when
+      it belongs to filling the catalogue. The instrument lied on its first real data.
 - [ ] **Two more channels.** `bigbox-phones` (Next.js embedded state) and `rdveikals-phones`
       (markup, the only one needing lxml) — chosen so that each proves a different decode
       path holds the same contract. `1a.lv` is nearly free after ksenukai: same engine,

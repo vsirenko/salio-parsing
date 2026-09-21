@@ -43,6 +43,12 @@ barcode from the feed and a description from the page end up on the same row.
 | `access` | `wholesale` — one request returns everything; `retail` — a listing, then a request per product. This is what decides the schedule. |
 | `decode` | `json_ld`, `embedded_state`, `graphql`, `private_api`, `xml`, `markup`. A swappable function and nothing more. |
 | `delivers_full` / `delivers_quick` | which of `catalogue`, `price`, `availability` each pass actually brings back. |
+| `category_id` | what it collects, when it collects one thing. Null for a channel carrying a whole shop. |
+
+`category_id` is what selects a category's reading rules, and the reason it is on the channel
+rather than inferred is that the same shape of value means different things to a laptop and a
+monitor. Null is a real answer, not a missing one: a mixed feed has no single category, and
+no rules at all is a quieter failure than the wrong ones.
 
 `delivers_quick` is the one that is easy to get wrong and expensive to discover. Whether a
 cheap pass carries stock is a property of the channel, not a general rule, and it decides

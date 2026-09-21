@@ -77,11 +77,61 @@ a source that reorders its JSON has not changed — and an unchanged page bumps 
 and writes nothing. `stored: false` in the response says so. That keeps this table
 proportional to how much the world changes rather than to how often we look at it.
 
-**Normalization is a pure function of the payload and the ruleset version.** That is the
-property the whole pipeline is built for: improving a rule means re-running it over what is
-already stored and comparing the old reading with the new one before accepting it. Re-running
-the same version is idempotent; a new version gets its own row, so both readings exist side
-by side.
+**Normalization is a pure function of the payload and the rules that apply to it.** That is
+the property the whole pipeline is built for: improving a rule means re-running it over what
+is already stored and comparing the old reading with the new one before accepting it.
+Re-running the same version is idempotent; a new version gets its own row, so both readings
+exist side by side.
+
+## Reading in layers
+
+Rules are declared objects, not a chain of conditionals, so the set an offer will get can be
+read **before** any of them has run — a chain answers that question only by being executed,
+and then only for the offer you happened to try. `rules_for(...)` is that answer.
+
+Five layers, general to specific, each seeing what the ones before it tidied. What changes
+down the list is not only how specific the knowledge is but **what selects it**:
+
+| layer | selected by | reads |
+|---|---|---|
+| `GENERIC` | nothing | any flat object: conventional key names, a comma decimal, a barcode shape |
+| `CATEGORY` | the category | what this kind of product means |
+| `SOURCE` | the channel | where this shop hides things |
+| `BRAND` | (category, brand) | this maker's conventions |
+| `PRODUCT` | (category, brand, line) | one line's own habits |
+| `FINISH` | nothing | check digits, reserved prefixes, canon |
+
+Three things that ordering encodes:
+
+- **The category comes before the shop.** The same shape of value means different things to
+  a laptop and a monitor — `128 GB` is an identity axis for one and a footnote for the other
+  — and keeping their rules in one list means applying the wrong one eventually.
+- **The shop comes before the brand**, because a brand knows more about its own product than
+  any shop does and should see a string the shop's rules have already tidied.
+- **A brand is scoped to a category, not global.** `phones/apple` and `laptops/apple` are
+  different rulesets: that a part number looks like `XXXXXYY/A` is true of Apple everywhere,
+  that a screen diagonal is part of the name is true only of a MacBook Pro.
+
+`PRODUCT` is selected from what the layers above produced, which is why it runs last before
+canonicalisation: a line cannot be known until the brand and the model have been read. A rule
+names one by writing `_line`, and every key beginning with an underscore is working state
+that `read` drops before anything is stored.
+
+**The version says what was applied**: `generic-1+phones-1+ksenukai-1`, composed rather than
+opaque, so a row can be attributed without looking anything up. A key with no ruleset is read
+by whatever is more general, which is how a sample gets loaded and measured before any rules
+are written for it.
+
+**A rule may be declared and not written.** `Rule.pending` is a gap that is visible, and the
+first one is real: colour splits a phone into variants, and across 520 collected products the
+word before `krās` takes 61 distinct forms — Latvian declension (`melns`, `melna`), plain
+English (`black`), and the maker's own marketing (`obsidian`, `glacier`). Two of those three
+are not a category's business, and a colour canonicalised wrongly splits one product into
+several, confidently.
+
+**`identity` is where canonical attributes go**, apart from `attributes`, which holds the
+shop's own names untouched. Mixing our vocabulary into theirs would leave no way to tell
+which is which, and this is what an identity key is computed from.
 
 **Brand and category arrive as strings.** `brand_raw` and `category_raw` hold what the source
 wrote; resolving them to rows is matching's work, not normalization's. The unresolved string
@@ -99,11 +149,23 @@ is also what a candidate queue would be filled from.
 - **The price on `offer` is the latest reading**, derived and recomputable. It is kept only
   so a card does not have to walk the observations to show a number; the record of what a
   price ever was belongs to the readings, and later to `price_event`.
-- **The generic ruleset is a placeholder with a real job.** It reads a flat object with
-  conventional keys, handles a comma decimal separator and a currency written into the price
-  string, and refuses a barcode that is not 8–14 digits — a `gtin` field holding "n/a" would
-  otherwise put nonsense on the strongest signal the matcher has. Per-source rulesets come
-  with the fetchers.
+- **The generic layer is not a placeholder.** It reads a flat object with conventional keys,
+  handles a comma decimal separator and a currency written into the price string, and refuses
+  a barcode that is not 8–14 digits — a `gtin` field holding "n/a" would otherwise put
+  nonsense on the strongest signal the matcher has. On a shop with no rules of its own it is
+  the whole reading, and the coverage on that shop's run is what says which rules to write.
+- **Rules are written against collected bytes, never against a guess.** Every `why` in
+  `normalization/` names the case from the data that put it there. The order is deliberate:
+  collect, measure, then write. On ksenukai's 520 phones the layers read
+  `gtin 0% → 99.6%`, `model 0% → 100%`, `storage 0% → 97.9%`, and `mpn` stays 0 on purpose —
+  its article numbers all begin `Y0000` and can never agree with another shop's.
+- **Choosing a barcode is a reading decision, not a parser's.** Check digits and GS1's
+  reserved prefixes are a standard, so `normalization/barcodes.py` owns it: a channel hands
+  over whatever the shop called its codes, and one place decides which is real.
+- **A source names its category** (`sources.category_id`, nullable). It is what selects the
+  category's rules. Null means a channel carrying a whole shop, and then those rules simply
+  do not apply — honest rather than a gap, because reading a monitor by a phone's rules is a
+  confident wrong answer and no rules at all is only a quiet one.
 - **Payload keys in the ruleset must be written in lower case**, and an assertion at import
   enforces it. They are matched against a lowered payload, so a key with a capital never
   matches anything — which is what silently happened to `currencyId`.

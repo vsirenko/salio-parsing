@@ -235,6 +235,8 @@ class ShopService:
             source.base_url = payload.base_url
         if payload.is_enabled is not None:
             source.is_enabled = payload.is_enabled
+        if "category_id" in sent:
+            source.category_id = payload.category_id
         if "cron_full" in sent:
             source.cron_full = payload.cron_full
         if "cron_quick" in sent:
