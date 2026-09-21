@@ -76,10 +76,14 @@ def test_admin_api_requires_a_token(client):
 
 
 def test_admin_api_with_admin_token(client):
+    from app.features.users.service import SEED_ACCOUNTS
+
     token = tokens(client, ADMIN, panel="/admin")["access_token"]
     response = client.get("/api/admin/users", headers=auth(token))
     assert response.status_code == 200
-    assert response.json()["total"] == 2
+    # Counted from the seed rather than written out: a new demo account is not a reason
+    # for this test to fail.
+    assert response.json()["total"] == len(SEED_ACCOUNTS)
 
 
 def test_garbage_token(client):

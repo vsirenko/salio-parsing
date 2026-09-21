@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin_router import admin_public_router, admin_router
 from app.api.router import api_router
+from app.api.worker_router import worker_public_router, worker_router
 from app.core.compression import GzipRequestMiddleware
 from app.core.config import settings
 from app.core.error_handlers import register_error_handlers
@@ -78,6 +79,8 @@ def create_app() -> FastAPI:
     app.include_router(api_router, prefix=settings.api_prefix)
     app.include_router(admin_public_router, prefix=settings.api_prefix)
     app.include_router(admin_router, prefix=settings.api_prefix)
+    app.include_router(worker_public_router, prefix=settings.api_prefix)
+    app.include_router(worker_router, prefix=settings.api_prefix)
 
     return app
 

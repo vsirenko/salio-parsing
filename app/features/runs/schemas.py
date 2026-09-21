@@ -74,6 +74,27 @@ class Check(BaseModel):
     note: str | None = None
 
 
+class Job(BaseModel):
+    """Everything a collector needs to do one run.
+
+    Asked for rather than passed on a command line: the channel's declaration comes with
+    it, because a worker has to know whether this pass is the full one or the cheap one,
+    and which facts the cheap one is expected to bring back.
+    """
+
+    run_id: int
+    source_id: int
+    source_slug: str
+    kind: Kind
+    access: str
+    decode: str
+    base_url: str | None
+    market_codes: list[str]
+    # What this particular pass is expected to bring back — `delivers_full` or
+    # `delivers_quick`, already chosen by `kind` so the worker does not choose wrongly.
+    delivers: list[str]
+
+
 class Due(BaseModel):
     """A channel and kind the scheduler should start now."""
 

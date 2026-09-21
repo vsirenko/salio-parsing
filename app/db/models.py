@@ -53,7 +53,7 @@ class User(Base):
     token_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     __table_args__ = (
-        CheckConstraint("role in ('customer', 'admin')", name="role_known"),
+        CheckConstraint("role in ('customer', 'admin', 'worker')", name="role_known"),
         Index("ix_users_role", "role"),
     )
 

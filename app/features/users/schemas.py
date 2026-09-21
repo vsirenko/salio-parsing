@@ -18,6 +18,9 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 class Role(StrEnum):
     CUSTOMER = "customer"
     ADMIN = "admin"
+    # Machine accounts. They sign in like anyone else and reach a different set of routes,
+    # because the audience decides that and not the role.
+    WORKER = "worker"
 
 
 class UserBase(BaseModel):

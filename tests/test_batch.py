@@ -57,6 +57,8 @@ def test_a_batch_goes_in_as_one(client):
         "failed": 0,
         "stored": 2,
         "offers_created": 2,
+        # Measured by the service on its own reading, not reported by the caller.
+        "coverage": {"price": 1.0, "title": 1.0},
         "failures": [],
     }
 

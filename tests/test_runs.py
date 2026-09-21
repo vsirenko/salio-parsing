@@ -12,8 +12,17 @@ FULL = ["catalogue", "price", "availability"]
 
 
 def channel(client, token, **over):
-    """A retail channel with a cheap pass, running nightly and four times a day."""
+    """A retail channel with a cheap pass, running nightly and four times a day.
+
+    Shown in a market, because a shop that is shown nowhere has nowhere to put its offers
+    — which the worker says out loud rather than collecting into a void.
+    """
     shop, _ = setup_source(client, token)
+    client.put(
+        f"/api/admin/shops/{shop['id']}/markets/LV",
+        headers=auth(token),
+        json={"is_enabled": True},
+    )
     body = {
         "slug": over.pop("slug", "rd-site"),
         "access": "retail",

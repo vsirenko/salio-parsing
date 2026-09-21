@@ -53,6 +53,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://app:app@db:5432/app
+      # Workers it spawns reach the service by name inside the compose network, not
+      # through the host port.
+      API_BASE_URL: http://api:8000
     command: ["python", "-m", "app.features.runs.scheduler"]
     restart: unless-stopped
     depends_on:
@@ -60,6 +63,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      api:
+        condition: service_started
 
 volumes:
   pgdata:

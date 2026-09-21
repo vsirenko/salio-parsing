@@ -26,10 +26,14 @@ _password_hash = PasswordHash.recommended()  # argon2
 
 
 class Audience(StrEnum):
-    """JWT `aud`. A token minted for one panel is rejected by the other."""
+    """JWT `aud`. A token minted for one audience is rejected by the others."""
 
     CLIENT = "client"
     ADMIN = "admin"
+    # A collector, not a person. It hands over what it crawled and reports how the run
+    # went, and can do nothing else — which matters because a parser is the one thing in
+    # the system that runs hostile input through itself all day.
+    WORKER = "worker"
 
 
 class TokenType(StrEnum):

@@ -102,6 +102,11 @@ class BatchResult(BaseModel):
     # so they bumped a timestamp and wrote nothing.
     stored: int
     offers_created: int
+    # What was actually read out of this batch, per field, as a fraction of what was
+    # accepted. Measured here rather than reported by the worker on purpose: it has to be
+    # the same reading the matcher will use, or the number describes the parser's opinion
+    # of itself.
+    coverage: dict[str, float] = Field(default_factory=dict)
     failures: list[BatchFailure]
 
 
@@ -118,6 +123,9 @@ class IngestResult(BaseModel):
     normalized_offer_id: int | None
     offer_created: bool
     stored: bool
+    # Which identity-bearing fields the reading actually found. Not part of the wire
+    # contract for a single ingest — it is what a batch sums into its coverage.
+    read: list[str] = Field(default_factory=list, exclude=True)
 
 
 class OfferRead(BaseModel):

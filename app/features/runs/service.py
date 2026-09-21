@@ -14,9 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from app.db.models import Run, Source
+from app.db.models import Run, ShopMarket, Source
 from app.db.query import paginated
-from app.features.runs.schemas import Check, Due, Kind, RunRead, RunResult, Status
+from app.features.runs.schemas import Check, Due, Job, Kind, RunRead, RunResult, Status
 from app.schemas.pagination import Pagination
 
 # A slot missed by more than this is let go rather than caught up. A crawl six hours late
@@ -56,6 +56,38 @@ class RunService:
         await self.session.refresh(run)
         audit.record_changes(started_run=run.id, kind=kind.value)
         return RunRead.model_validate(run)
+
+    async def job(self, run_id: int) -> Job:
+        """What a collector is being asked to do.
+
+        The channel's declaration travels with the run rather than being passed on a
+        command line, so a worker restarted by hand asks the same question and gets the
+        same answer as one the scheduler spawned.
+        """
+        run = await self._run(run_id)
+        source = await self._source(run.source_id)
+        kind = Kind(run.kind)
+        markets = (
+            await self.session.scalars(
+                select(ShopMarket.market_code)
+                .where(ShopMarket.shop_id == source.shop_id, ShopMarket.is_enabled.is_(True))
+                .order_by(ShopMarket.market_code)
+            )
+        ).all()
+
+        return Job(
+            run_id=run.id,
+            source_id=source.id,
+            source_slug=source.slug,
+            kind=kind,
+            access=source.access,
+            decode=source.decode,
+            base_url=source.base_url,
+            market_codes=list(markets),
+            # Chosen here rather than by the worker: the pass and the facts it is expected
+            # to bring back are one decision, and splitting it invites them to disagree.
+            delivers=list(source.delivers_full if kind is Kind.FULL else source.delivers_quick),
+        )
 
     # --- finishing ---
 

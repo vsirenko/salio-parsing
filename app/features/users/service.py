@@ -19,12 +19,14 @@ from app.schemas.pagination import Pagination
 SEED_ACCOUNTS = (
     ("admin@example.com", "admin-password", "Site Admin", Role.ADMIN),
     ("customer@example.com", "customer-password", "Demo Customer", Role.CUSTOMER),
+    ("worker@example.com", "worker-password", "Collector", Role.WORKER),
 )
 
 # Which roles may sign in to which panel.
 AUDIENCE_ROLES: dict[Audience, set[Role]] = {
     Audience.CLIENT: {Role.CUSTOMER},
     Audience.ADMIN: {Role.ADMIN},
+    Audience.WORKER: {Role.WORKER},
 }
 
 

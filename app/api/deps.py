@@ -157,5 +157,14 @@ async def get_current_admin(credentials: Credentials, users: UserServiceDep) -> 
     return user
 
 
+async def get_current_worker(credentials: Credentials, users: UserServiceDep) -> UserInDB:
+    """A collector. Only accepts tokens minted for the worker audience."""
+    user = await _authenticate(credentials, users, Audience.WORKER)
+    if user.role is not Role.WORKER:
+        raise ForbiddenError()
+    return user
+
+
 CurrentClient = Annotated[UserInDB, Depends(get_current_client)]
 CurrentAdmin = Annotated[UserInDB, Depends(get_current_admin)]
+CurrentWorker = Annotated[UserInDB, Depends(get_current_worker)]

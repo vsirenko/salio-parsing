@@ -1,5 +1,6 @@
 """Taking in what a shop served, and reading it."""
 
+from collections import Counter
 from datetime import UTC, datetime
 
 from sqlalchemy import case, func, select
@@ -35,6 +36,17 @@ from app.features.offers.schemas import (
 )
 from app.features.prices.service import PriceService
 from app.schemas.pagination import Pagination
+
+# What a run's coverage is counted over. Availability is not here: it has a value for
+# every reading, `unknown` included, so counting it would report 1.00 forever.
+COUNTED = ("title", "brand_raw", "gtin", "mpn", "model", "price")
+
+
+def _found(reading: NormalizedOffer | None) -> list[str]:
+    """Which of the fields worth counting this reading actually has."""
+    if reading is None:
+        return []
+    return [field for field in COUNTED if getattr(reading, field, None) is not None]
 
 
 class OfferService:
@@ -80,6 +92,7 @@ class OfferService:
             raise NotFoundError(f"Run {batch.run_id} not found")
 
         accepted = stored = created = 0
+        present: Counter[str] = Counter()
         failures: list[BatchFailure] = []
         for item in batch.offers:
             try:
@@ -105,6 +118,7 @@ class OfferService:
             accepted += 1
             stored += result.stored
             created += result.offer_created
+            present.update(result.read)
 
         # One entry for the batch, not one per observation. The trail exists to show what
         # an administrator did, and a crawl would bury that under a wall of arrivals.
@@ -121,6 +135,9 @@ class OfferService:
             failed=len(failures),
             stored=stored,
             offers_created=created,
+            coverage={field: round(count / accepted, 4) for field, count in sorted(present.items())}
+            if accepted
+            else {},
             failures=failures,
         )
 
@@ -157,6 +174,7 @@ class OfferService:
                 normalized_offer_id=reading.id if reading else None,
                 offer_created=created,
                 stored=False,
+                read=_found(reading),
             )
 
         raw = RawOffer(
@@ -182,6 +200,7 @@ class OfferService:
             normalized_offer_id=reading.id,
             offer_created=created,
             stored=True,
+            read=_found(reading),
         )
 
     async def renormalize(self, raw_offer_id: int) -> NormalizedOfferRead:

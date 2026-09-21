@@ -1,9 +1,16 @@
 ## Users and access
-- One `User` entity for both panels; `role` (`customer` / `admin`) decides where an account
-  may sign in. Do not split into separate admin/customer tables.
+- One `User` entity for every audience; `role` (`customer` / `admin` / `worker`) decides
+  where an account may sign in. Do not split into separate tables per kind of account.
 - The security boundary is the token audience, not the table. Client tokens carry
-  `aud=client`, admin tokens `aud=admin`; each panel decodes with its own expected audience,
-  so a token from one is rejected by the other before any role check runs.
+  `aud=client`, admin tokens `aud=admin`, collector tokens `aud=worker`; each side decodes
+  with its own expected audience, so a token from one is rejected by the others before any
+  role check runs. `AUDIENCE_ROLES` in `app/features/users/service.py` is the whole map.
+- `worker` is a machine account, and its narrowness is the point. A parser is the one thing
+  here that runs hostile input through itself all day; holding an admin token it could do
+  anything an administrator can. Collector routes live on `worker_router` in
+  `app/api/worker_router.py` and are deliberately few — read the job, hand over a pass,
+  report how the run went. Adding one is a decision, and `tests/test_worker.py` asserts the
+  exact set so that it cannot be made by accident.
 - Admin routes go on `admin_router` in `app/api/admin_router.py`, which carries
   `Depends(get_current_admin)` at router level — never guard admin endpoints one by one.
   `admin_public_router` holds only the routes that mint a token without one — login and

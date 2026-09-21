@@ -97,6 +97,38 @@ rather than closing everything as "scheduler stopped".
 memory limit gets found, and a channel collects far faster with a couple of neighbours than
 with a dozen.
 
+## The worker
+
+One process per run, spawned by the scheduler, so a parser that leaks or wedges takes down
+its own process and nothing else.
+
+**It reaches the service over HTTP with its own credentials, not through the database.** A
+parser is the one thing here that runs hostile input through itself all day, and what it
+holds while doing that decides what a compromised one is worth. A worker token carries
+`aud=worker` and reaches exactly five routes:
+
+| | |
+|---|---|
+| `POST /api/worker/auth/login` · `POST /api/worker/auth/refresh` | its own session |
+| `GET /api/worker/runs/{run_id}` | the job |
+| `POST /api/worker/runs/{run_id}/finish` | report back |
+| `POST /api/worker/sources/{source_id}/offers/batch` | hand over a pass |
+
+`tests/test_worker.py` asserts that exact set, so a sixth route is a decision rather than
+an accident.
+
+**The job is asked for, not passed on the command line.** The channel's declaration travels
+with the run — including which facts *this* pass is expected to bring back, already chosen
+by the kind so a worker cannot pick the wrong list — which means a worker started by hand
+gets the same answer as one the scheduler spawned.
+
+**A handed-over pass writes no audit entry**, unlike the same call on the admin router. Not
+an oversight: the trail records what an administrator did, and a scheduled crawl is not
+that. What a run collected is recorded on the run, which is where somebody would look.
+
+**A 401 mid-pass is retried once** through a fresh sign-in. A slow channel can outlive an
+access token, and losing a completed crawl to an expiry would be absurd.
+
 ## Not built yet
 
 **No channel is implemented.** `worker.py` has an empty registry, so every run ends as a

@@ -63,6 +63,29 @@ class Settings(BaseSettings):
     login_lock_seconds: int = 60
     login_max_lock_seconds: int = 3600
 
+    # --- Fetching ---
+    # A crawler that hammers a shop gets blocked, and a blocked channel produces nothing
+    # until somebody notices — which is slower than crawling slowly.
+    fetch_concurrency: int = Field(default=4, ge=1, le=32)
+    fetch_delay_seconds: float = Field(default=0.5, ge=0.0, le=60.0)
+    fetch_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
+    fetch_retries: int = Field(default=3, ge=0, le=10)
+    fetch_user_agent: str = "salio-parsing/0.1 (+https://example.com/bot)"
+    # Where a worker keeps the bytes a shop served. Its own disk rather than the database:
+    # a parser is wrong more often than a site changes, and every fix is worth only what it
+    # costs to re-apply — with a snapshot that is nothing, without one it is another crawl.
+    snapshot_dir: str = "data/snapshots"
+
+    # --- The collector's own account ---
+    # A worker signs in like anyone else and reaches a different set of routes, because
+    # the audience decides that. It is not an administrator: a parser runs hostile input
+    # through itself all day, and a compromised one holding an admin token could do
+    # anything an administrator can.
+    worker_email: str = "worker@example.com"
+    worker_password: SecretStr = SecretStr("worker-password")
+    # Where a worker reaches the service. Inside compose this is the service name.
+    api_base_url: str = "http://localhost:8080"
+
     # --- Ingestion ---
     # A batch is posted gzipped: product JSON compresses by roughly an order of magnitude
     # and the difference is paid on every pass of every channel. The cap is a safety

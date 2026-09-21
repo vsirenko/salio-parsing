@@ -17,7 +17,20 @@ from tests.test_offers import post
 from tests.test_runs import channel, start
 
 EXIT_BADLY = "/bin/sh -c 'exit 3'"
-REAL_WORKER = f"{sys.executable} -m app.features.runs.worker --run-id {{run_id}}"
+# A worker that closes its own run, without being the real one. The real worker reaches
+# the service over HTTP, and a subprocess here would aim at whatever is listening on the
+# configured port — in practice the development API, against the development database.
+# The genuine article is exercised in tests/test_worker.py, in-process and against this
+# app.
+SELF_CLOSING = (
+    f"{sys.executable} -c "
+    "'import asyncio,os,sys;"
+    'sys.path.insert(0,".");'
+    "from app.db.session import session_factory;"
+    "from app.features.runs.service import RunService;"
+    "from app.features.runs.schemas import RunResult;"
+    'asyncio.run(__import__("tests.helpers_worker",fromlist=["x"]).close(int(os.environ["RUN_ID"])))\''
+)
 
 
 @pytest.fixture
@@ -81,12 +94,12 @@ def test_startup_closes_runs_nobody_is_working_on(client, event_loop, tuned):
 # --- what it owes a worker ---
 
 
-def test_a_worker_finishes_its_own_run(client, event_loop, tuned):
-    """The real worker, spawned for real. It has no channel to collect, and says so."""
+def test_a_worker_that_reported_keeps_its_own_verdict(client, event_loop, tuned):
+    """The scheduler closes a run only when the process is gone and the row is still open."""
     token = admin_token(client)
     source = channel(client, token, cron_full="* * * * *", cron_quick=None)
 
-    tuned.worker_command = REAL_WORKER
+    tuned.worker_command = SELF_CLOSING
     event_loop.run_until_complete(scheduler().run_forever(once=True))
 
     runs = runs_of(client, token)
@@ -94,7 +107,7 @@ def test_a_worker_finishes_its_own_run(client, event_loop, tuned):
     assert runs[0]["source_id"] == source["id"]
     assert runs[0]["status"] == "failed"
     # Its own reason, not the scheduler's guess from an exit code.
-    assert "no channel implementation" in runs[0]["error"]
+    assert runs[0]["error"] == "reported by the worker"
 
 
 def test_a_worker_that_dies_silently_still_closes_its_run(client, event_loop, tuned):

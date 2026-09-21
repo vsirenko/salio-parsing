@@ -90,10 +90,14 @@ def test_offset_paging_walks_the_collection(client):
 
 
 def test_users_endpoint_uses_the_same_envelope(client):
+    from app.features.users.service import SEED_ACCOUNTS
+
     token = admin_token(client)
     body = client.get("/api/admin/users", params={"limit": 1}, headers=auth(token)).json()
     assert set(body) == {"items", "total", "limit", "offset", "next_cursor", "has_more"}
-    assert body["total"] == 2
+    # Counted from the seed rather than written out: a new demo account is not a reason
+    # for an envelope test to fail.
+    assert body["total"] == len(SEED_ACCOUNTS)
     assert body["has_more"] is True
 
 

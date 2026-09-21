@@ -96,10 +96,11 @@ and the questions that have to be answered with real data first, are written dow
       lifecycle does not change. `source.base_url` is still filled in by nobody.
 - [x] Batch ingestion, gzipped, partial on failure, one audit entry per batch, carrying
       the run that collected it
-- [ ] **A worker reaches the database directly.** It was spawned locally by the scheduler,
-      so it shares the engine. The boundary that was designed is HTTP — a worker posts
-      offers to the ingestion endpoint — and moving workers off this machine needs a
-      service account and a claim endpoint first.
+- [x] A collector audience: `aud=worker`, its own account, five routes and no more, so a
+      parser does not hold an administrator's credentials while chewing hostile input
+- [ ] **Workers still run only where the scheduler is.** They reach the service over HTTP
+      now, so moving them onto another machine needs a claim endpoint — the scheduler
+      currently spawns subprocesses rather than handing work out.
 - [x] Price history and availability history, two series keyed by the listing rather
       than the variant, both partitioned by month
 - [ ] **Availability has only one way in.** It is read out of whatever the main source
