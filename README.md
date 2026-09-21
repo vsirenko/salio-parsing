@@ -1,9 +1,16 @@
 # Products API
 
-Production-ready FastAPI service: Pydantic schemas, `.env` config, unified error handling,
-CORS, auto-generated Swagger/OpenAPI, and a Docker image.
+FastAPI service on PostgreSQL: authentication with two separate panels, an append-only
+audit trail, shared pagination, and a Docker image.
 
-Deliberately flat: routes → service → schemas. No repository pattern, no CQRS, no event bus.
+Deliberately flat: route → service → schema. No repository pattern, no CQRS, no event bus.
+The tree is sliced by feature rather than by layer — everything one feature needs sits in
+`app/features/<name>/`.
+
+The repository is named for a price parser that is **not built yet**. Its shape, and the
+questions that have to be answered against real data first, are written down in
+[docs/parser-design.md](docs/parser-design.md). What exists of it so far is the reference
+data underneath: currencies, countries and markets.
 
 ## Requirements
 
@@ -16,49 +23,50 @@ See [TODO.md](TODO.md) for what is not built yet.
 
 ```
 app/
-├── main.py                 # app factory: CORS, routers, error handlers, lifespan
-├── api/
-│   ├── deps.py             # shared deps + auth guards
-│   ├── pagination.py       # limit/offset/before_id query dependencies
-│   ├── router.py           # client routes    -> /api/*
-│   ├── admin_router.py     # admin routes     -> /api/admin/*, guarded at router level
-│   └── routes/
-│       ├── health.py       # GET /health
-│       ├── auth.py         # client sign-in
-│       ├── products.py     # GET/POST /api/products
-│       └── admin/
-│           ├── auth.py     # admin sign-in
-│           ├── users.py    # admin user management
-│           └── audit.py    # audit trail, read-only
-├── db/
-│   ├── base.py             # DeclarativeBase + constraint naming convention
-│   ├── models.py           # User, Product, AuditEntry tables
-│   ├── query.py            # count + window helper shared by the services
-│   └── session.py          # engine, request session, independent session factory
-├── core/
-│   ├── config.py           # Settings (pydantic-settings, reads .env)
-│   ├── error_handlers.py   # one consistent error body for every failure
-│   ├── exceptions.py       # AppError / NotFoundError / ConflictError
-│   ├── security.py         # argon2 hashing, JWT minting and verification
-│   ├── audit.py            # per-request audit context + redaction
-│   ├── audit_middleware.py # writes one audit record per admin request
+├── main.py                  # app factory: CORS, routers, error handlers, lifespan
+├── api/                     # wiring only — no routes of its own
+│   ├── deps.py              # shared dependencies, auth guards, service factories
+│   ├── pagination.py        # limit / offset / before_id query dependencies
+│   ├── router.py            # client routes -> /api/*
+│   └── admin_router.py      # admin routes  -> /api/admin/*, guarded at router level
+├── core/                    # cross-cutting, and knows nothing about any feature
+│   ├── config.py            # Settings (pydantic-settings, reads .env)
+│   ├── security.py          # argon2, JWT minting and verification, token vocabulary
+│   ├── exceptions.py        # AppError and its subclasses
+│   ├── error_handlers.py    # one consistent error body for every failure
+│   ├── audit.py             # per-request audit context + redaction
+│   ├── net.py               # the caller's address, shared by audit and rate limiting
 │   └── logging.py
-├── schemas/
-│   ├── common.py           # ErrorResponse, HealthResponse
-│   ├── pagination.py       # Page[T] envelope + Pagination value object
-│   ├── auth.py             # Audience, TokenPair, LoginRequest
-│   ├── audit.py            # AuditEntry, Outcome
-│   ├── user.py             # Role, UserCreate / UserRead / UserInDB
-│   └── product.py          # ProductCreate / ProductRead
-└── services/
-    ├── products.py         # business logic + in-memory storage
-    ├── users.py            # lookup, authentication, panel check
-    └── audit.py            # append-only audit storage
-alembic/                    # migrations
-docker-compose.yml          # db + migrate + api
-tests/
-.pre-commit-config.yaml     # ruff + commit message linting
+├── db/
+│   ├── base.py              # DeclarativeBase + constraint naming convention
+│   ├── models.py            # every table: User, Product, AuditEntry, LoginAttempt,
+│   │                        # Currency, Country, Market
+│   ├── query.py             # count + window helper shared by the services
+│   └── session.py           # engine, request session, independent session factory
+├── schemas/                 # only what every feature shares
+│   ├── common.py            # ErrorResponse, HealthResponse
+│   └── pagination.py        # Page[T] envelope + Pagination value object
+└── features/
+    ├── users/               # accounts and sessions, both panels
+    │   ├── router.py        # /api/auth/*
+    │   ├── admin_router.py  # /api/admin/auth/*, /api/admin/users/*
+    │   ├── service.py
+    │   └── schemas.py
+    ├── products/            # /api/products
+    ├── audit/               # middleware + /api/admin/audit, read-only
+    ├── currencies/          # /api/admin/currencies, read-only reference data
+    ├── countries/           # /api/admin/countries
+    ├── markets/             # /api/admin/markets — the storefronts we run
+    ├── rate_limit/          # sign-in limiter; no router, nothing exposes it
+    └── health/              # /health, /health/ready; no service, it has no state
+alembic/                     # migrations
+docs/parser-design.md        # the parser: shape, decisions, open questions
+tests/                       # test_architecture.py enforces the import direction
+.pre-commit-config.yaml      # ruff + commit message linting
 ```
+
+Imports point one way: `features` may import `core`, `db` and `schemas`; those three never
+import a feature. `tests/test_architecture.py` fails on a violation.
 
 ## Setup
 
@@ -122,8 +130,10 @@ Transactions:
 
 - `get_session` gives one transaction per request — committed when the handler returns,
   rolled back if it raises. A service calls `flush()`, never `commit()`.
-- The audit middleware writes through `session_factory` instead, in its own transaction.
-  A record of a failed request must survive that request's rollback.
+- Two things deliberately write outside it, through `session_factory`: the audit
+  middleware and the sign-in rate limiter. Both record what happened during a request
+  that then failed and rolled back, so a record on the request session would roll back
+  with it.
 - `DB_USE_NULL_POOL=true` stops connections being pooled, for tests (each client runs
   its own event loop and an asyncpg connection cannot cross loops) and for serverless.
 
@@ -257,21 +267,33 @@ for one panel carries an `aud` claim the other panel rejects.
 | POST | `/api/admin/auth/login` | Admin sign-in |
 | POST | `/api/admin/auth/refresh` | Refresh the admin session |
 
+Both sign-in endpoints are rate limited per account and per address.
+
 **Client token required** (`aud=client`)
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/auth/me` | Current customer |
+| POST | `/api/auth/password` | Change your own password, returns a fresh pair |
 
 **Admin token required** (`aud=admin`)
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/admin/auth/me` | Current admin |
+| POST | `/api/admin/auth/password` | Change your own password, returns a fresh pair |
 | GET | `/api/admin/users` | List users (`limit`, `offset`, `role`) |
 | POST | `/api/admin/users` | Create a user |
 | GET | `/api/admin/users/{id}` | Get one user |
+| PATCH | `/api/admin/users/{id}` | Edit name, role, active flag |
 | GET | `/api/admin/audit` | Read the audit trail (cursor paging) |
+| GET | `/api/admin/currencies` | ISO 4217, read-only |
+| GET | `/api/admin/countries` | List countries (`is_eu`) |
+| POST | `/api/admin/countries` | Add a country |
+| GET · PATCH | `/api/admin/countries/{code}` | Read or edit one — mainly its VAT rate |
+| GET | `/api/admin/markets` | List markets (`is_enabled`) |
+| POST | `/api/admin/markets` | Open a market |
+| GET · PATCH | `/api/admin/markets/{code}` | Read or edit one — mainly `is_enabled` |
 
 **Open for now** (products are not behind auth yet)
 
@@ -290,12 +312,23 @@ for one panel carries an `aud` claim the other panel rejects.
   `admin_public_router` is the single named exception, and holds only sign-in.
 - Access tokens live 15 minutes, refresh tokens 30 days. A refresh token is rejected where
   an access token is expected (`type` claim).
+- Tokens carry no server state, so revocation lives on the account: `users.token_epoch`.
+  Every token is minted at the account's current epoch and only that epoch is accepted, so
+  a password change or a deactivation ends every session at once. It is a counter rather
+  than a timestamp because JWT `iat` holds whole seconds, and a token minted in the same
+  second would survive a time comparison.
+- `UserService.get_for_token` is the single place that decides a valid signature is not
+  enough. Both the access path and the refresh endpoints go through it.
+- Failed sign-ins are counted in PostgreSQL per account and per address. Crossing a limit
+  locks that bucket, and the lock doubles with each further failure. The counters are
+  written outside the request transaction, or a rolled-back failure would not count.
 - Passwords are hashed with argon2. `UserRead` has no hash on it, so a handler cannot leak
   one by accident.
 - There is no public registration endpoint. Accounts are created via `/api/admin/users`.
 
-> Refresh tokens are stateless, so signing out everywhere is not possible yet. Add a `jti`
-> denylist (Redis) or rotation when that is needed.
+> Sessions can only be ended all at once. There is no list of active sessions and no way
+> to sign out one device — that needs a `refresh_tokens` table with `jti`, rotation and
+> reuse detection.
 
 ### Pagination
 
@@ -341,6 +374,11 @@ queryable and append-only, and lives in its own store.
 - The service layer adds meaning through `app/core/audit.py`: `set_target("user", id)` and
   `record_changes(...)`. Services have no request object, so the context travels in a
   ContextVar.
+- `set_target` is called as soon as the row is loaded, before the guards run, so a refused
+  attempt is recorded against what it was aimed at rather than at nothing. `record_changes`
+  reports only what was actually applied — a refusal applies nothing.
+- Everything handed to `record_changes` has to be JSON-safe (`model_dump(mode="json")`).
+  The column is JSONB and a `Decimal` makes the write fail.
 - `record_changes` redacts anything that looks like a credential (`password`, `token`,
   `secret`, `api_key`, …), recursing into nested structures. Callers are expected to pass
   clean data; this is the second line of defence.
@@ -353,9 +391,11 @@ queryable and append-only, and lives in its own store.
 Client traffic is not audited — the middleware is scoped by path prefix. Widen the prefix
 in `app/main.py` when that changes.
 
-> A failed audit write is logged and swallowed rather than failing the request. If the
-> trail ever becomes a compliance requirement, invert that in `AuditMiddleware` so the
-> action fails when it cannot be recorded.
+> A failed audit write is logged and swallowed rather than failing the request, which has
+> already hidden a bug once: a `Decimal` reaching the JSONB column made the write fail, and
+> the endpoint returned 200 with no record of what it had done. If the trail ever becomes a
+> compliance requirement, invert that in `AuditMiddleware` so the action fails when it
+> cannot be recorded.
 
 ### Demo accounts
 
@@ -466,9 +506,14 @@ curl "http://localhost:8000/api/admin/audit?limit=50&before_id=120" -H "Authoriz
 
 ## Extending
 
-- **New resource** — add `app/schemas/<thing>.py`, `app/services/<thing>.py`,
-  `app/api/routes/<thing>.py`, then register the router in `app/api/router.py`.
-- **Schema change** — edit `app/db/models.py`, run `alembic revision --autogenerate`,
-  read the generated migration before committing it.
+- **New resource** — add `app/features/<thing>/` holding `schemas.py`, `service.py` and
+  `router.py` (plus `admin_router.py` if the admin panel touches it), then mount it in
+  `app/api/router.py` or `app/api/admin_router.py`. Mount it nowhere else.
+- **Schema change** — edit `app/db/models.py` (every model lives there, whichever feature
+  owns it), run `alembic revision --autogenerate`, read the generated migration before
+  committing it.
+- **Reference data** — goes in the migration that creates its table, not a startup seed.
+  The demo seeding is forced off in production, and an empty lookup table is a broken
+  feature rather than an empty one.
 - **New error type** — subclass `AppError` in `app/core/exceptions.py`; it is serialized
   automatically, no handler to write.
