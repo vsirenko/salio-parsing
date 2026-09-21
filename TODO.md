@@ -36,6 +36,17 @@ Tick items off here when they land so the list stays honest.
 - [ ] **Observability.** Logs are plain text; no structured JSON, no error tracking
       (Sentry), no metrics.
 
+## Parser
+
+The reason this repository exists, and none of it is built. The shape it should take,
+and the questions that have to be answered with real data first, are written down in
+[docs/parser-design.md](docs/parser-design.md).
+
+- [ ] **Measure how far a deterministic matcher gets.** Everything else in that document
+      is downstream of this number. 30-50 real offers from both kinds of source, with the
+      same product sold by more than one shop.
+- [ ] **Nothing fetches, normalizes, matches or records a price yet.**
+
 ## Features
 
 - [ ] **No admin password reset.** An admin cannot set a password for a user who has
