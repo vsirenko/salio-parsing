@@ -8,6 +8,9 @@
   subclass, not a new handler. An error that needs a response header — `Retry-After` on
   a 429 — sets `headers` on its subclass and the one handler applies them.
 - Money is `Decimal`, never float.
+- Rates and shares are stored as fractions, never percentages: `0.2100`, not `21`. They
+  get multiplied, and percentages scatter a `/ 100` through the code until one of them is
+  forgotten.
 - The tree is sliced by feature, not by layer. Everything one feature needs sits in
   `app/features/<name>/`:
 
@@ -35,6 +38,9 @@
 - Imports point one way: `features` may import `core`, `db` and `schemas`; those three
   never import a feature. `api` wires features together and may import any of them.
   `tests/test_architecture.py` enforces this — it fails on a new violation.
+- Reading another feature's table is not a cross-feature import. Every model lives in
+  `app/db/models.py`, so a service selects from whatever table it needs; only importing
+  another feature's service, schemas or router counts as reaching across.
 - One feature imports another only where that other one is infrastructure for the rest:
   `users/service.py` uses `rate_limit/service.py`, and that is the whole list. A new
   cross-feature import is a design question, not a detail; answer it, then add it to the

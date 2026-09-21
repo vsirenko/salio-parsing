@@ -13,6 +13,10 @@
   records nothing — the status code already says it failed.
 - Sign-in names the actor email before the password is checked. A failed admin sign-in
   is exactly what the trail is read for and it has no actor id to name.
+- Everything handed to `record_changes` has to be JSON-safe — `model_dump(mode="json")`,
+  not the plain dump. The column is JSONB, a `Decimal` makes the write fail, and the
+  middleware swallows that failure: the only symptom is an action that returned 200 and
+  left no record. This has already happened once.
 - Never pass raw credentials in. `record_changes` redacts the keys in `SENSITIVE_KEYS`,
   but that is a safety net, not the contract; a new field that can carry a secret is
   added to that set as well.

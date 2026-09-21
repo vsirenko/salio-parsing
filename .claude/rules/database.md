@@ -10,6 +10,19 @@
   not add a third without that same reason.
 - After changing a model: `alembic revision --autogenerate`, then read the migration
   before committing. `alembic check` must pass.
+- Reference data belongs in the migration that creates its table, not in a startup seed:
+  a `countries` table with no rows is not an empty feature, it is a broken one, and the
+  demo seeding is forced off in production. A migration must also stay self-contained —
+  it has to keep working against the code of its own day — so it cannot import the rows
+  from anywhere, and the test fixture repeats them on purpose.
+- Reference tables are keyed by the code the outside world already uses: `EUR`, `LV`. It
+  arrives in every feed and appears in every URL, so a surrogate id would add a join to
+  almost every query and buy nothing. `login_attempts` is the existing precedent.
+- Never seed a fact you are not the source of truth for. A VAT rate or a country's
+  currency changes, and a wrong value in reference data is worse than a missing row,
+  because it is believed. Such a column is nullable, null means "not known", and an
+  explicit null has to be accepted on update — otherwise a wrong value can only ever be
+  replaced by another guess, never withdrawn.
 - `/health` must never touch the database — it is liveness, and a database blip should
   not cause a restart loop. Dependency checks belong in `/health/ready`.
 
