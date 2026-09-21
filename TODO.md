@@ -27,9 +27,11 @@ Tick items off here when they land so the list stays honest.
 - [ ] **Audit retention and backup.** The trail grows without bound and nothing prunes,
       archives or backs it up. Decide a retention window; partition by month if it gets
       large.
-- [ ] **Audit writes fail open.** `AuditMiddleware` logs and swallows a failed write so
-      the request still succeeds. If the trail becomes a compliance requirement, invert
-      it so the action fails when it cannot be recorded.
+- [ ] **Audit writes fail open, and it has already hidden a bug.** `AuditMiddleware`
+      logs and swallows a failed write so the request still succeeds. Passing a `Decimal`
+      to `record_changes` made the JSONB write fail; the endpoint returned 200 and simply
+      left no record. Either make the serializer tolerate what services pass, or invert
+      the middleware so an action fails when it cannot be recorded.
 - [ ] **Production DB grants.** The audit table should be INSERT + SELECT only for the
       application user, so append-only is enforced by the database and not just by us
       not writing an endpoint.
@@ -42,6 +44,11 @@ The reason this repository exists, and none of it is built. The shape it should 
 and the questions that have to be answered with real data first, are written down in
 [docs/parser-design.md](docs/parser-design.md).
 
+- [x] Currency and country reference tables, admin-managed, seeded with the three
+      Baltic markets. VAT rates are left null deliberately — see the migration.
+- [ ] **Fill in the VAT rates** for LV, LT and EE. They were not seeded because they
+      change and are not ours to guess; nothing computes with them, but they are what
+      explains a price difference between markets.
 - [ ] **Measure how far a deterministic matcher gets.** Everything else in that document
       is downstream of this number. 30-50 real offers from both kinds of source, with the
       same product sold by more than one shop.

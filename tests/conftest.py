@@ -17,14 +17,24 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.base import Base
-from app.db.models import Product
+from app.db.models import Country, Currency, Product
 
 # A separate database so a test run never touches development data.
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL", "postgresql+asyncpg://app:app@localhost:55432/app_test"
 )
 
-TABLES = ("audit_entries", "login_attempts", "products", "users")
+TABLES = ("audit_entries", "login_attempts", "products", "users", "countries", "currencies")
+
+# Reference data. Duplicated from the migration on purpose: a migration has to stay
+# self-contained and keep working against the code of its own day, so it cannot import
+# this, and this cannot import it.
+SEED_CURRENCIES = (("EUR", "Euro", "\u20ac", 2),)
+SEED_COUNTRIES = (
+    ("EE", "Estonia", "EUR", True),
+    ("LT", "Lithuania", "EUR", True),
+    ("LV", "Latvia", "EUR", True),
+)
 
 SEED_PRODUCTS = (
     ("Espresso machine", "499.99", ["kitchen", "coffee"]),
@@ -79,6 +89,14 @@ def clean_database(event_loop, schema):
             await session.commit()
 
         async with session_factory() as session:
+            for code, name, symbol, minor_units in SEED_CURRENCIES:
+                session.add(Currency(code=code, name=name, symbol=symbol, minor_units=minor_units))
+            # Flushed before the countries that point at them: the foreign key is a
+            # plain column rather than a relationship, so the unit of work has nothing
+            # to order these two by.
+            await session.flush()
+            for code, name, currency_code, is_eu in SEED_COUNTRIES:
+                session.add(Country(code=code, name=name, currency_code=currency_code, is_eu=is_eu))
             await seed_users(session)
             for name, price, tags in SEED_PRODUCTS:
                 session.add(Product(name=name, price=price, currency="EUR", tags=tags))

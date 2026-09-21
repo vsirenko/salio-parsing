@@ -12,6 +12,8 @@ from app.core.net import client_ip
 from app.core.security import Audience, AuthError, ForbiddenError, TokenType, decode_token
 from app.db.session import get_session
 from app.features.audit.service import AuditService
+from app.features.countries.service import CountryService
+from app.features.currencies.service import CurrencyService
 from app.features.products.service import ProductService
 from app.features.rate_limit.service import LoginRateLimiter
 from app.features.users.schemas import Role, UserInDB
@@ -45,8 +47,18 @@ def get_audit_service(session: SessionDep) -> AuditService:
     return AuditService(session)
 
 
+def get_currency_service(session: SessionDep) -> CurrencyService:
+    return CurrencyService(session)
+
+
+def get_country_service(session: SessionDep) -> CountryService:
+    return CountryService(session)
+
+
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
+CurrencyServiceDep = Annotated[CurrencyService, Depends(get_currency_service)]
+CountryServiceDep = Annotated[CountryService, Depends(get_country_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 

@@ -13,6 +13,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     func,
@@ -123,4 +124,63 @@ class LoginAttempt(Base):
         CheckConstraint("scope in ('ip', 'account')", name="scope_known"),
         # Buckets nobody has touched for a while are prunable; nothing else reads this.
         Index("ix_login_attempts_updated_at", "updated_at"),
+    )
+
+
+class Currency(Base):
+    """ISO 4217. Reference data, keyed by the code everything else already speaks."""
+
+    __tablename__ = "currencies"
+
+    # Natural key: the code is what arrives in every feed and appears in every URL, so a
+    # surrogate id would add a join to almost every query and buy nothing.
+    code: Mapped[str] = mapped_column(String(3), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    symbol: Mapped[str | None] = mapped_column(String(8))
+    # How many decimal places the currency actually has. Two almost everywhere, zero for
+    # the yen, three for a few others. It is what says Numeric(12, 2) is the right shape,
+    # and the only thing that catches a second currency with different precision.
+    minor_units: Mapped[int] = mapped_column(SmallInteger, default=2, server_default="2")
+
+    __table_args__ = (
+        CheckConstraint("code = upper(code)", name="code_upper"),
+        CheckConstraint("minor_units between 0 and 4", name="minor_units_sane"),
+    )
+
+
+class Country(Base):
+    """ISO 3166-1 alpha-2, and the facts that are true whether or not we sell there.
+
+    Not the same thing as a market: a shop in Germany may deliver to Riga while we run no
+    German storefront at all. Germany still needs a row here, for its VAT rate and for the
+    shop to point at.
+    """
+
+    __tablename__ = "countries"
+
+    code: Mapped[str] = mapped_column(String(2), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    currency_code: Mapped[str] = mapped_column(ForeignKey("currencies.code"))
+    # Standard rate, as a fraction: 0.2100, not 21. It is multiplied, never divided by a
+    # hundred somewhere further down.
+    #
+    # Nullable because an unknown rate has to look unknown. Nothing is computed from this
+    # — prices are stored exactly as the buyer sees them — so the rate only ever explains
+    # why two prices differ, and a wrong one explains it wrongly and silently.
+    #
+    # Current rate, not a history: rates change, and when one does this column is updated
+    # and past explanations quietly become wrong. That is acceptable only as long as no
+    # arithmetic depends on it. The day it does, this becomes a table with valid_from.
+    vat_standard_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    # Customs, duty and the cross-border VAT rules all differ across this line, so what
+    # can be promised to a buyer differs with it.
+    is_eu: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    __table_args__ = (
+        CheckConstraint("code = upper(code)", name="code_upper"),
+        CheckConstraint(
+            "vat_standard_rate is null or vat_standard_rate between 0 and 1",
+            name="vat_is_a_fraction",
+        ),
+        Index("ix_countries_is_eu", "is_eu"),
     )
