@@ -20,6 +20,7 @@ from app.features.countries.service import CountryService
 from app.features.currencies.service import CurrencyService
 from app.features.markets.service import MarketService
 from app.features.rate_limit.service import LoginRateLimiter
+from app.features.shops.service import ShopService
 from app.features.users.schemas import Role, UserInDB
 from app.features.users.service import UserService
 
@@ -71,6 +72,10 @@ def get_catalog_service(session: SessionDep) -> CatalogService:
     return CatalogService(session)
 
 
+def get_shop_service(session: SessionDep) -> ShopService:
+    return ShopService(session)
+
+
 def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
@@ -84,6 +89,7 @@ CategoryServiceDep = Annotated[CategoryService, Depends(get_category_service)]
 AttributeServiceDep = Annotated[AttributeService, Depends(get_attribute_service)]
 BrandServiceDep = Annotated[BrandService, Depends(get_brand_service)]
 CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
+ShopServiceDep = Annotated[ShopService, Depends(get_shop_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 

@@ -22,6 +22,9 @@ from app.features.categories.admin_router import router as categories_router
 from app.features.countries.admin_router import router as countries_router
 from app.features.currencies.admin_router import router as currencies_router
 from app.features.markets.admin_router import router as markets_router
+from app.features.shops.admin_router import groups_router as shop_groups_router
+from app.features.shops.admin_router import router as shops_router
+from app.features.shops.admin_router import sources_router
 from app.features.users.admin_router import auth_public_router, auth_router, users_router
 
 admin_router = APIRouter(prefix="/admin", dependencies=[Depends(get_current_admin)])
@@ -36,6 +39,9 @@ admin_router.include_router(attributes_router)
 admin_router.include_router(brands_router)
 admin_router.include_router(products_router)
 admin_router.include_router(variants_router)
+admin_router.include_router(shop_groups_router)
+admin_router.include_router(shops_router)
+admin_router.include_router(sources_router)
 admin_router.include_router(category_attributes_router)
 
 # Sign-in cannot require a token. Keep this router to the routes that mint one.

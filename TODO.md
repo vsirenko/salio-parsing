@@ -51,6 +51,12 @@ and the questions that have to be answered with real data first, are written dow
 - [x] Brands, their aliases and the resolver the matcher will call
 - [x] The catalogue: products, variants, their attributes, barcodes and part numbers,
       with the title, slug and identity key derived
+- [x] Shops, the sources we read them through, the sellers behind them, and which
+      markets they are shown in
+- [ ] **Nothing knows where a shop delivers.** `shop_markets` records where its offers are
+      shown, and a human fills it in. A feed rarely states which countries it ships to and
+      a scraped page states it in prose, so until that is solved "cheapest" on a card is
+      cheapest for somebody rather than for the person reading it.
 - [ ] **Merging a variant is not built.** The tables are there so an id survives being
       merged away, but the operation has to move offers and price history with it and
       neither exists yet. Until it does, a duplicate found by the identity key can only

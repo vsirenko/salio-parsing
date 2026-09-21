@@ -680,3 +680,128 @@ class ProductMerge(Base):
         CheckConstraint("decided_by in ('rule', 'judge', 'human')", name="decided_by_known"),
         Index("ix_product_merges_into_id", "into_id"),
     )
+
+
+class ShopGroup(Base):
+    """One retail brand across several countries. Optional.
+
+    MediaMarkt DE and MediaMarkt ES are different legal entities with different prices and
+    different VAT, so they are different shops — but a buyer sees one logo. Nothing breaks
+    when a shop has no group; most will not.
+    """
+
+    __tablename__ = "shop_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(200))
+
+    __table_args__ = (CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),)
+
+
+class Shop(Base):
+    """The commercial party a buyer deals with.
+
+    Not a source. The source is the channel we read bytes through, and its trust — a feed
+    carrying barcodes is not a title scraped out of markup — has nothing to do with this
+    shop's standing among buyers. One shop may have several sources, and that is the point:
+    a feed and a scraper of the same shop converge on one offer instead of becoming two
+    shops on a card.
+
+    `country_code` points at `countries`, not at `markets`: a German shop delivering to
+    Riga needs a row even though we run no German storefront.
+    """
+
+    __tablename__ = "shops"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shop_group_id: Mapped[int | None] = mapped_column(ForeignKey("shop_groups.id"))
+    country_code: Mapped[str] = mapped_column(ForeignKey("countries.code"))
+    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(200))
+    website: Mapped[str | None] = mapped_column(String(1000))
+    # A marketplace holds many sellers behind one shop. An ordinary shop holds exactly one,
+    # which is itself — created with it, because otherwise every shop needs a second call
+    # that somebody will forget.
+    is_marketplace: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # What buyers think of it, which is not what we think of its feed.
+    rating: Mapped[Decimal | None] = mapped_column(Numeric(3, 2))
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
+        CheckConstraint("rating is null or rating between 0 and 5", name="rating_range"),
+        Index("ix_shops_country_code", "country_code"),
+    )
+
+
+class ShopMarket(Base):
+    """Where a shop's offers are shown.
+
+    Delivery is the reason, but the decision is ours: a shop may ship to Lithuania while we
+    choose not to show it there yet. Hence a flag of its own — a shop can be switched off in
+    one market without being touched in the others.
+    """
+
+    __tablename__ = "shop_markets"
+
+    shop_id: Mapped[int] = mapped_column(
+        ForeignKey("shops.id", ondelete="CASCADE"), primary_key=True
+    )
+    market_code: Mapped[str] = mapped_column(
+        ForeignKey("markets.code", ondelete="CASCADE"), primary_key=True
+    )
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    __table_args__ = (Index("ix_shop_markets_market_code", "market_code"),)
+
+
+class Source(Base):
+    """A channel we read a shop's offers through.
+
+    `trust` belongs here rather than on the shop: a feed that carries barcodes is more
+    reliable than a title scraped out of markup, and that says nothing about whether the
+    shop is any good. When offers disagree, this is what breaks the tie.
+    """
+
+    __tablename__ = "sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id", ondelete="CASCADE"))
+    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    kind: Mapped[str] = mapped_column(String(10))
+    trust: Mapped[str] = mapped_column(String(10), default="medium", server_default="medium")
+    base_url: Mapped[str | None] = mapped_column(String(1000))
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),
+        CheckConstraint("kind in ('feed', 'api', 'scrape')", name="kind_known"),
+        CheckConstraint("trust in ('high', 'medium', 'low')", name="trust_known"),
+        Index("ix_sources_shop_id", "shop_id"),
+    )
+
+
+class Seller(Base):
+    """Who is actually selling, within one shop.
+
+    Price history is keyed by seller, so the word has to mean something exact. An ordinary
+    shop has one, which is the shop. A marketplace has thousands, and treating the
+    marketplace itself as the seller would draw a single price line through forty
+    independent traders and present the gaps between them as movement.
+
+    Deliberately not modelled: the same trader on two marketplaces. That is a second
+    identity problem and it buys nothing for comparing prices.
+    """
+
+    __tablename__ = "sellers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shop_id: Mapped[int] = mapped_column(ForeignKey("shops.id", ondelete="CASCADE"))
+    # The shop's own id for the trader. For a shop that is its own seller, its slug.
+    external_id: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("shop_id", "external_id", name="uq_seller_per_shop"),)
