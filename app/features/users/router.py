@@ -4,17 +4,22 @@ from fastapi import APIRouter
 
 from app.api.deps import ClientIP, CurrentClient, UserServiceDep
 from app.core.config import settings
-from app.core.security import create_access_token, create_refresh_token, decode_token
-from app.schemas.auth import (
+from app.core.security import (
     Audience,
+    TokenType,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+)
+from app.features.users.schemas import (
     LoginRequest,
     PasswordChange,
     RefreshRequest,
     TokenPair,
-    TokenType,
+    UserInDB,
+    UserRead,
 )
 from app.schemas.common import ErrorResponse
-from app.schemas.user import UserInDB, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

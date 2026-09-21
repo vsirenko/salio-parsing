@@ -1,9 +1,14 @@
-"""Aggregates the client-facing /api routes. Add new resource routers here."""
+"""Aggregates the client-facing /api routes.
+
+Wiring only: every route itself lives in `app/features/<name>/router.py`. A new feature
+is mounted here and nowhere else.
+"""
 
 from fastapi import APIRouter
 
-from app.api.routes import auth, products
+from app.features.products.router import router as products_router
+from app.features.users.router import router as users_router
 
 api_router = APIRouter()
-api_router.include_router(auth.router)
-api_router.include_router(products.router)
+api_router.include_router(users_router)
+api_router.include_router(products_router)

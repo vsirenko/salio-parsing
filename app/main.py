@@ -8,13 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin_router import admin_public_router, admin_router
 from app.api.router import api_router
-from app.api.routes import health
-from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
 from app.core.error_handlers import register_error_handlers
 from app.core.logging import configure_logging
 from app.db.session import engine, session_factory
-from app.services.users import seed_users
+from app.features.audit.middleware import AuditMiddleware
+from app.features.health.router import router as health_router
+from app.features.users.service import seed_users
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def create_app() -> FastAPI:
 
     register_error_handlers(app)
 
-    app.include_router(health.router)
+    app.include_router(health_router)
     app.include_router(api_router, prefix=settings.api_prefix)
     app.include_router(admin_public_router, prefix=settings.api_prefix)
     app.include_router(admin_router, prefix=settings.api_prefix)

@@ -15,8 +15,8 @@ from starlette.types import ASGIApp
 
 from app.core.audit import open_context
 from app.core.net import client_ip
-from app.schemas.audit import AuditEntryCreate
-from app.services.audit import record_entry
+from app.features.audit.schemas import AuditEntryCreate
+from app.features.audit.service import record_entry
 
 logger = logging.getLogger(__name__)
 

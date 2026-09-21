@@ -8,8 +8,39 @@
   subclass, not a new handler. An error that needs a response header — `Retry-After` on
   a 429 — sets `headers` on its subclass and the one handler applies them.
 - Money is `Decimal`, never float.
-- New resource = `app/schemas/<x>.py` + `app/services/<x>.py` + `app/api/routes/<x>.py`,
-  then register the router in `app/api/router.py`.
+- The tree is sliced by feature, not by layer. Everything one feature needs sits in
+  `app/features/<name>/`:
+
+  ```
+  app/
+    main.py                 app assembly, middleware, lifespan
+    api/                    wiring only: deps.py, pagination.py, router.py,
+                            admin_router.py — no routes of its own
+    core/                   cross-cutting and feature-agnostic: config, logging,
+                            security (passwords, JWT), exceptions, error_handlers,
+                            audit context, net
+    db/                     base, models, session, query — every model in models.py
+    schemas/                only envelopes shared by every feature: Page, ErrorResponse
+    features/
+      products/             router.py  service.py  schemas.py
+      users/                router.py  admin_router.py  service.py  schemas.py
+      audit/                router.py  service.py  schemas.py  middleware.py
+      rate_limit/           service.py
+      health/               router.py
+  ```
+
+- New resource = a folder under `app/features/`, holding `schemas.py`, `service.py` and
+  `router.py` (plus `admin_router.py` if the admin panel touches it), then mounted in
+  `app/api/router.py` or `app/api/admin_router.py`. Mount it nowhere else.
+- Imports point one way: `features` may import `core`, `db` and `schemas`; those three
+  never import a feature. `api` wires features together and may import any of them.
+  `tests/test_architecture.py` enforces this — it fails on a new violation.
+- One feature imports another only where that other one is infrastructure for the rest:
+  `users/service.py` uses `rate_limit/service.py`, and that is the whole list. A new
+  cross-feature import is a design question, not a detail; answer it, then add it to the
+  allowed set in that test with the answer written down.
+- A feature folder holds what that feature needs and nothing more. `rate_limit` has no
+  router because nothing exposes it; `health` has no service because it has no state.
 - Service methods stay `async` even while storage is in-memory, so swapping in a real
   database does not touch the API layer.
 

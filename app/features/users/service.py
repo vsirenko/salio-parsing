@@ -8,13 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from app.core.security import AuthError, hash_password, verify_password
+from app.core.security import Audience, AuthError, hash_password, verify_password
 from app.db.models import User
 from app.db.query import paginated
-from app.schemas.auth import Audience
+from app.features.rate_limit.service import LoginRateLimiter, Scope
+from app.features.users.schemas import Role, UserCreate, UserInDB, UserUpdate
 from app.schemas.pagination import Pagination
-from app.schemas.user import Role, UserCreate, UserInDB, UserUpdate
-from app.services.rate_limit import LoginRateLimiter, Scope
 
 # Dev-only accounts, created on startup. `seed_users` is forced off in production.
 SEED_ACCOUNTS = (

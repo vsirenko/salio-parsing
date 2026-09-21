@@ -72,7 +72,7 @@ def clean_database(event_loop, schema):
 
     async def reset():
         from app.db.session import session_factory
-        from app.services.users import seed_users
+        from app.features.users.service import seed_users
 
         async with session_factory() as session:
             await session.execute(text(f"truncate {', '.join(TABLES)} restart identity cascade"))

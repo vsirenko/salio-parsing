@@ -9,14 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import audit
 from app.core.config import settings
 from app.core.net import client_ip
-from app.core.security import AuthError, ForbiddenError, decode_token
+from app.core.security import Audience, AuthError, ForbiddenError, TokenType, decode_token
 from app.db.session import get_session
-from app.schemas.auth import Audience, TokenType
-from app.schemas.user import Role, UserInDB
-from app.services.audit import AuditService
-from app.services.products import ProductService
-from app.services.rate_limit import LoginRateLimiter
-from app.services.users import UserService
+from app.features.audit.service import AuditService
+from app.features.products.service import ProductService
+from app.features.rate_limit.service import LoginRateLimiter
+from app.features.users.schemas import Role, UserInDB
+from app.features.users.service import UserService
 
 # auto_error=False so a missing header raises our own AuthError shape, not Starlette's.
 bearer_scheme = HTTPBearer(auto_error=False)

@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import get_product_service
 from app.api.pagination import pagination_params
+from app.features.products.schemas import ProductCreate, ProductRead
+from app.features.products.service import ProductService
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
-from app.schemas.product import ProductCreate, ProductRead
-from app.services.products import ProductService
 
 router = APIRouter(prefix="/products", tags=["products"])
 

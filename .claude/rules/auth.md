@@ -12,7 +12,10 @@
   `UserRead`.
 - `role` is not accepted from any public input. There is no public registration endpoint;
   accounts are created through `/api/admin/users`.
-- Passwords: argon2 via `app/core/security.py`. Never compare or store raw passwords.
+- Passwords: argon2 via `app/core/security.py`, which also mints and verifies the JWTs
+  and owns the token vocabulary — `Audience`, `TokenType`, `TokenPayload`. The sign-in
+  bodies built from them (`LoginRequest`, `TokenPair`, `PasswordChange`) are wire format
+  and live in `app/features/users/schemas.py`. Never compare or store raw passwords.
 - A password never travels through the user update schema. Changing one is its own
   endpoint, and changing your own means proving the current one first.
 - Accounts are retired with `is_active = false`, never deleted. The audit trail points at
@@ -39,7 +42,7 @@
   kill it.
 
 ## Sign-in rate limiting
-- Both login endpoints go through `LoginRateLimiter` (`app/services/rate_limit.py`),
+- Both login endpoints go through `LoginRateLimiter` (`app/features/rate_limit/service.py`),
   keyed per account and per address. A new endpoint that accepts a password takes the
   limiter with it.
 - Counters live in PostgreSQL, not in process memory: several api replicas share one

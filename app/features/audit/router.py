@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import AuditServiceDep
 from app.api.pagination import cursor_pagination_params
-from app.schemas.audit import AuditEntry, Outcome
+from app.features.audit.schemas import AuditEntry, Outcome
 from app.schemas.pagination import Page, Pagination
 
 router = APIRouter(prefix="/audit", tags=["admin: audit"])

@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, NotFoundError
 from app.db.models import Product
 from app.db.query import paginated
+from app.features.products.schemas import ProductCreate, ProductRead
 from app.schemas.pagination import Pagination
-from app.schemas.product import ProductCreate, ProductRead
 
 
 class ProductService:

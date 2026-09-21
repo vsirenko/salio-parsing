@@ -13,15 +13,39 @@ signature.
 """
 
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 import jwt
 from pwdlib import PasswordHash
+from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.exceptions import AppError
-from app.schemas.auth import Audience, TokenPayload, TokenType
 
 _password_hash = PasswordHash.recommended()  # argon2
+
+
+class Audience(StrEnum):
+    """JWT `aud`. A token minted for one panel is rejected by the other."""
+
+    CLIENT = "client"
+    ADMIN = "admin"
+
+
+class TokenType(StrEnum):
+    ACCESS = "access"
+    REFRESH = "refresh"
+
+
+class TokenPayload(BaseModel):
+    """Decoded and already-validated JWT claims."""
+
+    sub: int
+    aud: Audience
+    type: TokenType
+    # Checked against the account's current epoch, so a password change can end the
+    # sessions that were opened before it.
+    epoch: int
 
 
 class AuthError(AppError):

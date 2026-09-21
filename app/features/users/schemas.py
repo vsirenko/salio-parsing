@@ -1,8 +1,12 @@
-"""User schemas.
+"""User and session schemas.
 
 One entity for both audiences; `role` decides which panel the account may sign in to.
 `UserInDB` never leaves the service layer — routes return `UserRead`, which has no
 password hash on it by construction.
+
+The sign-in bodies live here too: they are this feature's wire format. The token
+vocabulary they are built from — `Audience`, `TokenType`, `TokenPayload` — belongs to
+`app/core/security.py`, which mints and verifies the tokens.
 """
 
 from datetime import datetime
@@ -66,3 +70,32 @@ class UserInDB(UserRead):
 
     password_hash: str
     token_epoch: int
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str
+
+
+class PasswordChange(BaseModel):
+    """Changing your own password. Proving the current one is what makes it yours."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class TokenPair(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int = Field(description="Access token lifetime in seconds")

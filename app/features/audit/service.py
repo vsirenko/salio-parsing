@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import AuditEntry as AuditEntryRow
 from app.db.query import paginated
 from app.db.session import session_factory
-from app.schemas.audit import AuditEntry, AuditEntryCreate, Outcome
+from app.features.audit.schemas import AuditEntry, AuditEntryCreate, Outcome
 from app.schemas.pagination import Pagination
 
 # status >= 400 is a failure; expressed here so the filter can run in SQL.
