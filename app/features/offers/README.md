@@ -141,7 +141,15 @@ shop wrote in between stayed on, so 211 of 1524 catalogue entries were named
 takes the longest name the registry knows: whole words, longest wins, two different names
 decide nothing. Measured before it was written, a known name sits whole in 77% of bm's
 titles and 88% of m79's, where their own rules agreed with the rest of the market on 21%
-and 26%. A title holding no known name keeps what the shop's rule read. The registry
+and 26%. A title holding no known name keeps what the shop's rule read — and so does one
+that carries a known name on with a variant word (`Pro`, `Max`, `Ultra`, `Plus`, `Fold`,
+`FE`…): `iPhone 16` inside `iPhone 16 Pro` is the sibling, and before this was checked the
+registry, knowing only the shorter name, filed 21 listings under the neighbouring phone. A
+gap in the registry has to read as a gap. For the same reason a stated maker the catalogue
+knows but the registry has no page for reads nothing from it, where it used to read every
+maker's page: ZTE has none, Hammer's holds `Blade`, and four ZTE phones were one entry. A
+brand field naming no maker we know (`Nothing Phone`, a reseller) still opens every page.
+The registry
 itself — where it came from, why it is per brand, why `+` survives — is described in
 [brands](../brands/README.md), "The model registry".
 

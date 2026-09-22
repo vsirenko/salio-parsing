@@ -526,14 +526,14 @@ and the questions that have to be answered with real data first, are written dow
       30 promoted into entries of their own and 3 queued. Tick this off once it has run for
       real. Left after it: the display spelling (`Galaxy S25+` beside `Galaxy S25 Plus` as
       entry names) is registry work, and so are junk names like `S26+ 5G 256GB`.
-- [ ] **The registry reader cuts a model at the longest name it knows, so a missing name
-      becomes its sibling.** `iPhone 16 Pro` reads as `iPhone 16` because `iphone 16 pro` is
-      not in `model_aliases`: 21 readings on 22.09.2026, all bm and discover — `iPhone 16 Pro`
-      7, `iPhone 14 Pro`/`Pro Max` 6, `iPhone 15 Pro Max` 5, `Pixel 9 Pro Fold` 3, `Redmi Note
-      14 Pro+` 3. The rows are data entry and a reparse. The structural question is whether
-      `models.py` should decline a name the title continues with a variant word (`Pro`, `Max`,
-      `Ultra`, `Plus`, `Fold`, `FE`…), which is what the plus bug and this one have in common:
-      a name that is almost right, read confidently.
+- [x] **The registry reader cut a model at the longest name it knew, so a missing name
+      became its sibling.** `iPhone 16 Pro` read as `iPhone 16`: 21 readings, bm and discover.
+      `models.from_title` now refuses a name the title continues with a variant word, the
+      seven missing names are registry rows, and a stated maker with no page no longer reads
+      another maker's (ZTE through Hammer's `Blade`). Re-read over 9096 listings on
+      22.09.2026: 23 readings changed, none from right to wrong. Left visible rather than
+      wrong: bm's `REDMAGIC 11 Air Gaming Phone 5G` (6) and a TTfone title — ZTE/Nubia and
+      TTfone need pages.
 - [ ] **Ask the judge whether a rule's match names the same model.** Probed over all 8982 live
       matches on 22.09.2026 (title, brand and entry name only, never our parsed model): 315
       flagged at P(same)<0.5, 108 of them the plus misfiles. Of the other 207, P(same)<0.1 held

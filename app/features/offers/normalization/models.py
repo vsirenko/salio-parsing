@@ -16,6 +16,31 @@ from collections.abc import Mapping
 
 from app.features.brands.normalization import LONGEST_MODEL_NAME, normalize_model_name
 
+# The words a maker adds to a name to make another phone of the same line. A known name the
+# title carries on with one of these is not the name the title holds: `iPhone 16` inside
+# `iPhone 16 Pro` is the sibling, and reading it as the name filed seven Pro listings under
+# the plain phone before this was checked. Not vocabulary in the sense `reading.md` means:
+# a maker's variant word is the same word in every language, and what it does to a name —
+# makes it another one — is true of every maker.
+VARIANT_WORDS = frozenset(
+    {
+        "pro",
+        "max",
+        "ultra",
+        "plus",
+        "fold",
+        "flip",
+        "fe",
+        "lite",
+        "mini",
+        "neo",
+        "edge",
+        "power",
+        "xl",
+        "prime",
+    }
+)
+
 
 def from_title(title: str, names: Mapping[str, str]) -> str | None:
     """The longest of a maker's names found whole in the title, or nothing.
@@ -29,6 +54,11 @@ def from_title(title: str, names: Mapping[str, str]) -> str | None:
     bundle — `Galaxy S23 + Watch 5` — or a listing naming two phones, and picking one is a
     wrong answer rather than half of one.
 
+    A name the title carries on with a variant word is not found there at all: `iPhone 16
+    Pro` does not hold `iPhone 16`, it holds a name the registry has not been given. Nothing
+    is the answer then, and the shop's own reading stands — a gap in the registry shows up as
+    a gap rather than as the neighbouring phone.
+
     Every window of up to `LONGEST_MODEL_NAME` words is looked up, rather than every alias
     tried against the title: a few hundred lookups per title however large the registry.
     """
@@ -41,13 +71,39 @@ def from_title(title: str, names: Mapping[str, str]) -> str | None:
 
     longest = 0
     found: set[str] = set()
+    # Words inside a name the title carries on with a variant word. The shorter names within
+    # it are not found either: with `blade v70` refused in `Blade V70 Max`, `blade` would
+    # otherwise win and the reading would lose the half it had.
+    # Only windows lying wholly inside one: `galaxy s26 ultra` overlaps the refused `galaxy
+    # s26` in `Galaxy S26 Ultra 5G` and is exactly the name the title holds.
+    refused: list[range] = []
+    for start in range(len(words)):
+        for length in range(1, min(LONGEST_MODEL_NAME, len(words) - start) + 1):
+            window = " ".join(words[start : start + length])
+            if window in names and _continued(words, start + length):
+                refused.append(range(start, start + length))
     for start in range(len(words)):
         for length in range(1, min(LONGEST_MODEL_NAME, len(words) - start) + 1):
             model = names.get(" ".join(words[start : start + length]))
-            if model is None:
+            end = start + length
+            if model is None or any(r.start <= start and end <= r.stop for r in refused):
                 continue
             if length > longest:
                 longest, found = length, {model}
             elif length == longest:
                 found.add(model)
     return found.pop() if len(found) == 1 else None
+
+
+def _continued(words: list[str], end: int) -> bool:
+    """Whether the word after a window makes the name another phone.
+
+    `Galaxy S26+ Plus` is the one exception: a shop that writes the plus twice has not named
+    a second model, so a `plus` after a name already ending in one continues nothing.
+    """
+    if end >= len(words):
+        return False
+    following = words[end].rstrip("+")
+    if following not in VARIANT_WORDS:
+        return False
+    return not (following == "plus" and words[end - 1].endswith(("+", "plus")))

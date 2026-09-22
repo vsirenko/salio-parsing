@@ -24,7 +24,7 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-9"
+VERSION = "phones-10"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -219,14 +219,27 @@ def _from_the_registry(
     S26 S942 5G Dual Sim` — and the name is still in the title, whole. When it is not, the
     shop's own reading stands; this fills nothing in and only replaces.
 
-    Scoped to the maker the shop stated, when the registry holds a page for it. A shop that
-    states none — m79's German feed — gets every page, and only an answer exactly one of
-    them gives: `Note 17` under two makers is a question for the brand rung, not for this.
+    Scoped to the maker the shop stated. A shop that states none — m79's German feed — gets
+    every page, and only an answer exactly one of them gives: `Note 17` under two makers is a
+    question for the brand rung, not for this.
+
+    A maker the shop stated, that the catalogue knows, and that has no page gets nothing,
+    not every page. That fallback read another maker's names into this one's titles: ZTE has
+    no page, Hammer's has `Blade`, and `ZTE Blade A31 lite` and `ZTE Blade A76 5G` were read
+    as a Hammer model name and filed together under one entry, nine listings of four
+    different phones. A stated string that is no maker we know — `Nothing Phone`, the
+    reseller `Getnord`, `product` — still gets every page: there the brand field says
+    nothing, and the fallback is what finds the name.
     """
     if not vocabulary.models:
         return {}
     maker = _maker_key(fields.get("brand_raw"))
-    pages = [vocabulary.models[maker]] if maker in vocabulary.models else vocabulary.models.values()
+    if maker in vocabulary.models:
+        pages = [vocabulary.models[maker]]
+    elif str(fields.get("brand_raw") or "").strip().casefold() in vocabulary.brand_names:
+        return {}
+    else:
+        pages = list(vocabulary.models.values())
     for text in (fields.get("title"), fields.get("model")):
         if not text:
             continue

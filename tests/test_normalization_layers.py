@@ -107,10 +107,10 @@ def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
     assert version_for(KSENUKAI) == "generic-1+ksenukai-5"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-9+ksenukai-5"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-10+ksenukai-5"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-9+ksenukai-5"
+        == "generic-1+phones-10+ksenukai-5"
     )
 
 
@@ -258,7 +258,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-9+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-1+phones-10+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -475,23 +475,23 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-phones-2": "0856e8e1b4a5",
-    "bigbox-4": "c8d0450d4ad8",
-    "bm-2": "df8fb9de5bff",
+    "apple-phones-2": "f940eea49212",
+    "bigbox-4": "6e7e74b83ca7",
+    "bm-2": "7a3d7ac028a2",
     "cec-1": "e0252dfe4696",
-    "dateks-2": "28ca1e200e23",
-    "discover-2": "113eaca94ea9",
-    "google-phones-3": "b11089929d14",
-    "ksenukai-5": "89aa740d025f",
-    "m79-5": "188f71c2aa1c",
-    "oneplus-phones-1": "8d9ee7915042",
-    "mdata-1": "4c3e79e938e3",
-    "onea-1": "3f30745390d5",
+    "dateks-2": "323fc66f73e7",
+    "discover-2": "4eac3808c544",
+    "google-phones-3": "b13ca41b33fa",
+    "ksenukai-5": "90236ca60ef0",
+    "m79-5": "3b6eeff1998f",
+    "oneplus-phones-1": "29eaabd5e1ad",
+    "mdata-1": "474fbb01bcb9",
+    "onea-1": "958859debd73",
     "euronics-1": "e61bf95a7a78",
-    "phones-9": "c77f2d09b65a",
+    "phones-10": "94466890c645",
     "rdveikals-4": "f5078e0afc82",
-    "samsung-phones-2": "5fa9e1989091",
-    "tet-2": "a49facbac61d",
+    "samsung-phones-2": "9653d4e6a46a",
+    "tet-2": "0e2bb4bd31c5",
 }
 
 
@@ -507,12 +507,45 @@ def _fingerprints() -> dict[str, str]:
     Prose is deliberately not hashed. A `why` is written inside the ruleset literal and
     editing one changes nothing about what a reading comes out as, so it should not force
     three thousand rows to be recomputed.
+
+    The shared modules a ruleset imports are hashed with it — `models.py`, `colours.py`,
+    `naming.py`, `barcodes.py`. Hashing the ruleset's own module alone missed the second
+    change of the same kind: a guard added to `models.from_title` moved no fingerprint, and
+    `phones` would have kept its version over a different reading. The framework — `rules`
+    and the package itself — is left out: it is every ruleset's, and changing it already
+    means the whole suite.
     """
     import hashlib
     import inspect
     import re
 
     from app.features.offers.normalization.rules import BRANDS, CATEGORIES, PRODUCTS, SOURCES
+
+    package = "app.features.offers.normalization"
+    framework = {package, f"{package}.rules"}
+
+    def shared(module) -> list:
+        """The package's own modules this one imports, as modules or through a name."""
+        found = set()
+        for value in vars(module).values():
+            other = value if inspect.ismodule(value) else inspect.getmodule(value)
+            name = getattr(other, "__name__", "")
+            if other is not module and name.startswith(package) and name not in framework:
+                found.add(other)
+        return sorted(found, key=lambda m: m.__name__)
+
+    def hash_module(digest, module) -> None:
+        for name, value in sorted(vars(module).items()):
+            if inspect.isfunction(value) and inspect.getmodule(value) is module:
+                digest.update(name.encode())
+                digest.update(inspect.getsource(value).encode())
+            elif isinstance(value, frozenset) and not name.startswith("__"):
+                # Sorted: a set of strings iterates in an order that changes per process.
+                digest.update(f"{name}={sorted(value, key=repr)!r}".encode())
+            elif isinstance(value, (int, float, str, tuple)) and not name.startswith("__"):
+                digest.update(f"{name}={value!r}".encode())
+            elif isinstance(value, re.Pattern):
+                digest.update(f"{name}={value.pattern!r}".encode())
 
     seen: dict[str, str] = {}
     for registry in (CATEGORIES, SOURCES, BRANDS, PRODUCTS):
@@ -524,16 +557,10 @@ def _fingerprints() -> dict[str, str]:
 
             module = inspect.getmodule(bodies[0])
             digest = hashlib.sha256()
-            for name, value in sorted(vars(module).items()):
-                if inspect.isfunction(value) and inspect.getmodule(value) is module:
-                    digest.update(name.encode())
-                    digest.update(inspect.getsource(value).encode())
-                elif isinstance(value, (int, float, str, tuple, frozenset)) and not name.startswith(
-                    "__"
-                ):
-                    digest.update(f"{name}={value!r}".encode())
-                elif isinstance(value, re.Pattern):
-                    digest.update(f"{name}={value.pattern!r}".encode())
+            hash_module(digest, module)
+            for other in shared(module):
+                digest.update(other.__name__.encode())
+                hash_module(digest, other)
             # The ids say which rules exist; the rest says what they do.
             digest.update(",".join(sorted(rule.id for rule in ruleset.rules)).encode())
             seen[ruleset.version] = digest.hexdigest()[:12]
@@ -645,6 +672,40 @@ def test_the_longest_known_name_wins_and_a_plus_is_a_different_phone():
     assert plus["model"] == "Galaxy S26+"
 
 
+def test_a_known_name_the_title_carries_on_is_not_the_name_it_holds():
+    """bm wrote `Apple iPhone 16 Pro 1TB`; the registry knew `iPhone 16` and not the Pro, and
+    the longest known name filed seven Pro listings under the plain phone. A name followed by
+    a variant word is a name the registry has not been given, so the shop's reading stands."""
+    words = Vocabulary(models={"apple": {"iphone 16": "iPhone 16"}, **REGISTRY})
+    pro = read(
+        {"name": "Apple iPhone 16 Pro 1TB White Titanium", "brand": "Apple", "model": "as read"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert pro["model"] == "as read"
+    plain = read(
+        {"name": "Apple iPhone 16 128GB Black", "brand": "Apple", "model": "as read"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert plain["model"] == "iPhone 16"
+    # Nor does a shorter name inside the refused one win in its place.
+    zte = Vocabulary(models={"zte": {"blade": "Blade", "blade v70": "Blade V70"}})
+    max_ = read(
+        {"name": "ZTE Blade V70 Max 8/256GB", "brand": "ZTE", "model": "as read"},
+        category=PHONES,
+        vocabulary=zte,
+    )
+    assert max_["model"] == "as read"
+    # A shop writing the plus twice has not named a second phone.
+    twice = read(
+        {"name": "Samsung Galaxy S26+ Plus 5G 512GB Black", "brand": "Samsung"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert twice["model"] == "Galaxy S26+"
+
+
 def test_a_title_naming_two_models_keeps_what_the_shop_s_rule_read():
     """A bundle, or a listing that names two phones: picking one is a wrong answer rather
     than half of one, so the reading the layers before this one produced stands."""
@@ -675,6 +736,26 @@ def test_a_maker_the_shop_did_not_state_is_found_through_every_page():
         vocabulary=Vocabulary(models=REGISTRY),
     )
     assert fields["model"] == "Redmi Note 17"
+
+
+def test_a_stated_maker_with_no_page_is_not_read_through_another_maker_s():
+    """ZTE has no page and Hammer's holds `Blade`; reading every page for a stated maker
+    filed four different ZTE phones under one Hammer name."""
+    fields = read(
+        {"name": "ZTE Blade A31 lite 32GB", "brand": "ZTE", "model": "as read"},
+        category=PHONES,
+        vocabulary=Vocabulary(
+            models={"hammer": {"blade": "Blade"}, **REGISTRY}, brand_names=frozenset({"zte"})
+        ),
+    )
+    assert fields["model"] == "as read"
+    # A brand field that names no maker we know says nothing, and every page is read.
+    unknown = read(
+        {"name": "Samsung Galaxy S26 5G 256GB", "brand": "Samsung Smartphone", "model": "x"},
+        category=PHONES,
+        vocabulary=Vocabulary(models=REGISTRY, brand_names=frozenset({"samsung"})),
+    )
+    assert unknown["model"] == "Galaxy S26"
 
 
 def test_with_no_registry_the_shop_s_reading_stands():
