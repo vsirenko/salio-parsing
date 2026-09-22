@@ -389,7 +389,34 @@ and the questions that have to be answered with real data first, are written dow
       single phrase. A run breaks on anything but a space, because `Black/Orange` means
       both and joining those reads it as `orange`.
       Corpus 96.4% -> 97.4%, queue 336 -> 245, `brand_unresolved` 113 -> 29.
-- [ ] **`titanium` is a material and the registry calls it a colour.** It is the single
+- [x] **`titanium` is a material and the registry called it a colour — removed.** It was
+      winning over the real colour: `Blue Titanium` read as titanium, and two catalogue
+      entries held the desert, the natural and the white iPhone 16 Pro Max as one product
+      with their prices compared as one. Removing the value and its two aliases, and
+      clearing the axis off the 23 variants that held it, let 205 of the 248
+      titanium-titled listings read a real colour — black 73, silver 44, grey 30, blue 23,
+      white 19. It also unblocked Samsung's `Titanium Silverblue` line, which was the known
+      cost written down when the title rule landed.
+      What was left is Apple's own phrases, now in `apple-phones-2`: `desert titanium` gold
+      (one Apple shop states it, and `desert` reads gold in 4 shops of 4 across every maker
+      that uses the word), `natural titanium` grey (one shop, 5 listings, uncontested).
+      `lunar titanium` and `stellar titanium` are declared and unwritten — `lunar` gets four
+      different answers from four shops.
+      `colours.from_title` takes multi-word keys for this, which is what Motorola's forty
+      PANTONE names will need too: `Cosmic Orange` and `Cosmic Black` share a word and are
+      two colours, so the word is not the unit.
+- [ ] **480 live matches have a colour the entry contradicts, every one of them by
+      barcode.** Most are granularity and harmless — blue against dark-blue 18, red against
+      burgundy 16, grey against graphite 16 — where the barcode is right and two shops
+      describe one shade differently. A handful are not: grey against black 17, silver
+      against black 12, blue against white 11. One was traced all the way: a bigbox
+      `White Titanium` listing with no barcode became an entry, an rdveikals
+      `Natural Titanium` listing matched it on the model while both still read `titanium`,
+      the match looked complete because the wrong axis agreed, and `_learn_gtin` gave the
+      entry that listing's barcode. Now the listing finds itself by that barcode on every
+      pass and the GTIN rung never checks a colour. A wrong axis hardened into proof.
+      Worth separating the family-level conflicts from the shade-level ones and dropping
+      the learned barcodes behind the first kind. It is the single
       worst word in the corpus for disagreeing with what shops state in a field: 44 of the
       320 disagreements are `Titanium Silverblue` and friends, where the shop's own field
       says silver, white or green. Until it is settled, a rule that reads a colour out of a

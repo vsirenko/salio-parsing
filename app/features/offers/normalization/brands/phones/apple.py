@@ -27,15 +27,35 @@ needed — and does it by construction instead of by a rule remembering to.
 import re
 from typing import Any
 
+from app.features.offers.normalization import colours
 from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabulary, register
 
 CATEGORY = "phones"
 BRAND_KEY = "apple"
-VERSION = "apple-phones-1"
+VERSION = "apple-phones-2"
 
 # `MG014HX/A`: five of configuration, two of market, then the suffix Apple puts on
 # everything it sells at retail.
 PART_NUMBER = re.compile(r"^([A-Z0-9]{5})([A-Z]{2})/A$")
+
+# Apple's own names for a colour, as phrases: the word alone is not the unit, because
+# `Cosmic Orange` and `Cosmic Black` share one. Only the two the shops agree about — the
+# rest are declared and unwritten below.
+PALETTE = {
+    "desert titanium": "gold",
+    "natural titanium": "grey",
+}
+
+
+def _palette(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The maker's name for a colour, when nothing else found one."""
+    identity = fields.get("identity", {})
+    if identity.get("color"):
+        return {}
+    found = colours.from_title(fields.get("title") or "", PALETTE)
+    return {"identity": {**identity, "color": found}} if found else {}
 
 
 def _configuration(
@@ -88,6 +108,45 @@ RULESET = register(
                     " two machines filed as one, confidently, with nothing queued to say it"
                     " happened. The identity key is where this belongs, because it compares"
                     " capacity at the same time instead of trusting a rule to remember."
+                ),
+            ),
+            Rule(
+                id="apple-palette",
+                layer=BRAND,
+                why=(
+                    "`titanium` was a value in the colour registry and had to go: it is a"
+                    " material, not a colour, and it was winning. `Blue Titanium` read as"
+                    " titanium, `Desert Titanium` read as titanium, and two catalogue"
+                    " entries held the desert, the natural and the white iPhone 16 Pro Max"
+                    " as one product with their prices compared as one. Removing it let 205"
+                    " of the 248 titanium-titled listings read a real colour — black 73,"
+                    " silver 44, grey 30, blue 23, white 19 — because the other word in the"
+                    " phrase was the colour all along."
+                    "\n\n"
+                    "What it did not settle is the two phrases where the other word is"
+                    " Apple's own. `Desert Titanium` is gold: one Apple shop states it in a"
+                    " field, and `desert` reads gold in 4 shops of 4 across every maker that"
+                    " uses it, which is the case where a word is not a maker's invention but"
+                    " a plain description. `Natural Titanium` is grey on one shop's 5"
+                    " listings and nobody contradicts it — the phrase names unpainted metal."
+                    "\n\n"
+                    "Phrases rather than words, because `Cosmic Orange` and `Cosmic Black`"
+                    " share a word and are two colours. That is also why the palette holds"
+                    " no single word that appears inside one of its phrases."
+                ),
+                body=_palette,
+            ),
+            Rule(
+                id="apple-contested-titanium",
+                layer=BRAND,
+                why=(
+                    "`Lunar Titanium` and `Stellar Titanium` are declared and unwritten."
+                    " `Lunar` gets four different answers from four shops — grey, white,"
+                    " blue and a two-tone — which is not a disagreement to resolve but an"
+                    " absence of evidence. `Stellar` is blue in 3 shops, silver in 2 and"
+                    " black in 1, which is a real split. Half a canonicalisation is worse"
+                    " than none: a colour mapped wrongly splits one product into several,"
+                    " confidently."
                 ),
             ),
         ),

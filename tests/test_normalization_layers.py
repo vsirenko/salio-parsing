@@ -253,7 +253,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-7+apple-phones-1"
+    assert fields["ruleset_version"] == "generic-1+phones-7+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -282,6 +282,33 @@ def test_a_part_number_of_another_shape_is_left_alone():
     fields = read({"name": "x", "brand": "Apple", "mpn": "SOMETHING-ELSE"}, category=PHONES)
     assert "apple_config" not in fields["identity"]
     assert fields["mpn"] == "SOMETHING-ELSE"
+
+
+def test_a_maker_s_name_can_be_a_phrase_and_the_word_alone_is_not_the_unit():
+    """`Cosmic Orange` and `Cosmic Black` share a word and are two colours, so Apple's
+    palette is keyed on phrases. `titanium` used to win over both halves of these, which is
+    why it is no longer a colour the registry holds."""
+    desert = read(
+        {"name": "Apple iPhone 16 Pro Max 256GB Desert Titanium", "brand": "Apple"},
+        category=PHONES,
+    )
+    assert desert["identity"]["color"] == "gold"
+    natural = read(
+        {"name": "Apple iPhone 16 Pro 1TB Natural Titanium", "brand": "Apple"},
+        category=PHONES,
+    )
+    assert natural["identity"]["color"] == "grey"
+
+
+def test_the_titanium_phrases_the_shops_disagree_about_stay_unwritten():
+    """`Lunar` gets four answers from four shops and `Stellar` three."""
+    brand_rules = [r for r in rules_for(category=PHONES, brand="apple") if r.layer == BRAND]
+    contested = next(r for r in brand_rules if r.id == "apple-contested-titanium")
+    assert contested.pending
+    fields = read(
+        {"name": "Apple iPhone 17 Pro 512GB Lunar Titanium", "brand": "Apple"}, category=PHONES
+    )
+    assert "color" not in fields["identity"]
 
 
 def test_a_maker_s_own_name_for_a_colour_is_read_in_its_own_layer():
@@ -407,7 +434,7 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-phones-1": "12a9fce3575e",
+    "apple-phones-2": "0856e8e1b4a5",
     "bigbox-4": "c8d0450d4ad8",
     "bm-2": "df8fb9de5bff",
     "cec-1": "e0252dfe4696",

@@ -81,14 +81,28 @@ def from_title(title: str, palette: dict[str, str]) -> str | None:
     substring match would read both of them as the wrong colour with the same confidence as
     a right one.
 
+    A key may be several words: Apple names a colour `Desert Titanium` and Motorola names
+    forty of them with two words apiece, and the word alone is not the unit — `Cosmic
+    Orange` and `Cosmic Black` are one word and two colours. A multi-word key matches a
+    run of words in that order and nothing else.
+
     Two of a maker's names in one title decides nothing. That is a two-tone phone or a
     bundle — `Galaxy S23 Plus melna + Watch 5` — and picking one of them is a wrong answer
-    rather than half of one.
+    rather than half of one. A palette must therefore not hold both a phrase and a word
+    inside it, or every title carrying the phrase would carry two answers and get none.
     """
     if not title or not palette:
         return None
-    words = set(_WORDS.findall(title.casefold()))
-    found = {colour for word, colour in palette.items() if word in words}
+    words = _WORDS.findall(title.casefold())
+    seen = set(words)
+    found = set()
+    for name, colour in palette.items():
+        parts = name.split()
+        if len(parts) == 1:
+            if parts[0] in seen:
+                found.add(colour)
+        elif any(words[at : at + len(parts)] == parts for at in range(len(words))):
+            found.add(colour)
     return found.pop() if len(found) == 1 else None
 
 
