@@ -223,14 +223,16 @@ and the questions that have to be answered with real data first, are written dow
 - [x] An enum axis reaches the variant and takes part in the comparison, which the code said
       it could not until something resolved a value.
 - [x] A match reconciles: it fills in axes the entry never had. Colour merges 327 → 157.
-- [ ] **157 entries still hold two colours, and the cause is missing data rather than a weak
-      comparison.** Two of the three shops state no colour at all, so their red and their
-      black listings are the same thing to anything that reads them, and a model match
-      between them looks fully confirmed because neither side carries the axis that would
-      disagree. The bar that settles it is every axis the *category* calls identity-bearing,
-      known on both sides: `category_attributes.identity_bearing` exists and nothing
-      consults it. Until then a barcode learned from such a match is the thing that hardens
-      the error, which is why the gate was tightened rather than the rule removed.
+- [x] A match is only complete when every axis the *category* calls identity-bearing was
+      known on both sides — not every axis the listing happened to carry. Two of three shops
+      state no colour, so their listings agreed on everything they had, and that silence
+      counted as agreement. Learned barcodes 478 → 35, entries holding two colours 157 → 50.
+- [ ] **50 entries still hold two colours**, all of them between listings of the two shops
+      that publish no colour at all. Nothing in the reading can separate them, so this is a
+      collection problem rather than a matching one: either those shops state it somewhere
+      not yet read, or a third shop's barcode has to arrive and split them. Worth measuring
+      before anything is built — bigbox leaves colour in the title, which is the 358-form
+      problem `phones-color` refuses on purpose.
 - [ ] **Two shops disagree about three barcodes.** BigBox says `Iekšējā atmiņa, GB: 512GB`
       for a phone whose own title reads `4/128GB`, and lists 256 GB and 64 GB where
       rdveikals lists 128 GB and 256 GB for the same barcodes. We read the param over the

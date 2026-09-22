@@ -157,11 +157,18 @@ a judge does. A bucket without them needs someone to go and look first.
   entry has no colour to disagree with is not agreement, and treated as such it put a black
   phone's barcode onto a blue one's entry — permanently, at confidence 1.00 from then on.
   Tightening it took the learned barcodes from 758 to 478 with no loss of matching.
-  What remains is not a comparison that is too weak but data that is not there: two shops
-  state no colour at all, so their red and their black listings are indistinguishable to
-  anything that reads them. The bar that would settle it is every axis the *category* calls
-  identity-bearing, known on both sides — `category_attributes.identity_bearing` exists for
-  exactly that and nothing consults it yet.
+  The bar is every axis the **category** calls identity-bearing, known on both sides, not
+  every axis the listing happened to carry. The difference is what silence means. Two of the
+  three collected shops state no colour at all, so a red and a black listing from either of
+  them carry the same axes, agree on all of them, and under the weaker reading that counted
+  as full agreement — which is how a black phone's barcode reached a blue one's entry.
+  `category_attributes.identity_bearing` is where a category says which attributes tell its
+  products apart, and it is a property of the pair rather than of the attribute: a capacity
+  separates two phones and would mean nothing on a monitor. A category that declares none
+  leaves the older bar standing, because requiring nothing would make every match complete.
+  Measured over the same three shops: learned barcodes 478 → 35, entries holding two colours
+  157 → 50. The matches themselves are unchanged — what changed is which of them are trusted
+  enough to write proof.
 - **A match rewrites this listing's price and availability rows** to point at the variant.
   That is the cost of denormalizing the hint onto the series, and it is real: the number of
   rows rewritten grows with how long the listing has existed. Bounded to one listing, which

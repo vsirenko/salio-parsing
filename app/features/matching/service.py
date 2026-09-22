@@ -16,6 +16,7 @@ from app.db.models import (
     AvailabilityEvent,
     Brand,
     BrandAlias,
+    CategoryAttribute,
     MatchQueue,
     NormalizedOffer,
     Offer,
@@ -391,6 +392,8 @@ class MatchingService:
             elif canonical is not None:
                 held.setdefault(variant_id, {})[key] = canonical
 
+        required = await self._identity_axes(variant_ids)
+
         agreed: list[int] = []
         unverifiable: list[int] = []
         complete: set[int] = set()
@@ -401,9 +404,35 @@ class MatchingService:
                 unverifiable.append(variant_id)
             elif all(theirs[key] == wanted[key] for key in shared):
                 agreed.append(variant_id)
-                if shared == set(wanted):
+                # Complete means the axes the *category* says tell its products apart were
+                # all known on both sides — not merely that everything the listing happened
+                # to carry was weighed. Two shops that state no colour make a red and a
+                # black phone look identical, and under the weaker reading that silence
+                # counted as agreement.
+                wanted_here = required.get(variant_id) or set(wanted)
+                if wanted_here <= shared:
                     complete.add(variant_id)
         return IdentityCheck(sorted(agreed), sorted(unverifiable), True, frozenset(complete))
+
+    async def _identity_axes(self, variant_ids: list[int]) -> dict[int, set[str]]:
+        """Which axes each candidate's category says tell its products apart.
+
+        `category_attributes.identity_bearing` is where that is written down, and it is a
+        property of the pair rather than of the attribute: a capacity tells two phones apart
+        and would mean nothing on a monitor. A category that declares none leaves the older
+        rule standing — everything the listing carried — because requiring nothing would
+        make every match complete, which is the opposite of the intent.
+        """
+        rows = await self.session.execute(
+            select(Variant.id, Attribute.key)
+            .join(CategoryAttribute, CategoryAttribute.category_id == Variant.category_id)
+            .join(Attribute, Attribute.id == CategoryAttribute.attribute_id)
+            .where(Variant.id.in_(variant_ids), CategoryAttribute.identity_bearing.is_(True))
+        )
+        axes: dict[int, set[str]] = {}
+        for variant_id, key in rows.all():
+            axes.setdefault(variant_id, set()).add(key)
+        return axes
 
     async def _reconcile(self, variant_id: int, reading: NormalizedOffer) -> None:
         """Fill in axes the variant does not have, from a listing that just matched it.

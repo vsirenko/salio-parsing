@@ -1175,3 +1175,99 @@ def test_a_barcode_is_kept_only_when_every_axis_was_weighed(client):
     )
     assert run_on(client, token, coloured)["method"] == "brand_model"
     assert gtins_of(client, token, variant_id) == {"4006381333931"}, "the barcode was not kept"
+
+
+def test_a_silent_axis_is_not_agreement(client):
+    """Two shops that state no colour make a red and a black phone look identical, and the
+    weaker reading counted that silence as agreement: everything the listing carried was
+    weighed, because it carried nothing that could disagree. The bar is what the *category*
+    says tells its products apart."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    # An entry from a shop that states capacity and never colour.
+    silent = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, silent)["variant_id"]
+
+    # Another listing from the same silent shop: same model, same capacity, and in truth a
+    # different colour that neither side can say. It still matches — there is nothing to
+    # separate them on — but its barcode must not be written onto the entry, because that
+    # is what turns the guess into proof for everything that comes after.
+    also_silent = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "5902983617747",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-2",
+    )
+    assert run_on(client, token, also_silent)["method"] == "brand_model"
+    assert gtins_of(client, token, variant_id) == {"4006381333931"}, "the barcode was not kept"
+
+
+def test_a_category_with_no_declared_axes_keeps_the_older_bar(client):
+    """Requiring nothing would make every match complete, which is the opposite of the
+    intent. Where a category declares no identity axes, what the listing carried stands."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    client.patch(
+        f"/api/admin/categories/{category['id']}/attributes/"
+        + str(
+            client.get(
+                f"/api/admin/attributes/by-category/{category['id']}", headers=auth(token)
+            ).json()[0]["attribute_id"]
+        ),
+        headers=auth(token),
+        json={"identity_bearing": False},
+    )
+
+    first = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, first)["variant_id"]
+
+    second = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "5902983617747",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-2",
+    )
+    assert run_on(client, token, second)["method"] == "brand_model"
+    assert gtins_of(client, token, variant_id) == {"4006381333931", "5902983617747"}
