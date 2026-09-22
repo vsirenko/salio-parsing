@@ -318,8 +318,8 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 FINGERPRINTS = {
     "apple-phones-1": "12a9fce3575e",
     "bigbox-4": "c8d0450d4ad8",
-    "bm-1": "b6a37e00e044",
-    "dateks-1": "b052a168c0b5",
+    "bm-2": "df8fb9de5bff",
+    "dateks-2": "28ca1e200e23",
     "ksenukai-5": "89aa740d025f",
     "onea-1": "3f30745390d5",
     "phones-4": "e6b091ef5728",
@@ -392,3 +392,30 @@ def test_every_ruleset_is_fingerprinted():
     """A new ruleset with no entry here is one the guard above silently ignores."""
     missing = sorted(set(_fingerprints()) - set(FINGERPRINTS))
     assert not missing, f"rulesets with no recorded fingerprint: {missing}"
+
+
+# --- taking a maker's name off the front of a shop's text ---
+
+
+def test_a_brand_is_only_taken_off_when_it_is_the_whole_first_word():
+    """`CAT` against `Caterpillar CAT S75` matched `startswith` and left `erpillar CAT S75`.
+
+    A model with three letters missing off the front is worse than one with the brand still
+    on it: it is wrong rather than untidy, and nothing downstream can tell.
+    """
+    from app.features.offers.normalization import naming
+
+    assert naming.without_brand("Caterpillar CAT S75 6GB", "CAT") == "Caterpillar CAT S75 6GB"
+    assert naming.without_brand("Honor 600 Lite, 8GB", "Honor") == "600 Lite, 8GB"
+    assert naming.without_brand("HAMMER Hammer Iron 6", "HAMMER") == "Hammer Iron 6"
+    # The shop naming a different maker than the name does is left alone, not guessed at.
+    assert naming.without_brand("Google Pixel 10", "Getnord") == "Google Pixel 10"
+
+
+def test_a_name_that_is_only_the_brand_is_left_alone():
+    """Nothing is a worse model than something, so the name stands."""
+    from app.features.offers.normalization import naming
+
+    assert naming.without_brand("Apple", "Apple") == "Apple"
+    assert naming.without_brand("", "Apple") == ""
+    assert naming.without_brand("Apple iPhone", "") == "Apple iPhone"

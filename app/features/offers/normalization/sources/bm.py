@@ -10,7 +10,7 @@ attribute block is missing, and that Apple's code is written into the name.
 import re
 from typing import Any
 
-from app.features.offers.normalization import colours
+from app.features.offers.normalization import colours, naming
 from app.features.offers.normalization.rules import (
     SOURCE,
     Rule,
@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "bm-phones"
-VERSION = "bm-1"
+VERSION = "bm-2"
 
 # The shop's own words. It is a showroom that orders in, so `Pēc pasūtījuma` is its ordinary
 # state rather than an exception.
@@ -61,8 +61,7 @@ def _model(
     if not name:
         return {}
 
-    brand = (payload.get("brand") or "").strip()
-    head = name[len(brand) :] if brand and name.casefold().startswith(brand.casefold()) else name
+    head = naming.without_brand(name, payload.get("brand") or "")
     found = SIZE.search(head)
     if found:
         head = head[: found.start()]

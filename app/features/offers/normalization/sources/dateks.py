@@ -10,7 +10,7 @@ ends, and that the colour is the last thing in the name.
 import re
 from typing import Any
 
-from app.features.offers.normalization import barcodes, colours
+from app.features.offers.normalization import barcodes, colours, naming
 from app.features.offers.normalization.rules import (
     SOURCE,
     Rule,
@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "dateks-phones"
-VERSION = "dateks-1"
+VERSION = "dateks-2"
 
 # What the shop has, in its own words. `Birojā` is the office counter and is stock like any
 # other; `Pasūtāms` is the supplier's shelf, not ours.
@@ -66,10 +66,7 @@ def _model(
     if not name:
         return {}
 
-    head = name.split(",")[0].strip()
-    brand = (payload.get("brand") or "").strip()
-    if brand and head.casefold().startswith(brand.casefold()):
-        head = head[len(brand) :].strip(" -")
+    head = naming.without_brand(name.split(",")[0].strip(), payload.get("brand") or "")
 
     # A name with no comma at all is a supplier's description the shop pasted whole —
     # `S26 Ultra 5G EE 256GB Black Android`. Cutting at the capacity saves the model out of
