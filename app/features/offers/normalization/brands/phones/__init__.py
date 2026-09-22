@@ -5,6 +5,6 @@ category and the shop alone, which is not a failure — it is every brand until 
 measures one.
 """
 
-from app.features.offers.normalization.brands.phones import apple, samsung
+from app.features.offers.normalization.brands.phones import apple, google, samsung
 
-__all__ = ("apple", "samsung")
+__all__ = ("apple", "google", "samsung")

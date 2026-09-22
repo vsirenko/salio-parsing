@@ -343,6 +343,40 @@ and the questions that have to be answered with real data first, are written dow
       does not second-guess a brand that resolves, which is right in general and wrong here.
       Two signals disagreeing about a brand is exactly what `judge_verdicts` and
       `brand_ambiguous` were built for, and the judge has still never been asked anything.
+- [x] **A maker's palette is code, in the layer that selects on `(category, brand)`.** The
+      registry cannot hold it — `attribute_value_aliases` is keyed on the word and a
+      language with no brand, and `Canyon` is pink on a Google and orange on an Oppo — so it
+      goes in `brands/phones/`. `google-phones-2`: `canyon` pink (2 shops of 2), `jade`
+      green (2 of 2), `indigo` blue (3 of 3), `porcelain` white (6 of 7), `fog` green
+      (3 of 4); `frost` declared and unwritten, rdveikals purple 12 against euronics blue 6.
+      `samsung-phones-1`: `cobalt` purple (9 of 9, 217 listings), `silverblue` silver
+      (6 of 7), `jadegreen` green (5 of 5), `techno` purple (4 of 4), `whitesilver` white
+      (4 of 5), `blueberry` purple (3 of 4), `graygreen` green (2 of 3), `amber` yellow
+      (2 of 2); `charcoal`, `coralred` and `pinkgold` declared and unwritten.
+      Counted **per shop**, not per listing: five listings of one phone in one shop is one
+      opinion, and counting listings is what made these words look contested before.
+- [ ] **`titanium` is a material and the registry calls it a colour.** It is the single
+      worst word in the corpus for disagreeing with what shops state in a field: 44 of the
+      320 disagreements are `Titanium Silverblue` and friends, where the shop's own field
+      says silver, white or green. Until it is settled, a rule that reads a colour out of a
+      title cannot trust it.
+- [ ] **A colour word the registry already knows, read out of a title, is a lookup and not a
+      guess** — which is the one thing `phones-color` refuses that it probably should not.
+      Measured on the current corpus: 111 listings that have no colour at all would get one,
+      almost all of them plain words a shop wrote in its title (`black` 37, `blue` 13,
+      `white` 9, `zelta` 5, `melns` 4, `sudraba` 4). Where a field already gives a colour the
+      title word agrees on 4988 and disagrees on 320, and the disagreements are granularity
+      rather than contradiction: burgundy against red, mint against green, navy against blue,
+      graphite against grey. The one real contradiction is `glacier`, which is the known
+      euronics bug below. Whole words only — `Blueberry` contains `blue` — and exactly one
+      distinct colour, or nothing. Blocked on `titanium` above.
+- [ ] **OnePlus, Motorola and Honor have palettes waiting and nobody has written them.**
+      Measured the same way: OnePlus `charcoal` black (3 shops of 3), `eclipse` black (2 of
+      2), `pitch` black (3 of 3), `mist` grey (5 of 6), `marble` grey (5 of 6); Honor
+      `forest` green (4 of 4), `meteor` silver (3 of 3), `desert` gold (3 of 3); Motorola has
+      forty of them, all PANTONE two-word names — `Arctic Seal` grey in 6 shops of 6,
+      `Spruce Shaded` green in 5 of 5 — which is a different shape from a one-word name and
+      wants the phrase, not the word.
 - [ ] **The word method is a script that was run by hand and ought to be a tool.** It is the
       answer to the registry gap this project has been carrying since the first shop, and it
       runs against the corpus rather than against anybody's judgement. Worth an endpoint that

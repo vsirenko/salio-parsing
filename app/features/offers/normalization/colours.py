@@ -67,3 +67,31 @@ def pair(parts: list[str], vocabulary: Vocabulary) -> str | None:
 
     canonical = "-".join(named)
     return canonical if canonical in set(vocabulary.colours.values()) else None
+
+
+def from_title(title: str, palette: dict[str, str]) -> str | None:
+    """The one colour a maker's own names for one put in this title, or nothing.
+
+    A maker's palette, not a language's words: `Canyon` is pink on a Google and orange on an
+    Oppo, both unanimous across two shops, so the only layer that can hold this is the one
+    selected by `(category, brand)`. The callers are those rulesets; this holds the matching
+    so that two of them cannot disagree about what counts as a match.
+
+    Whole words only. `Blueberry` contains `blue` and `Graygreen` contains `gray`, and a
+    substring match would read both of them as the wrong colour with the same confidence as
+    a right one.
+
+    Two of a maker's names in one title decides nothing. That is a two-tone phone or a
+    bundle — `Galaxy S23 Plus melna + Watch 5` — and picking one of them is a wrong answer
+    rather than half of one.
+    """
+    if not title or not palette:
+        return None
+    words = set(_WORDS.findall(title.casefold()))
+    found = {colour for word, colour in palette.items() if word in words}
+    return found.pop() if len(found) == 1 else None
+
+
+# Letters only, so `12/256GB` and `(SM-A376B)` contribute nothing and a name glued to
+# punctuation — `256GB Canyon,` — is still found.
+_WORDS = re.compile(r"[^\W\d_]+", re.UNICODE)

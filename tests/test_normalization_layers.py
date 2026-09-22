@@ -282,12 +282,101 @@ def test_a_part_number_of_another_shape_is_left_alone():
     assert fields["mpn"] == "SOMETHING-ELSE"
 
 
+def test_a_maker_s_own_name_for_a_colour_is_read_in_its_own_layer():
+    """`Canyon` is pink on a Google and orange on an Oppo, both unanimous across two shops.
+    A registry row is keyed on the word with no brand and would have to make one of them
+    wrong, so the palette lives where the brand selects it."""
+    fields = read(
+        {"name": "Google Pixel 11 Pro 12/256GB Canyon", "brand": "Google"}, category=PHONES
+    )
+    assert fields["identity"]["color"] == "pink"
+    # And it cannot reach another maker: nothing is registered for Oppo.
+    other = read({"name": "Oppo Reno16 5G 256GB Canyon", "brand": "Oppo"}, category=PHONES)
+    assert "color" not in other["identity"]
+
+
+def test_a_colour_the_shop_stated_itself_wins():
+    """The shop answered about the product it is selling; the palette answers about a word."""
+    fields = read(
+        {
+            "name": "Google Pixel 11 Pro 12/256GB Canyon",
+            "brand": "Google",
+            "specs": {"Krāsa": "melna"},
+        },
+        category=PHONES,
+        vocabulary=Vocabulary(colours={"melna": "black"}),
+    )
+    assert fields["identity"]["color"] == "black"
+
+
+def test_two_of_the_maker_s_names_in_one_title_decide_nothing():
+    """A two-tone phone or a bundle. Picking one of them is a wrong answer, not half of one."""
+    fields = read({"name": "Google Pixel 11 Canyon Jade", "brand": "Google"}, category=PHONES)
+    assert "color" not in fields["identity"]
+
+
+def test_the_palette_matches_whole_words():
+    fields = read({"name": "Google Pixel Fogo Edition 128GB", "brand": "Google"}, category=PHONES)
+    assert "color" not in fields["identity"]
+
+
+def test_frost_is_declared_and_unwritten():
+    """Two shops disagree — purple on 9, blue on 3 — and the judge answered white at 0.46.
+    Three opinions and no two alike is what an unanswerable question looks like."""
+    brand_rules = [r for r in rules_for(category=PHONES, brand="google") if r.layer == BRAND]
+    frost = next(r for r in brand_rules if r.id == "google-frost")
+    assert frost.pending
+    assert (
+        "color"
+        not in read({"name": "Google Pixel 11 12/256GB Frost", "brand": "Google"}, category=PHONES)[
+            "identity"
+        ]
+    )
+
+
+def test_samsung_reads_its_maker_s_own_names_for_a_colour():
+    """`Cobalt Violet` is purple in 9 shops of 9, 217 listings. The shops that state a
+    colour in a field are the evidence for what the name means."""
+    fields = read(
+        {"name": "Samsung Galaxy S24 128GB Cobalt Violet", "brand": "Samsung"}, category=PHONES
+    )
+    assert fields["identity"]["color"] == "purple"
+
+
+def test_a_name_that_contains_a_colour_word_is_not_read_as_that_colour():
+    """`Blueberry` is purple, not blue, and `Graygreen` is green, not grey. A substring
+    match would get both wrong with the confidence of a right answer."""
+    blueberry = read(
+        {"name": "Samsung Galaxy S26 FE 5G 256GB Blueberry (SM-S741B)", "brand": "Samsung"},
+        category=PHONES,
+    )
+    assert blueberry["identity"]["color"] == "purple"
+    graygreen = read(
+        {"name": "Samsung Galaxy A37 5G 128GB Dual SIM Graygreen (SM-A376B)", "brand": "Samsung"},
+        category=PHONES,
+    )
+    assert graygreen["identity"]["color"] == "green"
+
+
+def test_the_names_the_shops_disagree_about_are_declared_and_unwritten():
+    """`Awesome Charcoal` is black in three shops and grey in two, and dateks says both of
+    them for the same phrase on the same phone."""
+    brand_rules = [r for r in rules_for(category=PHONES, brand="samsung") if r.layer == BRAND]
+    contested = next(r for r in brand_rules if r.id == "samsung-contested-names")
+    assert contested.pending
+    fields = read(
+        {"name": "Samsung Galaxy A37 5G 6+128GB Awesome Charcoal", "brand": "Samsung"},
+        category=PHONES,
+    )
+    assert "color" not in fields["identity"]
+
+
 def test_samsung_is_declared_and_unwritten():
     """Its trailing letters are half the product — colour tells two phones apart, region
     does not — so cutting them the way Apple's allow would merge different phones."""
     brand_rules = [r for r in rules_for(category=PHONES, brand="samsung") if r.layer == BRAND]
-    assert [r.id for r in brand_rules] == ["samsung-model-from-part-number"]
-    assert brand_rules[0].pending
+    part_number = next(r for r in brand_rules if r.id == "samsung-model-from-part-number")
+    assert part_number.pending
 
     fields = read({"name": "x", "brand": "Samsung", "mpn": "SM-A176BZKAEUE"}, category=PHONES)
     assert fields["mpn"] == "SM-A176BZKAEUE"
@@ -322,12 +411,13 @@ FINGERPRINTS = {
     "cec-1": "e0252dfe4696",
     "dateks-2": "28ca1e200e23",
     "discover-2": "113eaca94ea9",
+    "google-phones-2": "4291e6a77725",
     "ksenukai-5": "89aa740d025f",
     "onea-1": "3f30745390d5",
     "euronics-1": "e61bf95a7a78",
     "phones-5": "431fc8bf0c77",
     "rdveikals-4": "f5078e0afc82",
-    "samsung-phones-0": "pending",
+    "samsung-phones-1": "7e2a01b9bdf8",
     "tet-2": "a49facbac61d",
 }
 
