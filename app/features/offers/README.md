@@ -122,6 +122,15 @@ opaque, so a row can be attributed without looking anything up. A key with no ru
 by whatever is more general, which is how a sample gets loaded and measured before any rules
 are written for it.
 
+**A brand lives inside a category**, which is why the tree nests
+`normalization/brands/phones/apple.py`. A module there is mostly the measurement that
+justifies its rules, as the first two are: Apple's part number is five characters of
+configuration, two of market and `/A`, and nine of ninety-six configurations in the
+collected corpus are split across market codes — nine phones that look like eighteen.
+Samsung's looks the same and behaves nothing like it: its trailing letters carry the colour,
+which tells two phones apart, so cutting them the way Apple's allow would merge phones that
+really are different.
+
 **A rule may be declared and not written.** `Rule.pending` is a gap that is visible, and the
 first one is real: colour splits a phone into variants, and across 520 collected products the
 word before `krās` takes 61 distinct forms — Latvian declension (`melns`, `melna`), plain

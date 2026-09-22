@@ -16,6 +16,7 @@ from typing import Any
 
 from app.features.brands.normalization import normalize_brand
 from app.features.offers.normalization import generic
+from app.features.offers.normalization.brands import __all__ as _brands  # noqa: F401
 from app.features.offers.normalization.categories import __all__ as _categories  # noqa: F401
 from app.features.offers.normalization.generic import content_hash
 from app.features.offers.normalization.rules import (

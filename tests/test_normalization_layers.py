@@ -217,3 +217,66 @@ def test_nothing_valid_is_nothing():
     assert barcodes.pick(["1226772", "Y00001210299"]) is None
     assert barcodes.pick(None) is None
     assert barcodes.pick([]) is None
+
+
+# --- the brand layer, selected from what was read ---
+
+
+def test_the_brand_layer_selects_itself_from_the_reading():
+    """Nothing passes the brand in. It is worked out from what the layers above found,
+    which is why those layers come first."""
+    fields = read(
+        {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
+        category=PHONES,
+    )
+    assert fields["ruleset_version"] == "generic-1+phones-1+apple-phones-1"
+    assert fields["identity"]["apple_config"] == "MG014"
+    assert fields["identity"]["apple_market"] == "HX"
+
+
+def test_two_markets_of_one_machine_share_a_configuration():
+    """`MG014HX/A` and `MG014QN/A` are one phone sold in two places. Nine of ninety-six
+    configurations in the collected corpus are split this way."""
+    one = read({"name": "x", "brand": "Apple", "mpn": "MG014HX/A"}, category=PHONES)
+    other = read({"name": "x", "brand": "Apple", "mpn": "MG014QN/A"}, category=PHONES)
+
+    assert one["identity"]["apple_config"] == other["identity"]["apple_config"]
+    assert one["identity"]["apple_market"] != other["identity"]["apple_market"]
+    # And the part number each shop published is left exactly as it was.
+    assert one["mpn"] != other["mpn"]
+
+
+def test_a_brand_is_scoped_to_a_category():
+    """`phones/apple` and `laptops/apple` are different rulesets. Nothing is registered for
+    laptops, so the same offer read as one gets no brand rules at all."""
+    payload = {"name": "x", "brand": "Apple", "mpn": "MG014HX/A"}
+    assert read(payload, category="laptops")["identity"] == {}
+    assert read(payload, category=PHONES)["identity"]["apple_config"] == "MG014"
+
+
+def test_a_part_number_of_another_shape_is_left_alone():
+    fields = read({"name": "x", "brand": "Apple", "mpn": "SOMETHING-ELSE"}, category=PHONES)
+    assert "apple_config" not in fields["identity"]
+    assert fields["mpn"] == "SOMETHING-ELSE"
+
+
+def test_samsung_is_declared_and_unwritten():
+    """Its trailing letters are half the product — colour tells two phones apart, region
+    does not — so cutting them the way Apple's allow would merge different phones."""
+    brand_rules = [r for r in rules_for(category=PHONES, brand="samsung") if r.layer == BRAND]
+    assert [r.id for r in brand_rules] == ["samsung-model-from-part-number"]
+    assert brand_rules[0].pending
+
+    fields = read({"name": "x", "brand": "Samsung", "mpn": "SM-A176BZKAEUE"}, category=PHONES)
+    assert fields["mpn"] == "SM-A176BZKAEUE"
+
+
+def test_collapsing_apple_market_codes_is_declared_and_refused():
+    """It would be correct on the collected data and wrong on a larger corpus, where three
+    prefixes of sixty-six disagreed on storage — and the failure is two machines filed as
+    one, confidently."""
+    collapse = next(
+        r for r in rules_for(category=PHONES, brand="apple") if r.id == "apple-collapse-market-code"
+    )
+    assert collapse.pending
+    assert "three configuration prefixes out of sixty-six" in collapse.why

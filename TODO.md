@@ -100,11 +100,18 @@ and the questions that have to be answered with real data first, are written dow
 - [x] Layered reading: generic → category → source → brand → product → finish, each layer
       selected by a key that deepens down the list. On ksenukai's 520 phones it took
       `gtin 0 → 99.6%`, `model 0 → 100%`, `storage 0 → 97.9%`
-- [ ] **The brand and product layers are empty.** Declared, selectable, and with nothing
-      registered. The first thing owed to them is already measured: colour takes 61 forms
-      across 520 phones, of which the maker's marketing names (`obsidian`, `glacier`) are
-      brand knowledge and the plain-English ones need a language table. `phones-color` is
-      declared `pending` and says so.
+- [x] The brand layer, with its tree: `normalization/brands/phones/{apple,samsung}.py`,
+      selected from what the layers above read rather than passed in
+- [ ] **Collapsing Apple's market code is declared and unwritten.** It would be correct on
+      the collected data — nine configurations split, none disagreeing on capacity — and
+      wrong on a larger corpus, where three prefixes of sixty-six differed on storage. It
+      belongs to the identity key, which compares capacity at the same time instead of
+      trusting a rule to remember.
+- [ ] **The product layer is still empty.** Selectable by `(category, brand, line)` and with
+      nothing registered; `bigbox-line` already writes the key it would be chosen by.
+- [ ] **Samsung's part numbers cannot be cut yet.** `SM-A176BZ` begins six of them here and
+      the letters after it are half colour and half region — telling those apart needs the
+      colour table that does not exist, which is the same gap `phones-color` names.
 - [x] The first canonical attributes, entered from what the two shops actually write:
       `storage_gb` and `color` bearing identity for phones, `ram_gb`, `screen_inch`, `os`
       and `phone_type` beside them. Seven alias spellings collapsed into five rows.
