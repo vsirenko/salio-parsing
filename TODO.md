@@ -298,6 +298,25 @@ and the questions that have to be answered with real data first, are written dow
       purple 3, black 3), `Canyon` (pink 8, orange 3) and `Charcoal` (black 11, grey 6) are
       genuinely contested and were left alone — a marketing word can mean different colours
       to different makers, and the registry has no brand to hang that on.
+- [x] **A marketing colour name belongs to a maker, and the registry cannot say so.**
+      Counted across all shops the words looked contested; counted per maker one of them
+      proves the point outright: `Canyon` is **pink on a Google** (8 of 8, two shops) and
+      **orange on an Oppo** (3 of 3, two shops). A global alias would make one of them
+      wrong, so none of these were entered. `attribute_value_aliases` has a `language`
+      column and no brand, and the layer that selects on `(category, brand)` already exists
+      — `brands/phones/apple.py` and `samsung.py` — so a maker's palette belongs there or
+      behind a brand column, and it is a decision rather than a row.
+- [x] The four brands entered earlier — `CAT`, `TTfone`, `XREAL`, `Lenovo` — never worked:
+      creating a brand does not create an alias on its own name, and only `Caterpillar` was
+      added beside `CAT`. All four resolved to nothing. Self-aliases added, plus `HTC` and
+      `Umidigi`, which were missing outright. `brand_unknown` in the queue: 12 → 0, corpus
+      98.4% → 98.5%.
+- [ ] **A title that names a different maker than the field is a question for the judge.**
+      discover.lv files `Umidigi Bison X10` under `CAT`, its own section name, and now that
+      `CAT` resolves the listing goes there confidently — the title fallback deliberately
+      does not second-guess a brand that resolves, which is right in general and wrong here.
+      Two signals disagreeing about a brand is exactly what `judge_verdicts` and
+      `brand_ambiguous` were built for, and the judge has still never been asked anything.
 - [ ] **The word method is a script that was run by hand and ought to be a tool.** It is the
       answer to the registry gap this project has been carrying since the first shop, and it
       runs against the corpus rather than against anybody's judgement. Worth an endpoint that
