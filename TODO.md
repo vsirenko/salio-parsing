@@ -504,6 +504,18 @@ and the questions that have to be answered with real data first, are written dow
       `Demo`, `Renew`, `Grade A`, `Pre-owned`, `Mazlietots`, `Atjaunots` are six spellings
       from five shops in three languages, and they belong in the registry with the colours,
       not in six channel modules.
+- [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
+      Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
+      not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals
+      says `PreOrder` on 923 of 1396, dateks `Pasūtāms` on 524 of 745, euronics `On order`
+      on 58 of 319 (checked live against the site on the day: 60 of 320, so the readings
+      hold). The other seven shops mark none.
+      `availability` is read correctly and stored, and then nothing uses it: a price to be
+      ordered competes with a price on a shelf as though they were the same offer, and the
+      cheapest price in the catalogue is very often the one nobody has. The same shape as
+      `condition`, and the same fix: the column exists, the question is what a comparison
+      should do with it. Not urgent — nothing is read wrong — but the storefront should
+      probably show the cheapest in stock beside the cheapest at all.
 - [ ] **Re-deciding is one HTTP request per listing and it is the slowest thing here.**
       Every change to a reading rule costs a reparse (a minute) and then a re-decide of
       every match whose colour or model moved, one `POST /offers/{id}/match` at a time —
