@@ -62,6 +62,7 @@ app/
     └── health/              # /health, /health/ready; no service, it has no state
 alembic/                     # migrations
 docs/parser-design.md        # the parser: shape, decisions, open questions
+tools/preview.py             # read-only: writes two HTML pages to look at the result
 tests/                       # test_architecture.py enforces the import direction
 .pre-commit-config.yaml      # ruff + commit message linting
 ```
@@ -142,6 +143,25 @@ Two probes, deliberately different: `/health` is liveness and touches nothing, s
 database blip does not turn into a restart loop; `/health/ready` runs `select 1` and
 answers 503 when the database is down, which is what should pull the instance out of
 the load balancer.
+
+## Looking at the result
+
+The API serves JSON and there is no panel yet, so the only way to see whether the catalogue
+is any good is to build the pages and look:
+
+```bash
+.venv/bin/python -m tools.preview
+open var/preview/index.html
+```
+
+It reads the database, writes two self-contained files under `var/preview/` and stops.
+Nothing is served and nothing is cached — running it again is the whole refresh story.
+
+- `index.html` — the storefront: products, their variants, and every shop's price for each.
+- `unmatched.html` — the listings the matcher could not place, grouped by what is missing,
+  because "386 did not match" is a number nobody can act on. The grouping mirrors the order
+  `MatchingService.promote_queue` checks things in, so a listing is filed under the first
+  thing that stops it.
 
 ## Tests & lint
 

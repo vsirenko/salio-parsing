@@ -171,6 +171,13 @@ and the questions that have to be answered with real data first, are written dow
       of bigbox's phones and holds `Galaxy S26` for the Ultra, the Plus and the plain one
       alike — a family, not a model. `bigbox-line` writes it; the product layer that would be
       chosen by it is still empty.
+- [x] Two pages to look at the result: `tools/preview.py` writes a storefront and a page
+      of everything the matcher could not place, grouped by what is missing. Read-only and
+      outside the app — the API serves JSON and there is no panel yet.
+- [ ] **282 of the 386 queued listings are promotable right now.** They carry a barcode, a
+      brand that resolves and a model; a promotion pass takes a bounded number of rows and
+      stopped before them. None of their barcodes is on a variant yet, so each becomes a new
+      catalogue entry rather than a match. Nothing automatic runs the pass.
 - [ ] **Nothing fills a product's own fields.** It gets a brand, a category and a model, and
       its title is composed from those. A description, an image and a manufacturer URL are
       what a card actually shows, and none of them are set.
