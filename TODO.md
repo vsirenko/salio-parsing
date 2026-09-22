@@ -245,6 +245,16 @@ and the questions that have to be answered with real data first, are written dow
       the disagreements that were silent are visible. `variant_merges` exists and nothing
       produces a row in it: two entries that reach the same identity are the same thing, and
       saying so is the point of the table.
+- [x] A fifth channel, `dateks-phones`: 745 phones, model 100%, barcode 86.3%, colour
+      97.3%, availability 100%. The shop had been written off as closed — it is not, and
+      neither its Cloudflare nor our HTTP client was ever the problem: the category moved
+      from `mobilie-telefoni` to `viedtalruni` and the old address still answers 200 with a
+      page of navigation and no products. Two more traps measured rather than guessed: the
+      page index in the address is one less than the page, so a walk starting at `/pg/1`
+      drops the first 24 of 745; and the page's own schema.org `availability` reads
+      `InStock` for all 745 where the shop's words say 524 are to order. Matching across
+      five shops 98.1%, variants 1477 → 1768, carried by more than one shop 827 → 1006,
+      135 in all five.
 - [x] A fourth channel, `onea-phones` (1a.lv): 443 phones, model 99.6%, part number 44.5%,
       no barcode at all. Its index is a strict subset of ksenukai's — same engine, same
       field names — so the record shape and the colour rule are shared rather than copied.

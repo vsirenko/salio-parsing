@@ -186,11 +186,28 @@ lifecycle changes.
 |---|---|---|---|---|---|
 | `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 521 | 100% |
 | `bigbox-phones` | bigbox.lv | wholesale | private_api | 985 | 93.1% |
+| `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
+| `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
 
 `rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
 module says why its discovery walks the listing rather than the sitemap, and why the brand
 comes out of an analytics block instead of the microdata beside it.
+
+**`dateks-phones`** is the cheapest cheap pass here: the listing prints the name, both
+prices, the manufacturer code and a stock word on 100% of 745 cards, so 32 requests bring
+back the whole category's prices and stock with no product page opened. Its module records
+what a reader of this shop would otherwise get wrong, and three of those are worth naming
+here because they are the kind of mistake that reports success:
+
+- **The category moved and the old address still answers 200.** `/cenas/mobilie-telefoni`
+  serves a section page full of navigation and no products. A channel pinned to it would
+  report an open, empty shop — so `discover` raises on a first page with no cards rather
+  than returning none.
+- **The page number in the address is one less than the page**, so a walk that starts at
+  `/pg/1` quietly drops the first 24 products.
+- **The page's own schema.org `availability` reads `InStock` for everything**, including
+  the 513 of 745 the shop itself calls `Pasūtāms`. The words are read; the claim is not.
 
 They share 207 barcodes, which is the first thing in this system there has ever been
 anything to match against — and close to what the old corpus showed, where 39.5% of

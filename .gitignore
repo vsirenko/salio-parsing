@@ -9,3 +9,8 @@ venv/
 *.egg-info/
 .DS_Store
 var/
+
+# Collected bytes: what a run fetched, kept so a parser can be fixed against them and the
+# reading redone without crawling the shop again. Local to whoever ran the worker — in
+# compose it is a volume — and far too big for the repository.
+data/snapshots/

@@ -8,12 +8,23 @@
 - Tests need the `app_test` database and a running `db` container.
 
 ## Checks
-- After any Python change: `.venv/bin/ruff check .` and `.venv/bin/pytest`.
-- **One test run at a time, and wait for it.** The suite shares one `app_test` database and
-  truncates it before every test, so two runs at once deadlock on each other: no output, no
-  error, just silence that looks like a slow machine. Never start a second run before the
-  first has finished, and do not put the suite in the background to get on with something
-  else — it takes under three minutes and the whole point is to read the result.
+- After any Python change: `.venv/bin/ruff check .` — always, it takes a second — and the
+  tests that cover what changed.
+- **Run the tests for what you touched, not the whole suite.** The suite is 513 tests in
+  three minutes, and almost all of that is the shared `app_test` database being truncated
+  before every one of them: 0.36s per test, where `tests/test_dateks.py` on its own is 4
+  seconds. Waiting three minutes to learn that a channel parses a fixture is three minutes
+  of nothing. Name the files: `.venv/bin/pytest tests/test_dateks.py`.
+- **The whole suite is for changes that reach everybody**: anything in `app/core/`,
+  `app/db/`, `app/api/`, `app/schemas/`, `normalization/__init__.py`, `rules.py` or
+  `generic.py`, a model or a migration, and before a push. A new feature folder, a new
+  channel, a new source ruleset and their tests reach nobody else — their own files are the
+  whole of what can break.
+- **One test run at a time, and wait for it.** Two runs at once deadlock on the shared
+  database: no output, no error, just silence that looks like a slow machine. Never start a
+  second before the first has finished. The corollary of running the scoped set is that
+  there is nothing to do meanwhile, so do not put it in the background either — the point
+  is to read the result.
 - After any model change: `.venv/bin/alembic check`.
 - Before pushing: `.venv/bin/pre-commit run --all-files`.
 - Keep `TODO.md` current: tick an item off when it lands, add one when a gap is found.
