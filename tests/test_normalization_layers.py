@@ -48,6 +48,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
     rules = rules_for(KSENUKAI, category=PHONES)
     assert [rule.id for rule in rules] == [
         "phones-color",
+        "phones-color-from-title",
         "phones-storage",
         "ksenukai-barcode",
         # Within a layer the registry orders by id, not by where a rule was declared.
@@ -57,6 +58,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
     ]
     # General to specific: the category before the shop, canonicalisation last.
     assert [rule.layer for rule in rules] == [
+        CATEGORY,
         CATEGORY,
         CATEGORY,
         SOURCE,
@@ -100,10 +102,10 @@ def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
     assert version_for(KSENUKAI) == "generic-1+ksenukai-5"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-5+ksenukai-5"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-6+ksenukai-5"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-5+ksenukai-5"
+        == "generic-1+phones-6+ksenukai-5"
     )
 
 
@@ -251,7 +253,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-5+apple-phones-1"
+    assert fields["ruleset_version"] == "generic-1+phones-6+apple-phones-1"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -416,7 +418,7 @@ FINGERPRINTS = {
     "m79-3": "3bec76890f34",
     "onea-1": "3f30745390d5",
     "euronics-1": "e61bf95a7a78",
-    "phones-5": "431fc8bf0c77",
+    "phones-6": "e88d374e6487",
     "rdveikals-4": "f5078e0afc82",
     "samsung-phones-1": "7e2a01b9bdf8",
     "tet-2": "a49facbac61d",

@@ -381,16 +381,28 @@ and the questions that have to be answered with real data first, are written dow
       320 disagreements are `Titanium Silverblue` and friends, where the shop's own field
       says silver, white or green. Until it is settled, a rule that reads a colour out of a
       title cannot trust it.
-- [ ] **A colour word the registry already knows, read out of a title, is a lookup and not a
-      guess** — which is the one thing `phones-color` refuses that it probably should not.
-      Measured on the current corpus: 111 listings that have no colour at all would get one,
-      almost all of them plain words a shop wrote in its title (`black` 37, `blue` 13,
-      `white` 9, `zelta` 5, `melns` 4, `sudraba` 4). Where a field already gives a colour the
-      title word agrees on 4988 and disagrees on 320, and the disagreements are granularity
-      rather than contradiction: burgundy against red, mint against green, navy against blue,
-      graphite against grey. The one real contradiction is `glacier`, which is the known
-      euronics bug below. Whole words only — `Blueberry` contains `blue` — and exactly one
-      distinct colour, or nothing. Blocked on `titanium` above.
+- [x] **A colour word the registry already knows, read out of a title, is a lookup and not a
+      guess** — `phones-color-from-title`, beside the rule that refuses to canonicalise a
+      word nobody entered. Whole words, exactly one distinct colour or nothing: `Blueberry`
+      contains `blue` and `Graygreen` contains `gray`. Where a shop also states a field the
+      title agrees on 4988 readings and disagrees on 320, and the disagreements are
+      granularity rather than contradiction — burgundy against red, navy against blue — and
+      none of it fires anyway, because the rule only runs where the field gave nothing.
+      Worth +1548 colours on m79 and +107 across the other ten. Corpus 94.2% -> 96.3%,
+      queue 521 -> 337, `no_barcode` 384 -> 205, `ambiguous` 145 -> 42.
+      Two tests broke in shops that had nothing to do with it, and both were right to:
+      `test_dateks` and `test_rdveikals` were overriding `name` while generic reads `title`,
+      so they had been testing a payload the reading never saw.
+      One known cost: a maker's palette runs in the brand layer, after this, and fills only
+      a colour that is missing — so `Titanium Jadegreen` reads as `titanium` rather than
+      green. 19 listings, all Samsung's `Titanium` line, and the fix is the entry below
+      rather than this rule.
+- [ ] **`phones-color-from-title` and `ksenukai-color-from-title` are two implementations of
+      one idea.** The source-level one came first and reads a fixed position in that shop's
+      titles; the category one reads any registry word anywhere. Keeping both is how the
+      same three lines end up written twice with the same bug — which is exactly what
+      produced `naming.without_brand` earlier. Measure what ksenukai loses if its own rule
+      goes, then delete one of them.
 - [ ] **OnePlus, Motorola and Honor have palettes waiting and nobody has written them.**
       Measured the same way: OnePlus `charcoal` black (3 shops of 3), `eclipse` black (2 of
       2), `pitch` black (3 of 3), `mist` grey (5 of 6), `marble` grey (5 of 6); Honor

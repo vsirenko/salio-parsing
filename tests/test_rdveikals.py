@@ -236,7 +236,7 @@ def test_the_shop_s_own_model_field_is_a_line_not_a_model(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert read_it(parsed())["ruleset_version"] == "generic-1+phones-5+rdveikals-4"
+    assert read_it(parsed())["ruleset_version"] == "generic-1+phones-6+rdveikals-4"
 
 
 # --- stock on the pass that opens no pages ---
@@ -334,7 +334,14 @@ def test_a_marketing_name_resolves_to_nothing(event_loop):
     """`Obsidian` is Google's word for black and is not in the registry, on purpose: the
     pairs that could be learned from one shop include `evening blue` meaning grey."""
     fields = read(
-        {**parsed(), "specs": {"Kopējie parametri / Krāsa": "Obsidian"}},
+        {
+            **parsed(),
+            # The title has to be a name with no colour word in it too: a word the registry
+            # knows is read out of a title now, and that is a lookup rather than a guess.
+            "title": "mobilais telefons Google Pixel 10a 128GB Obsidian",
+            "name": "mobilais telefons Google Pixel 10a 128GB Obsidian",
+            "specs": {"Kopējie parametri / Krāsa": "Obsidian"},
+        },
         source_slug="rdveikals-phones",
         category="phones",
         vocabulary=with_colours(),

@@ -268,6 +268,7 @@ def test_a_name_with_no_comma_is_cut_at_the_capacity():
     """A supplier's description pasted whole. Without this the capacity travels as part of
     the model and files one phone as one product per capacity."""
     payload = product() | {
+        "title": "Samsung S26 Ultra 5G EE 256GB Black Android",
         "name": "Samsung S26 Ultra 5G EE 256GB Black Android",
         "brand": "Samsung",
     }
@@ -297,6 +298,7 @@ def test_a_two_tone_case_is_its_own_colour():
 def test_a_marketing_name_resolves_to_nothing():
     """`PANTONE Titan`, `Awesome Charcoal`, `Starlight` — 20 of 745 and left visible."""
     payload = product() | {
+        "title": "Motorola Edge 70 Pro, 8GB/256GB, PANTONE Titan",
         "name": "Motorola Edge 70 Pro, 8GB/256GB, PANTONE Titan",
         # Without this the category's rules find `Velvet Black` in the table and the name
         # is never consulted — which is the right order, and not what is under test here.
@@ -314,4 +316,4 @@ def test_without_the_registry_the_gap_stays_visible():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-1+phones-5+dateks-2"
+    assert reading()["ruleset_version"] == "generic-1+phones-6+dateks-2"

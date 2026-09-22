@@ -16,7 +16,7 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-5"
+VERSION = "phones-6"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -126,6 +126,37 @@ def _canonical(value: str, vocabulary: Vocabulary) -> str | None:
     return colours.resolve(value, vocabulary)
 
 
+# Letters only, so `12/256GB` and `(SM-A376B)` contribute nothing and a colour glued to
+# punctuation — `256GB Black,` — is still found.
+_WORDS = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _color_from_title(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """A colour the registry already knows, found as a whole word in the title.
+
+    Not the thing the rule above refuses. That one refuses to *canonicalise* a word nobody
+    entered — `Obsidian`, `Glacier`, `Cosmic Orange` — because guessing at one splits a
+    product into several. This asks a different question: does the title contain a word the
+    registry has already been given an answer for? That is a lookup, and a word nobody
+    entered produces nothing at all.
+
+    Whole words only, and exactly one distinct colour or none. `Blueberry` contains `blue`
+    and `Graygreen` contains `gray`, so a substring match would get both wrong with the
+    confidence of a right answer; and a title naming two colours is a two-tone case, where
+    picking one is not a partial answer but a wrong one.
+    """
+    identity = fields.get("identity", {})
+    if identity.get("color") or not vocabulary.colours:
+        return {}
+    words = {word.casefold() for word in _WORDS.findall(fields.get("title") or "")}
+    found = {vocabulary.colours[word] for word in words if word in vocabulary.colours}
+    if len(found) != 1:
+        return {}
+    return {"identity": {**identity, "color": found.pop()}}
+
+
 def _megabytes(text: str) -> int | None:
     """The largest size in the text, because a title that carries two carries both kinds.
 
@@ -220,6 +251,42 @@ RULESET = register(
                     " one. A separated field is resolved as a pair or not at all."
                 ),
                 body=_color,
+            ),
+            Rule(
+                id="phones-color-from-title",
+                layer=CATEGORY,
+                why=(
+                    "The rule above reads a field and never a title, and that stands: cut"
+                    " from a title the word takes 358 forms across one shop's products, and"
+                    " canonicalising those by guessing splits one product into several."
+                    " This is not that. It asks whether the title contains a word the"
+                    " registry has **already been given an answer for** — which is a lookup,"
+                    " not a guess — and a word nobody entered produces nothing."
+                    "\n\n"
+                    "Measured before it was written. Where a shop states a colour in a field"
+                    " as well, the title word agrees on 4988 readings and disagrees on 320,"
+                    " and the disagreements are granularity rather than contradiction:"
+                    " burgundy against red, mint against green, navy against blue, graphite"
+                    " against grey. Checked again on m79.lv alone, which states a field on"
+                    " 15% of its cards: 222 agree, 18 disagree, and 11 of those 18 are a"
+                    " two-tone field the title wrote as one colour. None of it fires in"
+                    " practice, because this only runs where the field gave nothing."
+                    "\n\n"
+                    "What it is worth: 1547 of m79's 2390 colourless listings get a colour,"
+                    " almost all of them a plain word a shop wrote in its own title —"
+                    " `black` 426, `blue` 209, `white` 110, `orange` 91, `silver` 85. Those"
+                    " listings carry no barcode either, and colour is the axis that was"
+                    " keeping them from becoming a catalogue entry."
+                    "\n\n"
+                    "One known cost. A maker's palette lives in the brand layer, which runs"
+                    " after this, and a palette only fills a colour that is missing — so on"
+                    " a title carrying both a registry word and a maker's name for the same"
+                    " colour, the coarser answer wins: `Titanium Jadegreen` reads as"
+                    " `titanium` rather than green. Nineteen listings in the corpus, all"
+                    " Samsung's `Titanium` line, and `titanium` is a material the registry"
+                    " calls a colour — which is the thing to fix, rather than this."
+                ),
+                body=_color_from_title,
             ),
         ),
     ),
