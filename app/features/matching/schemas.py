@@ -100,6 +100,23 @@ class MatchOutcome(BaseModel):
     candidates: list
 
 
+class PromotionReport(BaseModel):
+    """What a pass of promotions did.
+
+    `matched` is the interesting number: a listing that turned out to match a variant made
+    moments earlier, from another shop's listing of the same product. It is the whole point
+    of the exercise, and it is why a sweep tries to match before it promotes.
+    """
+
+    considered: int
+    promoted: int
+    matched: int
+    skipped: int
+    # Why the rest were not promoted, counted. A sweep that reports "48 skipped" and no
+    # reason is a sweep nobody can act on.
+    reasons: dict[str, int]
+
+
 class RunReport(BaseModel):
     attempted: int
     matched: int

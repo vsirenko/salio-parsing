@@ -420,3 +420,335 @@ def test_matching_requires_an_admin_token(client):
     user_token = tokens(client, CUSTOMER)["access_token"]
     assert client.get("/api/admin/match-queue", headers=auth(user_token)).status_code == 401
     assert client.post("/api/admin/matching/run").status_code == 401
+
+
+# --- starting the catalogue ---
+
+
+def promote(client, token, offer_id, expect=200):
+    response = client.post(f"/api/admin/offers/{offer_id}/promote", headers=auth(token))
+    assert response.status_code == expect, response.text
+    return response.json()
+
+
+def a_shop_we_can_build_from(client, token):
+    """A trusted channel that says what it collects, and a brand we know."""
+    shop, source = setup_source(client, token)
+    category = post(client, token, "/api/admin/categories", {"slug": "phones", "name": "Phones"})
+    client.patch(
+        f"/api/admin/sources/{source['id']}",
+        headers=auth(token),
+        json={"category_id": category["id"], "trust": "high"},
+    )
+    brand = post(client, token, "/api/admin/brands", {"slug": "apple", "canonical_name": "Apple"})
+    post(client, token, f"/api/admin/brands/{brand['id']}/aliases", {"alias": "Apple"})
+    return shop, source, category, brand
+
+
+def a_storage_axis(client, token, category_id):
+    attribute = post(
+        client,
+        token,
+        "/api/admin/attributes",
+        {
+            "key": "storage_mb",
+            "name": "Storage",
+            "value_type": "number",
+            "unit_dimension": "MB",
+            "scale": 0,
+        },
+    )
+    post(
+        client,
+        token,
+        f"/api/admin/categories/{category_id}/attributes",
+        {"attribute_id": attribute["id"], "identity_bearing": True},
+    )
+    return attribute
+
+
+def test_a_listing_becomes_the_variant_it_was_looking_for(client):
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple iPhone 15", "brand": "Apple", "model": "iPhone 15", "ean": "4006381333931"},
+    )
+    assert run_on(client, token, offer)["reason"] == "signals_unmatched"
+
+    outcome = promote(client, token, offer)
+    # Not a new kind of match: the variant is made and the ordinary ladder places it.
+    assert (outcome["matched"], outcome["method"]) == (True, "gtin")
+    assert client.get("/api/admin/variants", headers=auth(token)).json()["total"] == 1
+
+
+def test_a_second_shop_lands_on_what_the_first_one_made(client):
+    """The whole point. Two shops, one product, one catalogue entry."""
+    token = admin_token(client)
+    shop, first, _, _ = a_shop_we_can_build_from(client, token)
+    second = post(
+        client,
+        token,
+        f"/api/admin/shops/{shop['id']}/sources",
+        {
+            "slug": "rd-other",
+            "access": "wholesale",
+            "decode": "xml",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "trust": "high",
+        },
+    )
+    body = {
+        "name": "Apple iPhone 15",
+        "brand": "Apple",
+        "model": "iPhone 15",
+        "ean": "4006381333931",
+    }
+    mine = offer_from(client, token, first["id"], body, external_id="A-1")
+    theirs = offer_from(client, token, second["id"], body, external_id="B-1")
+
+    promote(client, token, mine)
+    assert run_on(client, token, theirs)["matched"] is True
+    assert client.get("/api/admin/variants", headers=auth(token)).json()["total"] == 1
+
+
+def test_capacities_of_one_model_are_variants_of_one_product(client):
+    """A model string names a family, not a buyable thing."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    for external_id, ean, size in (
+        ("A-1", "4006381333931", "256 GB"),
+        ("A-2", "5902983617747", "512 GB"),
+    ):
+        offer = offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Apple iPhone 15 {size}",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "ean": ean,
+                "attributes": {"storage": size},
+            },
+            external_id=external_id,
+        )
+        promote(client, token, offer)
+
+    variants = client.get("/api/admin/variants", headers=auth(token)).json()
+    products = client.get("/api/admin/products", headers=auth(token)).json()
+    assert variants["total"] == 2
+    assert products["total"] == 1
+    assert {v["product_id"] for v in variants["items"]} == {products["items"][0]["id"]}
+
+
+def test_a_model_that_agrees_but_a_capacity_that_does_not_is_not_a_match(client):
+    """What went wrong before: fifteen listings and a thousand euros as one entry."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    small = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    promote(client, token, small)
+
+    # Same model, no barcode to fall back on, a different capacity.
+    big = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 512 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "attributes": {"storage": "512 GB"},
+        },
+        external_id="A-2",
+    )
+    assert run_on(client, token, big)["matched"] is False
+
+
+def test_a_candidate_nothing_can_check_is_low_confidence(client):
+    """Not a match and not a miss — the third answer `low_confidence` was waiting for.
+
+    The listing brought a capacity and the candidate has none recorded, so nothing can
+    confirm or deny that they are the same thing.
+    """
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    # Promoted from a listing that said nothing about capacity, so the variant carries none.
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 15",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "ean": "4006381333931",
+            },
+            external_id="A-1",
+        ),
+    )
+    # This one knows its capacity, and there is nothing on the candidate to check it against.
+    described = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 512 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "attributes": {"storage": "512 GB"},
+        },
+        external_id="A-2",
+    )
+    outcome = run_on(client, token, described)
+    assert outcome["reason"] == "low_confidence"
+    assert outcome["candidates"]
+
+
+def test_a_listing_with_nothing_to_check_still_matches_on_the_model(client):
+    """The check applies when there is something to check with. Without it the rung would
+    never fire until every category and every shop were furnished."""
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 15",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "ean": "4006381333931",
+            },
+            external_id="A-1",
+        ),
+    )
+    plain = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple iPhone 15", "brand": "Apple", "model": "iPhone 15"},
+        external_id="A-2",
+    )
+    outcome = run_on(client, token, plain)
+    assert (outcome["matched"], outcome["method"]) == (True, "brand_model")
+
+
+# --- the bar a listing has to clear ---
+
+
+def test_a_sweep_takes_only_what_carries_a_barcode(client):
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    offer_from(
+        client, token, source["id"], {"name": "Apple thing", "brand": "Apple", "model": "Thing"}
+    )
+    client.post("/api/admin/matching/run", headers=auth(token))
+
+    report = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert (report["promoted"], report["reasons"]) == (0, {"no_barcode": 1})
+
+
+def test_a_shop_title_is_not_a_model(client):
+    """A catalogue entry named after a sentence cannot be searched for and groups with
+    nothing, while looking like a real product."""
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Tālrunis Apple iPhone 15 6,1 collas Dual SIM 5G melns",
+            "brand": "Apple",
+            "ean": "4006381333931",
+        },
+    )
+    assert promote(client, token, offer, expect=422)["error"]["code"] == "no_model"
+
+
+def test_an_untrusted_channel_does_not_start_the_catalogue(client):
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    client.patch(f"/api/admin/sources/{source['id']}", headers=auth(token), json={"trust": "low"})
+    offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "x", "brand": "Apple", "model": "M", "ean": "4006381333931"},
+    )
+    client.post("/api/admin/matching/run", headers=auth(token))
+
+    report = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert report["reasons"] == {"source_not_trusted": 1}
+
+
+def test_a_channel_that_does_not_say_its_category(client):
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    client.patch(f"/api/admin/sources/{source['id']}", headers=auth(token), json={"trust": "high"})
+    brand = post(client, token, "/api/admin/brands", {"slug": "apple", "canonical_name": "Apple"})
+    post(client, token, f"/api/admin/brands/{brand['id']}/aliases", {"alias": "Apple"})
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "x", "brand": "Apple", "model": "M", "ean": "4006381333931"},
+    )
+    assert promote(client, token, offer, expect=422)["error"]["code"] == "category_unknown"
+
+
+def test_a_brand_nobody_entered_cannot_start_an_entry(client):
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "x", "brand": "Nokla", "model": "M", "ean": "4006381333931"},
+    )
+    assert promote(client, token, offer, expect=422)["error"]["code"] == "brand_unresolved"
+
+
+def test_the_origin_of_a_variant_is_in_the_trail(client):
+    """Nothing on the row says which listing it was built from."""
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "x", "brand": "Apple", "model": "M", "ean": "4006381333931"},
+    )
+    promote(client, token, offer)
+
+    entries = client.get("/api/admin/audit", headers=auth(token)).json()["items"]
+    origin = next(e for e in entries if e["changes"].get("created_from_offer"))
+    assert origin["target_type"] == "variant"
+    assert origin["changes"]["created_from_offer"] == offer

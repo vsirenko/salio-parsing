@@ -43,6 +43,18 @@ from app.features.catalog.schemas import (
 from app.schemas.pagination import Pagination
 
 
+def _placeholder(brand_id: int, model: str, *, limit: int) -> str:
+    """A slug to hold the row down until it has an id and a real one.
+
+    Cut to fit the column it is going into. A model can be two hundred characters — a shop
+    title used as one, when nothing better was read — and `products.slug` holds a hundred
+    and sixty, so the unbounded version failed the insert rather than the validation, which
+    is the worst place to find out.
+    """
+    head = f"pending-{brand_id}-"
+    return (head + normalize_model(model))[:limit]
+
+
 class CatalogService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -80,7 +92,7 @@ class CatalogService:
             title=compose_title(brand.canonical_name, payload.model, []),
             # A placeholder until the row has an id, which the slug needs. Unique because
             # nothing else can be generating this string at the same moment.
-            slug=f"pending-{payload.brand_id}-{normalize_model(payload.model)}",
+            slug=_placeholder(payload.brand_id, payload.model, limit=160),
         )
         self.session.add(product)
         await self._flush_new(product, what="product")
@@ -161,7 +173,7 @@ class CatalogService:
             **payload.model_dump(),
             model_normalized=normalize_model(payload.model),
             title="",
-            slug=f"pending-{payload.brand_id}-{normalize_model(payload.model)}",
+            slug=_placeholder(payload.brand_id, payload.model, limit=200),
         )
         self.session.add(variant)
         await self._flush_new(variant, what="variant")

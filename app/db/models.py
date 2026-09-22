@@ -971,7 +971,10 @@ class NormalizedOffer(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     raw_offer_id: Mapped[int] = mapped_column(ForeignKey("raw_offers.id", ondelete="CASCADE"))
-    ruleset_version: Mapped[str] = mapped_column(String(30))
+    # Composed rather than opaque — `generic-1+phones-1+ksenukai-1+apple-phones-1` — so a
+    # row says what produced it without a lookup. It grows by one layer at a time and the
+    # first width it was given was outgrown the moment brands got theirs.
+    ruleset_version: Mapped[str] = mapped_column(String(200))
     title: Mapped[str | None] = mapped_column(String(1000))
     brand_raw: Mapped[str | None] = mapped_column(String(200))
     brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id"))

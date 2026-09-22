@@ -26,7 +26,10 @@ ALLOWED_CROSS_FEATURE = {
     # and belongs where it can be seen.
     ("matching", "brands"): "a brand string has to be normalized as brand aliases were",
     ("offers", "brands"): "a brand ruleset is keyed by the brand as the alias table spells it",
-    ("matching", "catalog"): "a model string has to be normalized as variants were",
+    ("matching", "catalog"): (
+        "a model string has to be normalized as variants were — and promoting a listing"
+        " creates a variant, which is the catalogue's own logic and must not be copied"
+    ),
     # The second feature that exists to serve another, and the same shape as rate_limit
     # under users: the judge knows nothing about offers or the queue, it answers a
     # question and remembers the answer. Which questions are worth asking is the

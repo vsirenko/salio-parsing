@@ -8,6 +8,8 @@ POST   /api/admin/matching/run          work through what is unplaced
 GET    /api/admin/match-queue           what could not be placed, and why
 GET    /api/admin/match-queue/summary   the breakdown that says what to build next
 POST   /api/admin/matching/judge        ask the judge about the brand choices, then retry
+POST   /api/admin/offers/{id}/promote   make the variant this listing was looking for
+POST   /api/admin/matching/promote      do that for everything identifiable in the queue
 """
 
 from typing import Annotated
@@ -22,6 +24,7 @@ from app.features.matching.schemas import (
     MatchOutcome,
     MatchQueueRead,
     OfferMatchRead,
+    PromotionReport,
     QueueSummary,
     Reason,
     RunReport,
@@ -98,6 +101,43 @@ async def run(
     """Skips listings that already have a live match, retries queued ones — the catalogue
     they failed against changes underneath them."""
     return await service.run(limit=limit)
+
+
+@offers_router.post(
+    "/{offer_id}/promote",
+    response_model=MatchOutcome,
+    summary="Make the variant this listing was looking for",
+    responses={
+        404: {"model": ErrorResponse, "description": "Offer not found"},
+        422: {"model": ErrorResponse, "description": "Not enough to build a variant from"},
+    },
+)
+async def promote(offer_id: int, service: MatchingServiceDep) -> MatchOutcome:
+    """The catalogue has to start somewhere, and only the shops know what is in them.
+
+    Deliberately not a new kind of match: the variant is created and then the ordinary
+    ladder runs, so the link records the rung that actually fired rather than a method
+    meaning "we made this from itself". Where the variant came from is in the audit trail.
+    """
+    return await service.promote(offer_id)
+
+
+@router.post(
+    "/promote",
+    response_model=PromotionReport,
+    summary="Start the catalogue from what can be identified",
+)
+async def promote_queue(
+    service: MatchingServiceDep,
+    limit: Annotated[int, Query(ge=1, le=1000, description="How many to consider")] = 100,
+) -> PromotionReport:
+    """Takes only listings that carry a barcode and come from a channel we trust.
+
+    A variant made from a junk listing cannot afterwards be told from a real one, so the
+    rest stay queued where somebody can look at them. Each candidate is matched before it
+    is promoted, because the one before it may have just created the variant it needed.
+    """
+    return await service.promote_queue(limit=limit)
 
 
 @router.post(

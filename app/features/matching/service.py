@@ -1,5 +1,6 @@
 """Placing a listing in the catalogue, or saying exactly why it could not be placed."""
 
+from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import NamedTuple
@@ -8,8 +9,9 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import AppError, NotFoundError, ValidationError
 from app.db.models import (
+    Attribute,
     AvailabilityEvent,
     Brand,
     BrandAlias,
@@ -18,14 +20,26 @@ from app.db.models import (
     Offer,
     OfferMatch,
     PriceEvent,
+    Product,
     RawOffer,
+    Source,
     Variant,
+    VariantAttribute,
     VariantGtin,
     VariantMpn,
 )
 from app.db.query import paginated
 from app.features.brands.normalization import normalize_brand
 from app.features.catalog.identity import normalize_model
+from app.features.catalog.schemas import (
+    IdentifierCreate,
+    ProductCreate,
+    SourceKind,
+    ValueOrigin,
+    VariantAttributeSet,
+    VariantCreate,
+)
+from app.features.catalog.service import CatalogService
 from app.features.judge.schemas import BrandRequest, BrandVerdict, JudgeReport
 from app.features.judge.service import JudgeService
 from app.features.matching.schemas import (
@@ -35,6 +49,7 @@ from app.features.matching.schemas import (
     MatchQueueRead,
     Method,
     OfferMatchRead,
+    PromotionReport,
     QueueSummary,
     Reason,
     RunReport,
@@ -172,17 +187,29 @@ class MatchingService:
             model = reading.model or reading.title
             if model:
                 found = await self._by_model(brand.id, model)
-                if len(found) == 1:
+                # A model string names a family, not a thing you can buy. `Galaxy S26 Ultra
+                # 5G` is the 256, the 512 and the terabyte alike, and matching on it alone
+                # filed fifteen listings spanning a thousand euros as one product. So the
+                # candidates it produces have to agree on the axes before one of them is
+                # accepted.
+                agreed, unverifiable = await self._identity_agrees(found, reading)
+                if len(agreed) == 1:
                     return await self._link(
                         offer,
-                        found[0],
+                        agreed[0],
                         Method.BRAND_MODEL,
                         {"signal": "model", "brand_id": brand.id, "value": model, **via},
                         decided_by=by,
                     )
-                if len(found) > 1:
+                if len(agreed) > 1:
                     return await self._queue(
-                        offer, Reason.AMBIGUOUS, self._variants(found, "model")
+                        offer, Reason.AMBIGUOUS, self._variants(agreed, "model")
+                    )
+                if unverifiable:
+                    # The model agreed and there was no axis in common to check it with.
+                    # Not a match and not a miss: somebody, or a judge, decides.
+                    return await self._queue(
+                        offer, Reason.LOW_CONFIDENCE, self._variants(unverifiable, "model")
                     )
 
         return await self._queue(offer, *self._why(reading, lookup))
@@ -256,6 +283,58 @@ class MatchingService:
             )
         )
         return sorted(set(rows))
+
+    async def _identity_agrees(
+        self, variant_ids: list[int], reading: NormalizedOffer
+    ) -> tuple[list[int], list[int]]:
+        """Split candidates into the ones whose axes agree and the ones nothing can check.
+
+        Compared on the axes both sides happen to carry. A candidate that disagrees on one
+        of them is a different thing wearing the same model string — a different capacity,
+        usually — and is dropped. A candidate with no axis in common cannot be confirmed or
+        denied, which is a third answer and the one `low_confidence` was waiting for.
+
+        The check only applies when the listing brought an axis to check with. Without one
+        there is nothing to disagree about, and refusing on that basis would stop the rung
+        firing at all until every category and every shop is furnished.
+        """
+        if not variant_ids:
+            return [], []
+        wanted = {
+            key: Decimal(str(value))
+            for key, value in (reading.identity or {}).items()
+            if isinstance(value, int | float | Decimal)
+        }
+        if not wanted:
+            # The listing carries no axis at all — its category has no rules yet, or it
+            # said nothing this reading could use. There is nothing to check with, and
+            # refusing on that basis would mean the model rung never fires until both sides
+            # are furnished. It goes back to being what it was: a model string, at the
+            # confidence a model string is worth.
+            return sorted(variant_ids), []
+
+        rows = await self.session.execute(
+            select(VariantAttribute.variant_id, Attribute.key, VariantAttribute.value_num)
+            .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+            .where(
+                VariantAttribute.variant_id.in_(variant_ids),
+                VariantAttribute.value_num.is_not(None),
+            )
+        )
+        held: dict[int, dict[str, Decimal]] = {}
+        for variant_id, key, value in rows.all():
+            held.setdefault(variant_id, {})[key] = value
+
+        agreed: list[int] = []
+        unverifiable: list[int] = []
+        for variant_id in variant_ids:
+            theirs = held.get(variant_id, {})
+            shared = set(theirs) & set(wanted)
+            if not shared:
+                unverifiable.append(variant_id)
+            elif all(theirs[key] == wanted[key] for key in shared):
+                agreed.append(variant_id)
+        return sorted(agreed), sorted(unverifiable)
 
     async def _resolve_brand(self, offer: Offer, reading: NormalizedOffer) -> BrandLookup:
         """A brand string to a brand, or an honest nothing with its reason attached.
@@ -399,6 +478,232 @@ class MatchingService:
             await self.session.execute(
                 update(model).where(model.offer_id == offer_id).values(variant_id=variant_id)
             )
+
+    # --- starting the catalogue ---
+
+    async def promote(self, offer_id: int) -> MatchOutcome:
+        """Make the variant this listing was looking for, and let the ladder place it.
+
+        The catalogue has to start somewhere, and the only thing that knows what is in the
+        shops is the shops. A listing that carries a barcode, a brand we recognise and a
+        category is a listing we can build a catalogue entry out of.
+
+        Deliberately not a new kind of match. The variant is created and then the ordinary
+        ladder runs, so the link records the rung that actually fired — a barcode, usually —
+        rather than a special method that means "we made this from itself". Where the
+        variant came from is what the audit trail is for.
+        """
+        offer = await self._offer(offer_id)
+        reading = await self._reading(offer_id)
+        if reading is None:
+            raise ValidationError(
+                f"Offer {offer_id} has not been read yet", code="nothing_to_match"
+            )
+
+        audit.set_target("offer", offer_id)
+        variant = await self._variant_from(offer, reading)
+        outcome = await self._decide(offer, reading)
+        audit.record_changes(
+            promoted_to_variant=variant.id,
+            model=variant.model,
+            matched=outcome.matched,
+            method=outcome.method.value if outcome.method else None,
+        )
+        return outcome
+
+    async def promote_queue(self, *, limit: int = 100) -> PromotionReport:
+        """Start the catalogue from the listings that can be identified, and no others.
+
+        A variant made from a junk listing cannot afterwards be told from a real one, so
+        this takes only what carries a barcode and comes from a channel we trust. The rest
+        stay queued, where somebody can look at them.
+
+        Each candidate is matched before it is promoted, because the one before it may have
+        just created the variant it needed — which is the first thing this system has ever
+        been able to do.
+        """
+        rows = (
+            await self.session.scalars(
+                select(MatchQueue)
+                .where(MatchQueue.reason == Reason.SIGNALS_UNMATCHED.value)
+                .order_by(MatchQueue.offer_id)
+                .limit(limit)
+            )
+        ).all()
+
+        promoted = matched = 0
+        reasons: Counter[str] = Counter()
+        for row in rows:
+            reading = await self._reading(row.offer_id)
+            if reading is None:
+                reasons["not_read"] += 1
+                continue
+            offer = await self._offer(row.offer_id)
+
+            # It may already have what it needs: the listing before it in this very pass
+            # could have created the variant.
+            outcome = await self._decide(offer, reading)
+            if outcome.matched:
+                matched += 1
+                continue
+
+            refusal = await self._why_not_promotable(offer, reading)
+            if refusal is not None:
+                reasons[refusal] += 1
+                continue
+
+            try:
+                await self._variant_from(offer, reading)
+            except AppError as error:
+                reasons[error.code] += 1
+                continue
+
+            promoted += 1
+            await self._decide(offer, reading)
+
+        audit.record_changes(
+            considered=len(rows), promoted=promoted, matched=matched, **dict(reasons)
+        )
+        return PromotionReport(
+            considered=len(rows),
+            promoted=promoted,
+            matched=matched,
+            skipped=sum(reasons.values()),
+            reasons=dict(reasons),
+        )
+
+    async def _why_not_promotable(self, offer: Offer, reading: NormalizedOffer) -> str | None:
+        """The bar a listing has to clear before it becomes a catalogue entry."""
+        if not reading.gtin:
+            # Without one there is nothing another shop could ever agree with, and the
+            # entry would be a guess wearing the authority of a catalogue.
+            return "no_barcode"
+        source = await self._source_of(offer)
+        if source is None or source.trust != "high":
+            return "source_not_trusted"
+        return None
+
+    async def _variant_from(self, offer: Offer, reading: NormalizedOffer) -> Variant:
+        """Build a catalogue entry out of one listing, identifiers and all."""
+        lookup = await self._resolve_brand(offer, reading)
+        if lookup.brand is None:
+            raise ValidationError(
+                "The brand has to be settled before a variant can be made from this listing",
+                code="brand_unresolved",
+            )
+
+        source = await self._source_of(offer)
+        if source is None or source.category_id is None:
+            raise ValidationError(
+                "The channel does not say which category it collects, so there is nothing"
+                " to file this under",
+                code="category_unknown",
+            )
+
+        model = (reading.model or "").strip()
+        if not model:
+            # Deliberately no fallback to the title. A shop title is a sentence —
+            # `Tālrunis Oukitel WP58 Pro 6,7" viedtālrunis Dual SIM Android 15 5G USB…` —
+            # and a catalogue entry named after one is worse than no entry: it cannot be
+            # searched for, it groups with nothing, and it looks like a real product. A
+            # channel with no model rule leaves its listings in the queue, where the gap is
+            # visible, and they still match variants another shop created by barcode.
+            raise ValidationError(
+                "This channel does not read a model, and a shop's title is not one",
+                code="no_model",
+            )
+
+        catalog = CatalogService(self.session)
+        variant = await catalog.create_variant(
+            VariantCreate(
+                brand_id=lookup.brand.id,
+                category_id=source.category_id,
+                model=model[:200],
+                product_id=await self._family(
+                    catalog, lookup.brand.id, source.category_id, model[:200]
+                ),
+            )
+        )
+        if reading.gtin:
+            await catalog.add_gtin(variant.id, IdentifierCreate(value=reading.gtin))
+        if reading.mpn:
+            await catalog.add_mpn(variant.id, IdentifierCreate(value=reading.mpn))
+        await self._carry_identity(catalog, variant.id, reading)
+
+        # The trail is where a catalogue entry's origin lives: nothing on the row says
+        # which listing it was built from, and that is the first thing anybody will ask.
+        audit.set_target("variant", variant.id)
+        audit.record_changes(created_from_offer=offer.id, source=source.slug)
+        return await self.session.get(Variant, variant.id)
+
+    async def _family(
+        self, catalog: CatalogService, brand_id: int, category_id: int, model: str
+    ) -> int:
+        """The product this variant belongs to, made if it is the first of its family.
+
+        A brand and a model string name a **family** — `Galaxy S26 Ultra 5G` is the 256, the
+        512 and the terabyte — which is what the product level is for. Matching on it as
+        though it named one buyable thing is what filed fifteen listings and a thousand
+        euros of price range as a single entry.
+
+        The design note said grouping was a later, cheaper decision than creating a variant,
+        and that inventing a family from a single data point would be a guess. It is not a
+        guess here: the family is exactly what the model string already said, and the
+        alternative is a catalogue where every variant is an orphan.
+        """
+        existing = await self.session.scalar(
+            select(Product.id).where(
+                Product.brand_id == brand_id,
+                Product.category_id == category_id,
+                func.lower(Product.model) == model.lower(),
+            )
+        )
+        if existing is not None:
+            return existing
+        product = await catalog.create_product(
+            ProductCreate(brand_id=brand_id, category_id=category_id, model=model)
+        )
+        return product.id
+
+    async def _carry_identity(
+        self, catalog: CatalogService, variant_id: int, reading: NormalizedOffer
+    ) -> None:
+        """Put the axes the reading worked out onto the variant it just became.
+
+        Without this a variant is a brand and a model string and nothing else, and every
+        capacity of one phone is the same catalogue entry — which is exactly what happened:
+        `Galaxy S26 Ultra 5G` matched fifteen listings spanning three capacities and a
+        thousand euros. The axes are what `identity_key` is computed from, and setting them
+        is what makes that key mean anything.
+        """
+        for key, value in (reading.identity or {}).items():
+            attribute = await self.session.scalar(select(Attribute).where(Attribute.key == key))
+            if attribute is None:
+                # An axis a rule produced and nobody entered in the registry. Not an error:
+                # the registry is filled by a person and the rules run ahead of them.
+                continue
+            if attribute.value_type != "number" or not isinstance(value, int | float | Decimal):
+                # Only numbers for now. An enum axis needs its value resolved to a row in
+                # the registry, and nothing resolves one yet.
+                continue
+            await catalog.set_variant_attribute(
+                variant_id,
+                VariantAttributeSet(
+                    attribute_id=attribute.id,
+                    value_num=Decimal(str(value)),
+                    source_kind=SourceKind.PARAM,
+                    origin=ValueOrigin.CONSENSUS,
+                ),
+            )
+
+    async def _source_of(self, offer: Offer) -> Source | None:
+        return await self.session.scalar(
+            select(Source)
+            .join(RawOffer, RawOffer.source_id == Source.id)
+            .where(RawOffer.offer_id == offer.id)
+            .order_by(RawOffer.fetched_at.desc())
+            .limit(1)
+        )
 
     # --- asking for help ---
 

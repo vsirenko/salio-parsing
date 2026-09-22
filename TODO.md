@@ -144,11 +144,17 @@ and the questions that have to be answered with real data first, are written dow
       matches would be.
 - [x] A signal that was used outranks one that was not: a barcode that was tried and
       missed is `signals_unmatched`, whatever the brand turned out to be
-- [ ] **Promoting a listing into a variant has to be a choice, not a sweep.** Every one of
-      the 1504 is a candidate and most should not be: a variant made from a junk listing
-      cannot afterwards be told from a real one. The narrow version — a listing with a
-      barcode, from a source whose `trust` is high — starts the catalogue with what is
-      identifiable and leaves the rest in the queue where somebody can look at it.
+- [x] Promotion: a listing with a barcode from a trusted channel becomes a variant, joins
+      the product for its brand and model, and carries its identity axes. 267 variants and
+      202 products from the two shops, 610 of 1504 listings matched, and no entry merging
+      two capacities — where the model rung alone had merged 44 of 96.
+- [ ] **`bigbox-phones` reads no model, so 768 of its listings cannot be promoted.** Its
+      titles carry one — `Tālrunis Oukitel WP56 5G 12GB/512GB Black` — and pulling it out is
+      per-brand work, which is what the brand layer is for. They still match variants
+      ksenukai created, by barcode; they just cannot start a catalogue entry of their own.
+- [ ] **Nothing fills a product's own fields.** It gets a brand, a category and a model, and
+      its title is composed from those. A description, an image and a manufacturer URL are
+      what a card actually shows, and none of them are set.
 - [x] A second channel, `bigbox-phones`: 984 phones, 98.7% deterministically identifiable,
       and 207 barcodes it shares with ksenukai — the first thing in this system there has
       ever been anything to match against

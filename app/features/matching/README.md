@@ -14,6 +14,8 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `GET /api/admin/match-queue` | what could not be placed, filterable by `reason` |
 | `GET /api/admin/match-queue/summary` | the breakdown that says what to build next |
 | `POST /api/admin/matching/judge` | ask the judge about the brand choices, then retry them |
+| `POST /api/admin/offers/{offer_id}/promote` | make the variant this listing was looking for |
+| `POST /api/admin/matching/promote` | do that for everything identifiable in the queue |
 
 ## How it works
 
@@ -62,6 +64,30 @@ inference can throw away the right answer and report it as absent.
 
 A queue row carries the near misses that were considered, so deciding is a choice rather
 than a search.
+
+**A model string names a family, not a thing you can buy.** `Galaxy S26 Ultra 5G` is the
+256, the 512 and the terabyte alike, and matching on it alone filed fifteen listings
+spanning a thousand euros as one catalogue entry — 44 of 96 such entries merged capacities.
+So the candidates that rung produces must agree on the identity axes before one is
+accepted, and what the rung was reaching for — the family — is the **product** level:
+a promoted variant joins the product for its brand, category and model, and several
+capacities of one phone become several variants of one product. After the change, none of
+either rung's entries merge a capacity.
+
+The check applies only when the listing brought an axis to check with. Without one there is
+nothing to disagree about, and refusing on that basis would stop the rung firing until
+every category and every shop were furnished. When the listing has an axis and the candidate
+has none, that is neither a match nor a miss: it is `low_confidence`, which until now had no
+producer.
+
+**The catalogue starts from listings, because only the shops know what is in them.**
+Promotion makes a variant out of a listing and then lets the ordinary ladder place it, so
+the link records the rung that actually fired rather than a method meaning "we made this
+from itself"; where a variant came from is in the audit trail. A sweep takes only what
+carries a barcode and comes from a channel we trust, because a variant made from a junk
+listing cannot afterwards be told from a real one. It also refuses a shop's title in place
+of a model: an entry named after a sentence cannot be searched for, groups with nothing, and
+looks like a real product.
 
 **A signal that was used outranks one that was not.** A barcode needs no brand — the first
 rung runs before the brand is looked at — so a listing whose barcode was tried and missed is
