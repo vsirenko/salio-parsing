@@ -11,7 +11,13 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import CategoryServiceDep
 from app.api.pagination import pagination_params
-from app.features.categories.schemas import CategoryCreate, CategoryRead, CategoryUpdate
+from app.features.categories.schemas import (
+    CategoryAliasCreate,
+    CategoryAliasRead,
+    CategoryCreate,
+    CategoryRead,
+    CategoryUpdate,
+)
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
 
@@ -79,3 +85,30 @@ async def update_category(
     """Hiding a category hides everything under it, and nothing is deleted or stops being
     collected. `is_visible_effective` is recomputed here rather than sent in."""
     return await service.update_category(category_id, payload)
+
+
+@router.get(
+    "/{category_id}/aliases",
+    response_model=list[CategoryAliasRead],
+    summary="What shops call this category",
+)
+async def list_aliases(category_id: int, service: CategoryServiceDep) -> list[CategoryAliasRead]:
+    return await service.list_aliases(category_id)
+
+
+@router.post(
+    "/{category_id}/aliases",
+    response_model=CategoryAliasRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a name a shop gives this category",
+    responses={
+        404: {"model": ErrorResponse, "description": "Category not found"},
+        409: {"model": ErrorResponse, "description": "Already a name for it"},
+    },
+)
+async def add_alias(
+    category_id: int, payload: CategoryAliasCreate, service: CategoryServiceDep
+) -> CategoryAliasRead:
+    """Two jobs at once: the word a shop puts at the front of a title, and the name it
+    gives the section a listing came from."""
+    return await service.add_alias(category_id, payload)

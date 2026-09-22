@@ -6,13 +6,28 @@ under a name it does not know, and that a field holding the maker's own code is 
 nothing at all.
 """
 
+import re
 from typing import Any
 
 from app.features.offers.normalization import barcodes
-from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, register
+from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-1"
+VERSION = "bigbox-2"
+
+# `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
+SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
+# `4/128GB` writes the working memory and the capacity as one, and only the second half
+# carries a unit — so cutting at the unit leaves `4/` behind, on the model.
+_RAM_PREFIX = re.compile(r"\s*\d+\s*/\s*$")
+# A diagonal is a specification, and everything after it on these titles is too.
+_FROM_DIAGONAL = re.compile(
+    # No word boundary after the quote mark: there is none between `"` and a space, and
+    # requiring one is why this matched nothing the first time.
+    r'\s*\d+(?:[.,]\d+)?\s*(?:"|\b(?:collas|inch)\b).*$',
+    re.IGNORECASE,
+)
+_TRAILING = re.compile(r"[\s,/]+$")
 
 # The record calls its manufacturer code by its raw column name: the index only labels the
 # attributes it lets shoppers filter on, and this is not one of them.
@@ -21,16 +36,60 @@ MPN_KEY = "attribute_string_23"
 LINE_KEY = "Tālruņa modelis"
 
 
-def _barcode(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _barcode(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     return {"gtin": barcodes.pick(payload.get("ean_code"))}
 
 
-def _part_number(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _part_number(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     value = (payload.get("attributes") or {}).get(MPN_KEY)
     return {"mpn": str(value).strip()[:100]} if value else {}
 
 
-def _line(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _model(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The model, cut out of a title whose word order this shop keeps.
+
+    `[kind] [brand] MODEL CAPACITY COLOUR`, and each step of the cut is one of those.
+    """
+    title = (fields.get("title") or "").strip()
+    if not title:
+        return {}
+
+    words = title.split()
+    at = 0
+    # The words naming the category come from the registry, not from here: they are Latvian,
+    # and a Lithuanian shop needs rows rather than another tuple in this module.
+    while (
+        at < len(words)
+        and words[at].strip(',.\u201e\u201c"').casefold() in vocabulary.category_names
+    ):
+        at += 1
+
+    brand = (fields.get("brand_raw") or "").strip()
+    if brand and at < len(words) and words[at].casefold() == brand.casefold():
+        at += 1
+
+    rest = " ".join(words[at:])
+    found = SIZE.search(rest)
+    if not found:
+        # Nothing to cut at. On this shop that is a feature phone or a desk phone, where
+        # there is no capacity to state — and the colour then runs into the name, so two
+        # colours of one handset would become two products. Better a visible gap.
+        return {}
+
+    head = _FROM_DIAGONAL.sub("", rest[: found.start()])
+    model = _TRAILING.sub("", _RAM_PREFIX.sub("", head)).strip()
+    return {"model": model[:200]} if model else {}
+
+
+def _line(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     line = (payload.get("attributes") or {}).get(LINE_KEY)
     return {"_line": str(line).strip()} if line else {}
 
@@ -68,6 +127,29 @@ RULESET = register(
                     " wrongly."
                 ),
                 body=_part_number,
+            ),
+            Rule(
+                id="bigbox-model-from-title",
+                layer=SOURCE,
+                why=(
+                    "This shop states no model anywhere, so 768 of its listings could not"
+                    " start a catalogue entry. Its titles keep one word order —"
+                    " `Telefons Apple iPhone 18 Pro Max 256GB Burgundy` — so the model is"
+                    " what is left after the word naming the category and the brand, cut at"
+                    " the first capacity. The colour needs no handling at all: it comes"
+                    " after the capacity and falls off with it. Measured on all 984: 891"
+                    " yield a model, and the names agree with what ksenukai states for the"
+                    " same phone — `iPhone 17 Pro`, `iPhone 18 Pro Max`,"
+                    " `Galaxy S26 Ultra 5G`. The other 93 have no capacity to cut at, and"
+                    " every one is a feature phone or a desk phone; there the colour runs"
+                    " into the name, so they are left alone rather than filed as one"
+                    " product per colour. Of the 891, about 118 come out untidy — a"
+                    " diagonal that ran into the name, a title with the kind of thing at the"
+                    " end instead of the front. They are untidy consistently: the same"
+                    " phone yields the same string, so its variants still group together"
+                    " and what suffers is how the name reads rather than what it does."
+                ),
+                body=_model,
             ),
             Rule(
                 id="bigbox-line",

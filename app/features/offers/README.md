@@ -122,6 +122,17 @@ opaque, so a row can be attributed without looking anything up. A key with no ru
 by whatever is more general, which is how a sample gets loaded and measured before any rules
 are written for it.
 
+**Words a rule needs come in as a `Vocabulary`, never out of a query.** Reading is a pure
+function of a payload and the rules that apply to it — that is what lets a stored payload be
+read again and the two readings compared — and a rule that went to the database for a word
+would make the answer depend on when it was asked. So `OfferService` loads the words once per
+category and hands them to `read()`. Empty is valid: a rule given no words does nothing,
+which is a rule declining to guess rather than a rule that is broken.
+
+The first of those words is what a shop calls the category, which is how bigbox's model is
+read (see [categories](../categories/README.md)). They are Latvian here and Lithuanian one
+shop later, so they are rows — a tuple in this module would be a code change per country.
+
 **A brand lives inside a category**, which is why the tree nests
 `normalization/brands/phones/apple.py`. A module there is mostly the measurement that
 justifies its rules, as the first two are: Apple's part number is five characters of
@@ -175,6 +186,13 @@ is also what a candidate queue would be filled from.
   category's rules. Null means a channel carrying a whole shop, and then those rules simply
   do not apply — honest rather than a gap, because reading a monitor by a phone's rules is a
   confident wrong answer and no rules at all is only a quiet one.
+- **An unchanged payload still gets read again when the rules have moved on.** Ingestion
+  short-circuits on identical bytes — that is what keeps `raw_offers` proportional to how
+  much the world changes — and a reparse goes through the same path. So a shop that had just
+  gained a rule kept the reading it had from before anybody wrote one, and the rule looked
+  like it did nothing. The stored `ruleset_version` is now compared before the short circuit
+  is trusted, and a row is written only when it differs; a pass that changed nothing still
+  writes nothing.
 - **Payload keys in the ruleset must be written in lower case**, and an assertion at import
   enforces it. They are matched against a lowered payload, so a key with a capital never
   matches anything — which is what silently happened to `currencyId`.

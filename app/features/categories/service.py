@@ -6,9 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from app.db.models import Category
+from app.db.models import Category, CategoryAlias
 from app.db.query import paginated
-from app.features.categories.schemas import CategoryCreate, CategoryRead, CategoryUpdate
+from app.features.categories.schemas import (
+    CategoryAliasCreate,
+    CategoryAliasRead,
+    CategoryCreate,
+    CategoryRead,
+    CategoryUpdate,
+)
 from app.schemas.pagination import Pagination
 
 # Recomputed for the whole tree rather than for the subtree that moved. There are few
@@ -128,6 +134,38 @@ class CategoryService:
         await self.session.refresh(category)
         audit.record_changes(**sent)
         return CategoryRead.model_validate(category)
+
+    # --- what shops call it ---
+
+    async def list_aliases(self, category_id: int) -> list[CategoryAliasRead]:
+        await self._row(category_id)
+        rows = await self.session.scalars(
+            select(CategoryAlias)
+            .where(CategoryAlias.category_id == category_id)
+            .order_by(CategoryAlias.alias_normalized)
+        )
+        return [CategoryAliasRead.model_validate(row) for row in rows]
+
+    async def add_alias(self, category_id: int, payload: CategoryAliasCreate) -> CategoryAliasRead:
+        await self._row(category_id)
+        audit.set_target("category", category_id)
+
+        alias = CategoryAlias(
+            category_id=category_id,
+            alias_normalized=payload.alias,
+            language=payload.language,
+            origin=payload.origin.value,
+        )
+        self.session.add(alias)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError(f"'{payload.alias}' already names this category") from exc
+
+        await self.session.refresh(alias)
+        audit.record_changes(added_alias=payload.alias, language=payload.language)
+        return CategoryAliasRead.model_validate(alias)
 
     async def _row(self, category_id: int) -> Category:
         category = await self.session.get(Category, category_id)

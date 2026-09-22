@@ -152,17 +152,17 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     full = read(fields, source_slug="bigbox-phones", category="phones")
     assert full["gtin"] == "6941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-1+phones-1+bigbox-1"
+    assert full["ruleset_version"] == "generic-1+phones-1+bigbox-2"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):
-    """`Galaxy S26` is the Ultra, the Plus and the plain one alike: matching on it would
-    make one ambiguous pile out of a whole family."""
+    """`Galaxy S26` is the Ultra, the Plus and the plain one alike: reading it as the model
+    would make one ambiguous pile out of a whole family. The model comes from the title."""
     fields = {**parsed(event_loop), "attributes": {"Tālruņa modelis": "Galaxy S26"}}
-    full = read(fields, source_slug="bigbox-phones", category="phones")
+    full = read_it(fields)
 
-    assert full["model"] is None
-    # It is a line, which is what the layer below the brand selects on.
+    assert full["model"] == "WP56 5G"
+    # The line is working state the layer below the brand selects on, and is not stored.
     assert "_line" not in full
 
 
@@ -170,3 +170,61 @@ def test_capacity_comes_from_the_category_not_the_shop(event_loop):
     fields = parsed(event_loop)
     full = read(fields, source_slug="bigbox-phones", category="phones")
     assert full["identity"]["storage_mb"] == 512 * 1024
+
+
+# --- reading a model out of a title ---
+
+
+def read_it(fields, words=("telefons", "tālrunis", "viedtālrunis", "mobilais")):
+    from app.features.offers.normalization import Vocabulary
+
+    return read(
+        fields,
+        source_slug="bigbox-phones",
+        category="phones",
+        vocabulary=Vocabulary(category_names=frozenset(words)),
+    )
+
+
+def test_the_model_is_what_is_left_after_the_kind_and_the_brand(event_loop):
+    """`[kind] [brand] MODEL CAPACITY COLOUR`, and the colour falls off with the capacity."""
+    fields = parsed(event_loop)
+    assert fields["title"] == "Tālrunis Oukitel WP56 5G 12GB/512GB Black"
+    assert read_it(fields)["model"] == "WP56 5G"
+
+
+def test_the_words_naming_the_category_come_from_the_registry(event_loop):
+    """They are Latvian. A rule carrying them is vocabulary in code, which is the thing we
+    keep having to take back out."""
+    fields = parsed(event_loop)
+    # Without the words, the kind stays on the front of the name.
+    assert read_it(fields, words=())["model"] == "Tālrunis Oukitel WP56 5G"
+
+
+def test_working_memory_written_into_the_capacity_does_not_land_on_the_model(event_loop):
+    """`4/128GB` is two numbers and one unit, so cutting at the unit leaves `4/` behind."""
+    fields = {**parsed(event_loop), "title": "Viedtālrunis Oukitel G3 4/128GB Black"}
+    assert read_it(fields)["model"] == "G3"
+
+
+def test_a_diagonal_is_a_specification_not_a_name(event_loop):
+    fields = {**parsed(event_loop), "title": 'Viedtālrunis Oukitel G3 6" 4/128GB 6300mAh'}
+    assert read_it(fields)["model"] == "G3"
+
+
+def test_a_title_with_no_capacity_yields_no_model(event_loop):
+    """On this shop that is a feature phone or a desk phone. There the colour runs into the
+    name, so two colours of one handset would become two products."""
+    fields = {**parsed(event_loop), "title": "Mobilais tālrunis Nokia 3210 LTE Gold"}
+    assert read_it(fields)["model"] is None
+
+
+def test_the_names_agree_with_what_the_other_shop_states(event_loop):
+    """Which is what lets one product hold both shops' listings."""
+    for title, expected in (
+        ("Telefons Apple iPhone 17 Pro 256GB Deep Blue", "iPhone 17 Pro"),
+        ("Telefons Apple iPhone 18 Pro Max 512GB Black", "iPhone 18 Pro Max"),
+        ("Telefons Samsung Galaxy S26 Ultra 5G 1TB Pink", "Galaxy S26 Ultra 5G"),
+    ):
+        fields = {**parsed(event_loop), "title": title, "brand": title.split()[1]}
+        assert read_it(fields)["model"] == expected, title

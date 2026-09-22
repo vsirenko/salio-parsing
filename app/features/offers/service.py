@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.exceptions import AppError, NotFoundError, ValidationError
 from app.db.models import (
     Category,
+    CategoryAlias,
     Market,
     NormalizedOffer,
     Offer,
@@ -22,7 +23,12 @@ from app.db.models import (
     Source,
 )
 from app.db.query import paginated
-from app.features.offers.normalization import content_hash, read
+from app.features.offers.normalization import (
+    Vocabulary,
+    content_hash,
+    read,
+    version_for,
+)
 from app.features.offers.schemas import (
     BatchFailure,
     BatchOffer,
@@ -53,6 +59,9 @@ def _found(reading: NormalizedOffer | None) -> list[str]:
 class OfferService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        # One query per category for the life of a request, not one per listing: a batch
+        # carries five hundred of them and they all want the same words.
+        self._vocabularies: dict[int, Vocabulary] = {}
         # Ingestion records a price change; it does not decide when one counts. That rule
         # is the same knowledge as what the history means, so it lives with the table.
         self.prices = PriceService(session)
@@ -168,7 +177,18 @@ class OfferService:
             # to how often we look at it.
             existing.last_seen_at = now
             await self.session.flush()
+
+            # Unchanged bytes still get read again when the rules have moved on. Without
+            # this a reparse re-runs the parser and stops there: the payload comes out
+            # identical, the short circuit fires, and a shop that just gained a rule keeps
+            # the reading it had before anybody wrote one. The row is only written when the
+            # ruleset version differs, so a pass that changed nothing writes nothing.
             reading = await self._current_reading(existing.id)
+            if reading is None or reading.ruleset_version != version_for(
+                source.slug, category=await self._category_slug(source)
+            ):
+                reading = await self._store_reading(existing, source=source)
+                self._apply_reading_to_offer(offer, reading)
             return IngestResult(
                 offer_id=offer.id,
                 raw_offer_id=existing.id,
@@ -371,6 +391,7 @@ class OfferService:
             raw.payload,
             source_slug=source.slug,
             category=await self._category_slug(source),
+            vocabulary=await self._vocabulary(source),
         )
         reading = await self.session.scalar(
             select(NormalizedOffer).where(
@@ -414,6 +435,24 @@ class OfferService:
         offer.price = reading.price
         offer.currency_code = reading.currency_code
         offer.availability = reading.availability
+
+    async def _vocabulary(self, source: Source) -> Vocabulary:
+        """The words the rules need, loaded once for the batch rather than per listing.
+
+        Read here and handed in so that `read` stays a pure function of its arguments: a
+        reading has to be recomputable over stored bytes, and a rule that queried a registry
+        would make the answer depend on when it was asked.
+        """
+        if source.category_id is None:
+            return Vocabulary()
+        if source.category_id not in self._vocabularies:
+            names = await self.session.scalars(
+                select(CategoryAlias.alias_normalized).where(
+                    CategoryAlias.category_id == source.category_id
+                )
+            )
+            self._vocabularies[source.category_id] = Vocabulary(category_names=frozenset(names))
+        return self._vocabularies[source.category_id]
 
     async def _category_slug(self, source: Source) -> str | None:
         """What this channel collects, when it collects one thing.

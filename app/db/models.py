@@ -310,6 +310,41 @@ class AttributeAlias(Base):
     )
 
 
+class CategoryAlias(Base):
+    """A name a shop gives this category, in the language it gives it in.
+
+    Two jobs, and the second is why this is a table rather than a list in a module.
+
+    A shop puts the kind of thing at the front of a title — `Telefons Apple iPhone 18 Pro
+    Max 256GB Burgundy` — and that word carries no model, so reading a model out of a title
+    means knowing which words name the category. They are Latvian words. Written into a
+    rule they are vocabulary in code, which is the thing we keep having to take back out;
+    written here they are rows, and a Lithuanian shop needs rows rather than a rewrite.
+
+    The same rows answer the other question nobody has answered yet: which of our categories
+    a shop's own section path means. `Mobilie telefoni` and `Telefoni` are both this
+    category said by two shops, which is exactly what an alias is.
+    """
+
+    __tablename__ = "category_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"))
+    alias_normalized: Mapped[str] = mapped_column(String(200))
+    # ISO 639-1, or null for a name that belongs to no particular language.
+    language: Mapped[str | None] = mapped_column(String(2))
+    origin: Mapped[str] = mapped_column(String(10), default="human", server_default="human")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("category_id", "alias_normalized", name="uq_alias_per_category"),
+        CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
+        # Not unique on the string alone: a word can name two categories, and which one a
+        # listing means is settled by where it came from rather than by the word.
+        Index("ix_category_aliases_normalized", "alias_normalized"),
+    )
+
+
 class CategoryAttribute(Base):
     """Which attributes a category has, and which of them carry identity there.
 

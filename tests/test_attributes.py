@@ -415,3 +415,53 @@ def test_attaching_is_recorded_against_the_category(client):
     assert entry["target_id"] == str(phones["id"])
     assert entry["changes"]["attached_attribute"] == "color"
     assert entry["changes"]["identity_bearing"] is True
+
+
+# --- what shops call a category ---
+
+
+def test_a_category_is_named_in_the_languages_shops_use(client):
+    """Two jobs: the word a shop puts at the front of a title, and the name it gives the
+    section a listing came from."""
+    from tests.test_offers import post
+
+    token = admin_token(client)
+    phones = post(client, token, "/api/admin/categories", {"slug": "phones", "name": "Phones"})
+    for word in ("Telefons", "„Tālrunis“", "Mobilie telefoni"):
+        response = client.post(
+            f"/api/admin/categories/{phones['id']}/aliases",
+            headers=auth(token),
+            json={"alias": word, "language": "lv"},
+        )
+        assert response.status_code == 201, response.text
+
+    stored = {
+        a["alias_normalized"]
+        for a in client.get(
+            f"/api/admin/categories/{phones['id']}/aliases", headers=auth(token)
+        ).json()
+    }
+    # The shop's quotation marks are punctuation around the name, not part of it.
+    assert stored == {"telefons", "tālrunis", "mobilie telefoni"}
+
+
+def test_the_same_name_twice_is_refused(client):
+    from tests.test_offers import post
+
+    token = admin_token(client)
+    phones = post(client, token, "/api/admin/categories", {"slug": "phones", "name": "Phones"})
+    body = {"alias": "Telefons", "language": "lv"}
+    assert (
+        client.post(
+            f"/api/admin/categories/{phones['id']}/aliases", headers=auth(token), json=body
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/api/admin/categories/{phones['id']}/aliases",
+            headers=auth(token),
+            json={"alias": " telefons ", "language": "lv"},
+        ).status_code
+        == 409
+    )

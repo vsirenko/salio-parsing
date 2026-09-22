@@ -118,11 +118,17 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **`color` has no values and no alias.** It bears identity for a phone and there is
       nothing to resolve a colour to — 61 spellings across 520 products, three problems in
       one shape. Its rule is declared `pending` and its registry row is empty on purpose.
-- [ ] **Nothing resolves an attribute name to the registry, so vocabulary sits in code.**
+- [x] The words a shop puts in front of a title live in the database, not in a rule.
+      `category_aliases` holds one row per spelling, normalized the way it is looked up, and
+      `Vocabulary` carries them into `read()` so that reading stays a pure function of what
+      it was handed. Nine Latvian words entered for phones. The same table is what the
+      unbuilt source-category mapping needs.
+- [ ] **Nothing resolves an *attribute* name to the registry, so that vocabulary sits in code.**
       `attribute_aliases` and `attribute_value_aliases` exist for exactly this and both carry
       a `language` column; nothing calls either, so `categories/phones.py` holds Latvian
-      strings as a marked stopgap. It is the piece that makes a second country cheap: a
-      Lithuanian shop needs rows, not another tuple in a category module. The resolution
+      strings as a marked stopgap. Category names took this route already, and attribute
+      names are the same journey: a Lithuanian shop needs rows, not another tuple in a
+      category module. The resolution
       cannot live in `read()`, which is pure — it is a second step over a stored reading,
       taking the offer's market for the language order (`markets.languages`, first is
       default) and falling back to aliases that belong to no language at all, which is what
@@ -148,10 +154,23 @@ and the questions that have to be answered with real data first, are written dow
       the product for its brand and model, and carries its identity axes. 267 variants and
       202 products from the two shops, 610 of 1504 listings matched, and no entry merging
       two capacities — where the model rung alone had merged 44 of 96.
-- [ ] **`bigbox-phones` reads no model, so 768 of its listings cannot be promoted.** Its
-      titles carry one — `Tālrunis Oukitel WP56 5G 12GB/512GB Black` — and pulling it out is
-      per-brand work, which is what the brand layer is for. They still match variants
-      ksenukai created, by barcode; they just cannot start a catalogue entry of their own.
+- [x] `bigbox-phones` reads a model out of its titles. The shop keeps one word order —
+      `[kind] [brand] MODEL CAPACITY COLOUR` — so the model is what is left once the word
+      naming the category and the brand are off the front and the title is cut at the first
+      capacity; the colour needs no handling, it falls off with the capacity. 891 of 984
+      yield one, and the names agree with what ksenukai states for the same phone
+      (`iPhone 17 Pro`, `Galaxy S26 Ultra 5G`). Coverage went `model 0 → 90.6%`, and the
+      shop's `no_model` refusals from 768 to 182.
+- [ ] **93 bigbox listings still read no model**, and every one is a feature phone or a desk
+      phone — there is no capacity in the title to cut at, and the colour then runs into the
+      name, so two colours of one handset would file as two products. Left as a visible gap
+      rather than guessed at. About 118 of the 891 also come out untidy, consistently so:
+      the same phone yields the same string, so its variants still group, and what suffers is
+      how the name reads rather than what it does.
+- [ ] **`Tālruņa modelis` is read as a line and nothing selects on it yet.** It is on 40.5%
+      of bigbox's phones and holds `Galaxy S26` for the Ultra, the Plus and the plain one
+      alike — a family, not a model. `bigbox-line` writes it; the product layer that would be
+      chosen by it is still empty.
 - [ ] **Nothing fills a product's own fields.** It gets a brand, a category and a model, and
       its title is composed from those. A description, an image and a manufacturer URL are
       what a card actually shows, and none of them are set.

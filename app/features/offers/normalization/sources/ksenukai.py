@@ -14,6 +14,7 @@ from app.features.offers.normalization.rules import (
     SOURCE,
     Rule,
     Ruleset,
+    Vocabulary,
     register,
 )
 
@@ -25,16 +26,22 @@ VERSION = "ksenukai-1"
 INTERNAL_PREFIX = "Y0000"
 
 
-def _barcode(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _barcode(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     return {"gtin": barcodes.pick(payload.get("alternative_codes"))}
 
 
-def _model(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _model(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     model = (payload.get("attributes") or {}).get("Modelis")
     return {"model": str(model).strip()[:200]} if model else {}
 
 
-def _not_a_part_number(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _not_a_part_number(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     mpn = fields.get("mpn")
     if mpn and str(mpn).startswith(INTERNAL_PREFIX):
         return {"mpn": None}

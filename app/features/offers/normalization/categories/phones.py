@@ -9,7 +9,7 @@ shop that sells them.
 import re
 from typing import Any
 
-from app.features.offers.normalization.rules import CATEGORY, Rule, Ruleset, register
+from app.features.offers.normalization.rules import CATEGORY, Rule, Ruleset, Vocabulary, register
 
 SLUG = "phones"
 VERSION = "phones-1"
@@ -40,7 +40,9 @@ SCALE = {"MB": 1, "GB": 1024, "TB": 1024 * 1024}
 _SIZE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s?(TB|GB|MB)\b", re.IGNORECASE)
 
 
-def _storage(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _storage(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     """Capacity as an exact number of megabytes, from the attributes or from the title."""
     for name, value in (fields.get("attributes") or {}).items():
         lowered = str(name).strip().lower()

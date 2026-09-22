@@ -27,7 +27,7 @@ needed — and does it by construction instead of by a rule remembering to.
 import re
 from typing import Any
 
-from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, register
+from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabulary, register
 
 CATEGORY = "phones"
 BRAND_KEY = "apple"
@@ -38,7 +38,9 @@ VERSION = "apple-phones-1"
 PART_NUMBER = re.compile(r"^([A-Z0-9]{5})([A-Z]{2})/A$")
 
 
-def _configuration(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
+def _configuration(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
     found = PART_NUMBER.match(str(fields.get("mpn") or "").strip().upper())
     if not found:
         return {}

@@ -39,8 +39,27 @@ from typing import Any
 
 GENERIC, CATEGORY, SOURCE, BRAND, PRODUCT, FINISH = 10, 20, 30, 40, 50, 90
 
-# What a rule is handed: the raw payload, and the reading so far.
-Body = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
+
+@dataclass(frozen=True)
+class Vocabulary:
+    """The words a rule needs and cannot know, handed in rather than looked up.
+
+    `read` is a pure function of a payload and the rules that apply to it, and that purity
+    is what lets a reading be recomputed over stored bytes and compared with the old one.
+    A rule that queried a registry would break it, and a rule that carried the words itself
+    would put Latvian in a module and Lithuanian in the same module a month later.
+
+    So the caller loads them and passes them. Empty is a valid vocabulary: a rule that
+    needs words it was not given does nothing, which is a rule declining to guess.
+    """
+
+    # What shops call this category, normalized: `telefons`, `viedtālrunis`, `mobilais`.
+    # A shop puts one at the front of a title and it carries no model.
+    category_names: frozenset[str] = frozenset()
+
+
+# What a rule is handed: the raw payload, the reading so far, and the words it was given.
+Body = Callable[[dict[str, Any], dict[str, Any], Vocabulary], dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -62,8 +81,10 @@ class Rule:
         """Declared but not written. A gap that is visible beats one that is not."""
         return self.body is None
 
-    def apply(self, payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
-        return {} if self.body is None else self.body(payload, fields)
+    def apply(
+        self, payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+    ) -> dict[str, Any]:
+        return {} if self.body is None else self.body(payload, fields, vocabulary)
 
 
 @dataclass(frozen=True)

@@ -26,6 +26,7 @@ from app.features.offers.normalization.rules import (
     SOURCES,
     Rule,
     Ruleset,
+    Vocabulary,
 )
 from app.features.offers.normalization.sources import __all__ as _sources  # noqa: F401
 
@@ -38,6 +39,7 @@ __all__ = [
     "RULESET_VERSION",
     "Rule",
     "Ruleset",
+    "Vocabulary",
     "content_hash",
     "read",
     "rules_for",
@@ -110,6 +112,7 @@ def read(
     *,
     source_slug: str | None = None,
     category: str | None = None,
+    vocabulary: Vocabulary | None = None,
 ) -> dict[str, Any]:
     """One reading of one payload. Everything it cannot make sense of stays None.
 
@@ -120,13 +123,16 @@ def read(
     """
     fields = generic.read(payload)
     fields.setdefault("identity", {})
+    # Handed in rather than looked up, so this stays a pure function of its arguments and a
+    # reading can be recomputed over stored bytes and compared with the old one.
+    words = vocabulary or Vocabulary()
 
     brand: str | None = None
     line: str | None = None
     for rule in rules_for(source_slug, category=category, brand=brand, line=line):
         # Each rule sees what the ones before it tidied, and later wins. A rule that finds
         # nothing returns nothing rather than a None that would erase an earlier answer.
-        fields.update(rule.apply(payload, fields))
+        fields.update(rule.apply(payload, fields, words))
         if brand is None:
             brand = _brand_key(fields)
         line = fields.get("_line") or line
@@ -137,7 +143,7 @@ def read(
     line = fields.get("_line") or line
     for rule in rules_for(source_slug, category=category, brand=brand, line=line):
         if rule.layer >= 40:  # BRAND and below: the layers that could not be selected yet
-            fields.update(rule.apply(payload, fields))
+            fields.update(rule.apply(payload, fields, words))
 
     fields["ruleset_version"] = version_for(source_slug, category=category, brand=brand, line=line)
     return {key: value for key, value in fields.items() if not key.startswith("_")}

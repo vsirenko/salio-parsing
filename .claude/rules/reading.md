@@ -28,9 +28,16 @@
   both keyed by a normalized string and a language, both nullable where the string belongs
   to no particular language — a maker's marketing name is the same word everywhere.
   `markets.languages` is ordered, and the first is the market's default.
-- Nothing resolves through those registries yet, so `categories/phones.py` holds Latvian
-  strings **as a stopgap, marked as one**. Do not add a second language beside them; add the
-  resolution step instead.
+- **Words a rule needs are handed in, never queried.** They arrive as a `Vocabulary`
+  (`normalization/rules.py`), loaded by the caller and passed to `read()`, because reading is
+  a pure function of a payload and the rules that apply to it — that purity is what lets a
+  stored payload be read again and the two readings compared. A rule given no words does
+  nothing, which is declining to guess, not a failure.
+- Category names go this way already: `category_aliases`, loaded once per category by
+  `OfferService`, which is how a shop's `Telefons` is cut off the front of a title.
+  Attribute names do not yet, so `categories/phones.py` still holds Latvian strings **as a
+  stopgap, marked as one**. Do not add a second language beside them; add the resolution
+  step instead.
 - Matching leans on the language-neutral signals on purpose — barcode, part number, model
   designation — so language is a question about attributes and the storefront, not about
   identifying a product.
