@@ -27,10 +27,13 @@ Per shop, not per listing: five listings of one phone in one shop is one shop's 
     fog         green   bm 8, rdveikals 6, euronics 5, and rdveikals   3 shops against 1
                         light-green 12; dateks alone says grey 8
 
-`frost` is the one that is genuinely contested and it is left undeclared below rather than
-guessed: rdveikals says purple 9, euronics says blue 3, and two shops disagreeing is not a
-majority of one. The judge was asked and answered `white` at 0.46, under the threshold — three
-opinions, no two alike, which is what an unanswerable question looks like.
+`frost` and `lemongrass` are here by a decision rather than by a count, and the difference is
+written down because it matters. `frost` is contested — rdveikals says purple 12, euronics
+says blue 6, and the judge asked as a straight choice between those two answered **neither**
+at 0.89 and 0.91. `lemongrass` is not contested, it is thin: euronics says green on 6
+listings and nobody says otherwise, which is one shop and the bar elsewhere here is two.
+Both were settled by the person who owns this catalogue, and both can be argued with by
+pointing at these numbers.
 
 ## Why the version moved to 2
 
@@ -58,7 +61,7 @@ from app.features.offers.normalization.rules import (
 
 CATEGORY = "phones"
 BRAND_KEY = "google"
-VERSION = "google-phones-2"
+VERSION = "google-phones-3"
 
 # Google's own names for a colour, each one counted across the shops that state a colour in a
 # field beside it. Deliberately a closed list: a name not here is not guessed at.
@@ -68,6 +71,9 @@ PALETTE = {
     "indigo": "blue",
     "porcelain": "white",
     "fog": "green",
+    # Entered by a decision rather than by a count — see the rule's `why`.
+    "lemongrass": "green",
+    "frost": "purple",
 }
 
 
@@ -114,16 +120,24 @@ RULESET = register(
                 body=_palette,
             ),
             Rule(
-                id="google-frost",
+                id="google-decided-by-hand",
                 layer=BRAND,
                 why=(
-                    "`Frost` is left undeclared on purpose. rdveikals reads it purple on 9"
-                    " and euronics blue on 3 — two shops disagreeing is not a majority of"
-                    " one — and the judge answered `white` at 0.46, which is a third opinion"
-                    " and under the threshold. Three answers and no two alike is what an"
-                    " unanswerable question looks like, and half a canonicalisation is worse"
-                    " than none: a colour mapped wrongly splits one product into several,"
-                    " confidently. It needs a photograph, like `Night Sky` does."
+                    "`frost` and `lemongrass` are in the palette above by a decision, not by"
+                    " a count, and this rule exists to say so where anybody changing the"
+                    " palette will read it."
+                    "\n\n"
+                    "`lemongrass` is thin rather than contested: euronics says green on 6"
+                    " listings and nothing says otherwise. One shop is one opinion and the"
+                    " bar everywhere else here is two, so counting alone would leave it"
+                    " undeclared and four listings unplaceable."
+                    "\n\n"
+                    "`frost` is genuinely contested and was settled anyway: rdveikals reads"
+                    " it purple on 12, euronics blue on 6, and the judge — asked as a"
+                    " straight choice between exactly those two — answered **neither** at"
+                    " 0.89 and 0.91, the only confident answer in twelve such questions."
+                    " Purple is the majority by listings and by nothing else. If a third"
+                    " shop ever states it in a field, that is the number to look at."
                 ),
             ),
         ),

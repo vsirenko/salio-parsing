@@ -349,18 +349,20 @@ def test_the_palette_matches_whole_words():
     assert "color" not in fields["identity"]
 
 
-def test_frost_is_declared_and_unwritten():
-    """Two shops disagree — purple on 9, blue on 3 — and the judge answered white at 0.46.
-    Three opinions and no two alike is what an unanswerable question looks like."""
+def test_the_decided_palette_words_are_marked_as_decided():
+    """`frost` and `lemongrass` are in the palette by a decision, not by a count, and the
+    rule that says so is declared with no body so nobody changes them without reading why:
+    rdveikals reads Frost purple on 12 and euronics blue on 6, and the judge asked as a
+    straight choice between those two answered neither, at 0.89."""
     brand_rules = [r for r in rules_for(category=PHONES, brand="google") if r.layer == BRAND]
-    frost = next(r for r in brand_rules if r.id == "google-frost")
-    assert frost.pending
-    assert (
-        "color"
-        not in read({"name": "Google Pixel 11 12/256GB Frost", "brand": "Google"}, category=PHONES)[
-            "identity"
-        ]
+    decided = next(r for r in brand_rules if r.id == "google-decided-by-hand")
+    assert decided.pending
+    frost = read({"name": "Google Pixel 11 12/256GB Frost", "brand": "Google"}, category=PHONES)
+    assert frost["identity"]["color"] == "purple"
+    lemongrass = read(
+        {"name": "Google Pixel 10 12/128GB Lemongrass", "brand": "Google"}, category=PHONES
     )
+    assert lemongrass["identity"]["color"] == "green"
 
 
 def test_samsung_reads_its_maker_s_own_names_for_a_colour():
@@ -440,7 +442,7 @@ FINGERPRINTS = {
     "cec-1": "e0252dfe4696",
     "dateks-2": "28ca1e200e23",
     "discover-2": "113eaca94ea9",
-    "google-phones-2": "4291e6a77725",
+    "google-phones-3": "b11089929d14",
     "ksenukai-5": "89aa740d025f",
     "m79-4": "9aa38c660bc8",
     "onea-1": "3f30745390d5",
