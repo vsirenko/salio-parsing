@@ -516,6 +516,44 @@ class MatchingService:
         await self.session.flush()
         audit.record_changes(learned_gtin=reading.gtin, onto_variant=variant_id)
 
+    async def _brand_from_title(self, reading: NormalizedOffer) -> Brand | None:
+        """The maker the title begins with, when the field named one nobody knows.
+
+        A shop can be wrong about a brand and still be right about everything else.
+        bm.market files eight Google Pixels under `Getnord`, a maker of rugged phones that
+        did not make them: the title says `Google Pixel 10`, the model, the colour and the
+        capacity all agree with the Pixels four other shops sell, and only the one field
+        disagrees. Read as it stands, the listing is lost — and entering `Getnord` in the
+        registry would be worse, because then it would be filed confidently under a maker
+        that did not make it.
+
+        Deliberately narrow. This runs only where the field resolved to **nothing**, so a
+        title is never weighed against a brand a shop stated correctly, and two words before
+        one because a maker's name can be two — `Bang & Olufsen`, `Kruger&Matz`.
+        """
+        words = (reading.title or reading.model or "").split()
+        for take in (2, 1):
+            if len(words) < take:
+                continue
+            try:
+                normalized = normalize_brand(" ".join(words[:take]))
+            except ValueError:
+                continue
+            found = list(
+                (
+                    await self.session.execute(
+                        select(Brand)
+                        .join(BrandAlias, BrandAlias.brand_id == Brand.id)
+                        .where(BrandAlias.alias_normalized == normalized)
+                    )
+                )
+                .scalars()
+                .unique()
+            )
+            if len(found) == 1:
+                return found[0]
+        return None
+
     async def _resolve_brand(self, offer: Offer, reading: NormalizedOffer) -> BrandLookup:
         """A brand string to a brand, or an honest nothing with its reason attached.
 
@@ -548,6 +586,12 @@ class MatchingService:
         if len(brands) == 1:
             return BrandLookup(brands[0], "resolved", [brands[0].id])
         if not brands:
+            # The field names a maker nobody has heard of, and the title may name one we
+            # have. Only then: a field that resolves is never second-guessed, and a field
+            # that resolves to two is a question the judge answers, not this.
+            named = await self._brand_from_title(reading)
+            if named is not None:
+                return BrandLookup(named, "resolved_title", [named.id])
             return BrandLookup(None, "unknown", [])
 
         candidates = [brand.id for brand in brands]

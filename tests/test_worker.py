@@ -352,3 +352,44 @@ def test_a_store_that_cannot_be_written_to_fails_the_run_once(client, event_loop
     result = event_loop.run_until_complete(collect(job, collector=None, store=SnapshotStore(shut)))
     assert result.items_seen == 0
     assert "cannot write snapshots" in result.error
+
+
+def test_a_reparse_reports_the_id_the_shop_gave_and_not_the_file_name(client, event_loop, tmp_path):
+    """A file name has to be safe to put in a path, so a slash in an identifier becomes an
+    underscore. Reported under that name, a reparse does not re-read the product — it
+    invents a second one beside it, and the shop doubles."""
+    from app.features.runs.channel import Part, Snapshot
+    from app.features.runs.schemas import Job, Kind
+    from app.features.runs.snapshots import SnapshotStore
+    from app.features.runs.worker import _reparse
+
+    store = SnapshotStore(tmp_path)
+    store.save(
+        "slow-shop",
+        Snapshot(
+            external_id="MJXP4HX/A",
+            parts=[Part(role="detail", url="http://shop/1", status=200, body="{}")],
+        ),
+    )
+
+    class Channel:
+        slug = "slow-shop"
+
+        def parse(self, snapshot):
+            return {"id": snapshot.external_id}
+
+    job = Job(
+        run_id=1,
+        source_id=1,
+        source_slug="slow-shop",
+        kind=Kind.REPARSE,
+        access="retail",
+        decode="markup",
+        base_url=None,
+        market_codes=["LV"],
+        delivers=["catalogue"],
+    )
+    seen, payloads, failed = _reparse(job, Channel(), store)
+
+    assert (seen, failed) == (1, 0)
+    assert [p["external_id"] for p in payloads] == ["MJXP4HX/A"]

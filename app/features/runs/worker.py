@@ -126,7 +126,12 @@ def _reparse(job: Job, channel: Channel, store: SnapshotStore) -> tuple[int, lis
 
         payloads.append(
             {
-                "external_id": external_id,
+                # The snapshot's own id, not the one the filename yielded. A file name has
+                # to be safe to put in a path, so `MJXP4HX/A` is stored as `MJXP4HX_A` —
+                # and reported under that name a reparse does not re-read the product, it
+                # invents a second one beside it. cec's Apple codes all carry that slash,
+                # and one reparse doubled the shop from 92 listings to 184.
+                "external_id": snapshot.external_id or external_id,
                 "payload": fields,
                 "url": snapshot.url,
                 "seller_external_id": snapshot.seller_external_id,

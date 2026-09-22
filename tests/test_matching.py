@@ -1458,3 +1458,42 @@ def test_an_entry_that_knows_its_colour_beats_one_that_does_not(client):
     outcome = run_on(client, token, third)
     assert outcome["matched"] is True, "the colourless entry no longer makes this a question"
     assert outcome["method"] == "brand_model"
+
+
+def test_a_brand_the_shop_got_wrong_is_read_off_the_title(client):
+    """bm.market files eight Google Pixels under `Getnord`, a maker of rugged phones that
+    did not make them. The title, the model, the colour and the capacity all agree with the
+    Pixels four other shops sell; only the one field disagrees.
+
+    Entering `Getnord` in the registry would be worse than leaving it out: the listing would
+    stop being visibly unplaced and start being confidently filed under the wrong maker.
+    """
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    brand, _, variant = catalogue(client, token)
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": f"{brand['canonical_name']} iPhone 15 Pro 256GB",
+            "brand": "Getnord",
+            "model": "iPhone 15 Pro",
+        },
+    )
+
+    outcome = run_on(client, token, offer)
+    assert outcome["matched"] is True
+    assert outcome["variant_id"] == variant["id"]
+
+
+def test_a_brand_the_shop_stated_correctly_is_never_second_guessed(client):
+    """The title is read only where the field resolved to nothing."""
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    catalogue(client, token)
+    offer = offer_from(
+        client, token, source["id"], {"name": "Nokla phone", "brand": "Nokla", "model": "X1"}
+    )
+
+    assert run_on(client, token, offer)["reason"] == "brand_unknown"

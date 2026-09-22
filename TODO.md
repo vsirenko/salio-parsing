@@ -253,13 +253,25 @@ and the questions that have to be answered with real data first, are written dow
       up to four other shops each. The brand is supplied by a rule, because the shop states
       none in any of a product's 41 fields; the inference is checked rather than assumed,
       since all 89 known codes are published under Apple elsewhere.
-- [ ] **cec's `Sudraba krāsas` resolves to nothing, and 19 of its 92 are `ambiguous` for
-      want of a colour.** `sudraba` is in the registry and `Sudraba krāsas` — "of silver
-      colour" — is not, so the phrase fails and the matcher finds several variants differing
-      only by colour. Five labels are missing: `Sudraba krāsas` (15 products) and
-      `Lavandas krāsas` (2) are plain Latvian and safe to enter; `Ledāju krāsas` (8),
-      `Night Sky` (4) and `Astromelns` (1) are Apple's marketing and want a photo first.
-      Registry work, not rule work — the words belong in `attribute_value_aliases`.
+- [x] cec's colours, entered from evidence rather than judgement: the 89 Apple codes it
+      shares with other shops say what those shops call each phone, and three labels came
+      back unanimous — `Sudraba krāsas` silver (49 votes), `Lavandas krāsas` purple,
+      `Astromelns` black. Entered; cec went from 19 unplaced to 8. `Ledāju krāsas` (white
+      17 / blue 8) and `Night Sky` (no evidence at all) are left as visible gaps, which is
+      what the disagreement is for.
+- [ ] **`Ledāju krāsas` and `Night Sky` want a photograph.** Apple's marketing names for
+      two colours, on 12 cec listings. The shops that carry the same codes disagree about
+      the first and say nothing about the second, so neither can be entered from evidence.
+- [ ] **bigbox's 50 unplaced listings are reachable, and not yet worth reaching.** Its
+      model rule declines a title with no capacity in it, deliberately: on that shop it is a
+      feature phone or a desk phone, and the colour runs into the name. Cutting a trailing
+      colour off through the registry — rdveikals' technique — was measured at 58 of its 93
+      model-less listings. The quality is not there yet: `GSM Nokia 106` and
+      `KX-TS500PDB stacionārais` keep a category word the registry does not hold, a stylus
+      reads as `Zīmulis Honor Magic Pencil`, and `NOKIA 200 4G TA-1785 DS` and
+      `NOKIA 200 4G DS` would become two entries for one phone. Worth doing with the title
+      cleaning done properly — adding `gsm`, `stacionārais`, `fiksētais` to
+      `category_aliases` is most of it — and not worth doing by bolting it on.
 - [ ] **bm.market's Apple codes are the first five characters of everybody else's.** It
       writes `MD1Q4` where the others write `MD1Q4HX/A`, so 46 of its Apple listings cannot
       match on a part number they in fact share. Apple's first five characters identify the
