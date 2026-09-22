@@ -262,17 +262,21 @@ class MatchingService:
             if model:
                 found = await self._by_model(brand.id, model)
                 if not found:
-                    # A shop that states no maker leaves it on the model, because the
-                    # reading has no way to know which word it is: m79's German feed reads
-                    # `Google Pixel 10` where every other shop, and the catalogue, holds
-                    # `Pixel 10`. Here the brand has just been resolved, so the same cut the
-                    # reading could not make is a lookup — and only when the full form found
-                    # nothing, so a model that really begins with its maker's name keeps it.
-                    shorter = naming.without_brand(model, brand.canonical_name)
-                    if shorter != model:
-                        found = await self._by_model(brand.id, shorter)
+                    # The maker's name at the front of a model is noise, and it can be on
+                    # either side: a shop that states no brand leaves it on the listing, and
+                    # an entry named before the reading learned to take it off still carries
+                    # it. So the name is tried without it and then with it, and only when
+                    # the form as read found nothing.
+                    for other in (
+                        naming.without_brand(model, brand.canonical_name),
+                        f"{brand.canonical_name} {model}",
+                    ):
+                        if other == model:
+                            continue
+                        found = await self._by_model(brand.id, other)
                         if found:
-                            model = shorter
+                            model = other
+                            break
                 # A model string names a family, not a thing you can buy. `Galaxy S26 Ultra
                 # 5G` is the 256, the 512 and the terabyte alike, and matching on it alone
                 # filed fifteen listings spanning a thousand euros as one product. So the
@@ -1066,7 +1070,15 @@ class MatchingService:
         )
 
     async def _stale_names(self, *, limit: int) -> list[tuple[int, str]]:
-        """Entries with one listing, named after a reading that listing has outgrown."""
+        """Entries named after a reading their listings have outgrown, where they all agree.
+
+        One listing used to be the bar, on the grounds that two shops agreeing on an entry
+        is evidence its name is good enough and one of them disagreeing about a `5G` suffix
+        is not a reason to rename what they share. The guard was right about disagreement
+        and too blunt about the rest: 132 entries read `Motorola Motorola G06 Power` — the
+        maker twice — and every listing on every one of them had already stopped reading it
+        that way. That is unanimity, not a disagreement, and it is what the bar is now.
+        """
         newest = (
             select(
                 OfferMatch.variant_id.label("variant_id"),
@@ -1086,18 +1098,20 @@ class MatchingService:
             .where(NormalizedOffer.model.is_not(None))
             .subquery()
         )
-        alone = (
-            select(OfferMatch.variant_id)
-            .where(OfferMatch.superseded_at.is_(None))
-            .group_by(OfferMatch.variant_id)
-            .having(func.count() == 1)
+        # One row per entry, and only where every listing on it reads the same model. A
+        # single row back means they agree; two or more means they do not, and an entry two
+        # shops describe differently keeps the name it has.
+        agreed = (
+            select(newest.c.variant_id, func.min(newest.c.model).label("model"))
+            .where(newest.c.rank == 1)
+            .group_by(newest.c.variant_id)
+            .having(func.count(func.distinct(newest.c.model)) == 1)
             .subquery()
         )
         rows = await self.session.execute(
-            select(newest.c.variant_id, newest.c.model)
-            .join(Variant, Variant.id == newest.c.variant_id)
-            .join(alone, alone.c.variant_id == newest.c.variant_id)
-            .where(newest.c.rank == 1, Variant.model != newest.c.model)
+            select(agreed.c.variant_id, agreed.c.model)
+            .join(Variant, Variant.id == agreed.c.variant_id)
+            .where(Variant.model != agreed.c.model)
             .limit(limit)
         )
         return [(variant_id, model) for variant_id, model in rows.all()]

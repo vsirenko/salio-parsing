@@ -9,14 +9,21 @@ shop that sells them.
 import re
 from typing import Any
 
-from app.features.offers.normalization import colours
-from app.features.offers.normalization.rules import CATEGORY, Rule, Ruleset, Vocabulary, register
+from app.features.offers.normalization import colours, naming
+from app.features.offers.normalization.rules import (
+    CATEGORY,
+    FINISH,
+    Rule,
+    Ruleset,
+    Vocabulary,
+    register,
+)
 
 SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-7"
+VERSION = "phones-8"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -179,6 +186,28 @@ def _colour_phrases(fields: dict[str, Any], vocabulary: Vocabulary) -> list[str]
     return phrases
 
 
+def _without_the_maker(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """Take the maker off the front of a model that repeats it.
+
+    Last of all, because the model is what the layers before this one worked out. Two words
+    before one, so `Bang & Olufsen` and `Kruger&Matz` come off whole.
+    """
+    model = (fields.get("model") or "").strip()
+    if not model or not vocabulary.brand_names:
+        return {}
+    words = model.split()
+    for take in (2, 1):
+        if len(words) <= take:
+            continue
+        maker = " ".join(words[:take])
+        if maker.casefold() in vocabulary.brand_names:
+            shorter = naming.without_brand(model, maker)
+            return {"model": shorter} if shorter != model else {}
+    return {}
+
+
 def _megabytes(text: str) -> int | None:
     """The largest size in the text, because a title that carries two carries both kinds.
 
@@ -318,6 +347,30 @@ RULESET = register(
                     " calls a colour — which is the thing to fix, rather than this."
                 ),
                 body=_color_from_title,
+            ),
+            Rule(
+                id="phones-model-does-not-repeat-the-maker",
+                layer=FINISH,
+                why=(
+                    "`Motorola Motorola G06 Power` is how a catalogue entry came out, and"
+                    " 301 of 2939 of them read that way: the title composes the brand and"
+                    " the model, and the model already held the brand. It gets there because"
+                    " a shop that states no maker in a field leaves it at the front of the"
+                    " name, and the shop's own rule can only cut off a brand the shop"
+                    " stated. 1821 of m79's 2680 models repeat the maker, and euronics,"
+                    " discover, bm, rdveikals and dateks all do it too."
+                    "\n\n"
+                    "Which word is the maker is not something a rule can know and not"
+                    " something the shop says, so the names are handed in as vocabulary —"
+                    " the same way the words for `phone` are. A catalogue with no brands in"
+                    " it yet hands in nothing and this does nothing, which is the right"
+                    " behaviour rather than a gap."
+                    "\n\n"
+                    "Last of all, because the model is what every layer before this one"
+                    " worked out. Through `naming.without_brand` so the cut respects a word"
+                    " boundary: `CAT` against `Caterpillar CAT S75` once cut mid-word."
+                ),
+                body=_without_the_maker,
             ),
         ),
     ),

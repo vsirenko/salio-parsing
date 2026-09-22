@@ -55,6 +55,8 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         "ksenukai-color-from-title",
         "ksenukai-model",
         "ksenukai-article-is-not-a-part-number",
+        # Last of all: the model is what every layer before it worked out.
+        "phones-model-does-not-repeat-the-maker",
     ]
     # General to specific: the category before the shop, canonicalisation last.
     assert [rule.layer for rule in rules] == [
@@ -64,6 +66,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         SOURCE,
         SOURCE,
         SOURCE,
+        FINISH,
         FINISH,
     ]
 
@@ -102,10 +105,10 @@ def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
     assert version_for(KSENUKAI) == "generic-1+ksenukai-5"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-7+ksenukai-5"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-8+ksenukai-5"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-7+ksenukai-5"
+        == "generic-1+phones-8+ksenukai-5"
     )
 
 
@@ -253,7 +256,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-7+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-1+phones-8+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -282,6 +285,28 @@ def test_a_part_number_of_another_shape_is_left_alone():
     fields = read({"name": "x", "brand": "Apple", "mpn": "SOMETHING-ELSE"}, category=PHONES)
     assert "apple_config" not in fields["identity"]
     assert fields["mpn"] == "SOMETHING-ELSE"
+
+
+def test_a_model_does_not_repeat_its_maker():
+    """`Motorola Motorola G06 Power` is how 301 catalogue entries of 2939 came out: the
+    title composes the brand and the model, and the model already held the brand. Which
+    word is the maker is handed in, because no rule can know it and no shop says it."""
+    from app.features.offers.normalization.rules import Vocabulary
+
+    words = Vocabulary(brand_names=frozenset({"motorola", "samsung"}))
+    fields = read(
+        {"name": "Motorola Moto G06 Power", "brand": "Motorola", "model": "Motorola Moto G06"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert fields["model"] == "Moto G06"
+
+    # A catalogue with no brands in it hands in nothing, and then this does nothing.
+    bare = read(
+        {"name": "Motorola Moto G06", "brand": "Motorola", "model": "Motorola Moto G06"},
+        category=PHONES,
+    )
+    assert bare["model"] == "Motorola Moto G06"
 
 
 def test_a_maker_s_name_can_be_a_phrase_and_the_word_alone_is_not_the_unit():
@@ -460,7 +485,7 @@ FINGERPRINTS = {
     "oneplus-phones-1": "8d9ee7915042",
     "onea-1": "3f30745390d5",
     "euronics-1": "e61bf95a7a78",
-    "phones-7": "a9b123a7ff8a",
+    "phones-8": "5f102ff7e96d",
     "rdveikals-4": "f5078e0afc82",
     "samsung-phones-2": "5fa9e1989091",
     "tet-2": "a49facbac61d",

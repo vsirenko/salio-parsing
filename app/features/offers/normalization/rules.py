@@ -57,6 +57,12 @@ class Vocabulary:
     # What shops call this category, normalized: `telefons`, `viedtālrunis`, `mobilais`.
     # A shop puts one at the front of a title and it carries no model.
     category_names: frozenset[str] = frozenset()
+    # Every maker the catalogue knows, lowercased. A model does not repeat its maker, and
+    # a shop that states no brand field leaves it on the model instead — `Samsung Galaxy S26
+    # Ultra 5G` where every other shop writes `Galaxy S26 Ultra 5G`. Which word is the maker
+    # is not something a rule can know and not something a shop tells us, so it is handed
+    # in, like the words for `phone` above.
+    brand_names: frozenset[str] = frozenset()
     # Every spelling of a colour that resolves, lowercased, to the canonical value it means:
     # `melna` and `black` both to `black`. One map for every language the registry holds,
     # because a rule reading a Latvian field and a rule reading an English name are both

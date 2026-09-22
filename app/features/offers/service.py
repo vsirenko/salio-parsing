@@ -15,6 +15,7 @@ from app.db.models import (
     Attribute,
     AttributeValue,
     AttributeValueAlias,
+    Brand,
     Category,
     CategoryAlias,
     Market,
@@ -498,8 +499,10 @@ class OfferService:
                 .join(Attribute, Attribute.id == AttributeValue.attribute_id)
                 .where(Attribute.key == COLOR_KEY)
             )
+            makers = await self.session.scalars(select(Brand.canonical_name))
             self._vocabularies[source.category_id] = Vocabulary(
                 category_names=frozenset(names),
+                brand_names=frozenset(name.casefold() for name in makers if name),
                 colours=MappingProxyType({alias: value for alias, value in colours.all()}),
             )
         return self._vocabularies[source.category_id]

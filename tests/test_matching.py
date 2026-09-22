@@ -1023,9 +1023,9 @@ def test_a_maker_left_on_the_model_is_cut_off_for_the_lookup(client):
     assert outcome["variant_id"] == variant["id"]
 
 
-def test_a_model_that_really_begins_with_its_maker_keeps_it(client):
-    """Only when the full form found nothing, so an entry whose model genuinely starts with
-    the maker's name is still found by it."""
+def test_an_entry_that_kept_the_maker_is_still_found(client):
+    """The cut is tried only when the full form found nothing, so an entry named before the
+    reading learned to take the maker off is not lost while it waits to be renamed."""
     token = admin_token(client)
     _, source, category, brand = a_shop_we_can_build_from(client, token)
     variant = post(
@@ -1048,7 +1048,11 @@ def test_a_model_that_really_begins_with_its_maker_keeps_it(client):
         },
         external_id="C-10",
     )
-    assert run_on(client, token, offer)["variant_id"] == variant["id"]
+    # The reading takes the maker off, and the lookup finds the entry that still has it by
+    # putting it back — which is the same two forms tried from the other end.
+    outcome = run_on(client, token, offer)
+    assert outcome["matched"] is True
+    assert outcome["variant_id"] == variant["id"]
 
 
 def test_a_maker_named_at_the_end_of_a_title_is_read(client):

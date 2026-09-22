@@ -456,6 +456,28 @@ and the questions that have to be answered with real data first, are written dow
       on the plain one, the same phrase on the same phone. Without it the count is two shops
       to one, which is the ordinary bar, and the answer is black. Worth remembering as a
       way of counting rather than as a fact about charcoal.
+- [x] **A model does not repeat its maker.** 301 catalogue entries of 2939 read
+      `Motorola Motorola G06 Power`: the title composes the brand and the model, and the
+      model already held the brand. It gets there because a shop that states no maker in a
+      field leaves it at the front of the name — 1821 of m79's 2680 models, and euronics,
+      discover, bm, rdveikals and dateks all do it. Which word is the maker is handed in as
+      vocabulary, the same way the words for `phone` are, and the rule runs at FINISH
+      because the model is what every layer before it worked out. 301 -> 74.
+- [x] **A rename needs unanimity, not a single listing.** The bar was "one listing on the
+      entry", on the grounds that two shops agreeing is evidence the name is good enough.
+      That was right about disagreement and too blunt about the rest: 132 entries carried
+      the maker twice and every listing on every one of them had already stopped reading it
+      that way. The bar is now that all of them agree. The 74 that remain are held by real
+      disagreement — their shops write the model differently — which is the case the guard
+      was written for.
+- [ ] **Re-deciding is one HTTP request per listing and it is the slowest thing here.**
+      Every change to a reading rule costs a reparse (a minute) and then a re-decide of
+      every match whose colour or model moved, one `POST /offers/{id}/match` at a time —
+      500 to 8000 of them, sequentially. It wants to be one endpoint that takes the whole
+      set: the query that finds them is already written and used by hand every time.
+- [ ] **The colour registry exists only in this database.** 235 rows, of which 31 were
+      entered today, and `cad9caa29396` creates the table without seeding it. A fresh
+      database starts with no colours at all and every reading loses its colour.
 - [ ] **Motorola and Honor still have palettes waiting.**
 - [ ] **The word method is a script that was run by hand and ought to be a tool.** It is the
       answer to the registry gap this project has been carrying since the first shop, and it
