@@ -265,12 +265,25 @@ and the questions that have to be answered with real data first, are written dow
       seal` put the invention last, and guessing from the first word would read a seal as a
       colour. `normalization/colours.py` owns the decision for every shop, as
       `barcodes.py` does for its own.
-- [ ] **About 150 colour spellings left, and they really are the maker's marketing** —
-      `obsidian`, `glacier`, `silver shadow`, `cobalt violet`. Nothing derives them, so
-      they are rows a person writes once. Cheaper than a judge at this size and readable
-      afterwards, which a probability is not; the judge earns the question when the list
-      stops being finite — thirteen shops, ten categories, three languages, and a new
-      invention with every flagship.
+- [x] 117 spellings of a maker's own colour names, written by hand into
+      `attribute_value_aliases`. Nothing derives them — obsidian is black because Google
+      decided so — and at this size a person writes them once and can read them back, which
+      a probability cannot.
+- [x] A reparse recomputes a reading instead of trusting the version. The version tracks
+      the rules and a reading is a function of the rules *and* the words handed to them, so
+      117 aliases entered in the registry moved no version, nothing looked stale, and
+      nothing was recomputed: two shops kept readings with no colour while the words sat in
+      the table. Colour went 90.6% → 95.4% the moment the re-read stopped asking.
+- [x] ksenukai and 1a.lv leave the word for colour off 34 titles altogether and put the
+      colour last behind a comma anyway. Read from there, with the registry still the gate.
+- [ ] **Seven of those 117 are guesses and should be checked against a real product.**
+      `arctic seal` and `silhouette` and `miglas` went to grey by how they sound;
+      `carbon` is nearer dark grey than black; `black olive` is a dark *green* and was filed
+      under black by its first word; `sky teal` sits between green and turquoise and we hold
+      both; `fluidity` and `tapestry` are not colour words at all. And `evening blue` was
+      filed as blue against the shop's own field, which called it grey. A wrong colour
+      splits one product into several, confidently, so these are worth an hour with the
+      product photos — or the first question the judge is ever asked.
 - [ ] **Colour merges are a visibility number, not a quality one.** They went 327 → 157 → 50
       → 67 → 92 as colour reached more listings: each time more of them carry one, more
       previously silent disagreements become countable. Counting how many *could* disagree

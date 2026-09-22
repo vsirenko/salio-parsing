@@ -18,6 +18,30 @@
   then write — and put the measurement in the `why`. A source with no ruleset is read
   generically, and the coverage on its run is what says which rules it needs.
 
+## A version, and what it does not cover
+
+- **`ruleset_version` is what decides whether a stored reading is stale.** A re-read
+  compares it and keeps the row when it matches, so editing a rule and leaving the version
+  alone is a fix that reaches nothing: the reparse sees the same string, every row stands,
+  and the rule looks broken. That happened three times in one afternoon before it was
+  guarded.
+- **Bump the version when a *body* changes, not only when a rule is added.** A helper the
+  body calls counts, and so does a constant or a regex it reads —
+  `tests/test_normalization_layers.py` fingerprints the whole module and fails naming the
+  ruleset whose version has to go up. Move the version and the fingerprint in the same
+  commit; they are two values that have to agree, so forgetting one is loud.
+- **Prose is deliberately not fingerprinted.** A `why` lives inside the ruleset literal and
+  editing one changes nothing about what comes out of a reading. Rewriting a comment should
+  not recompute three thousand rows.
+- **The version covers the code and not the vocabulary**, and this is the part that is easy
+  to miss. A reading is a function of the rules *and* of the words handed to them, and
+  entering a hundred aliases in the registry moves no version at all — so nothing looks
+  stale and nothing is recomputed. Registry work therefore has to be followed by a
+  **reparse**, which re-reads what is stored with the reader as it is now and does not
+  consult the version. Ordinary ingestion still does: there, unchanged bytes should not cost
+  work, and that is what keeps `raw_offers` proportional to how much the world changes
+  rather than to how often we look at it.
+
 ## Vocabulary is data, structure is code
 
 - **A rule may not carry a shop's or a language's words.** That `Iekšējā atmiņa` means

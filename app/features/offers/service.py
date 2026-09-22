@@ -46,6 +46,7 @@ from app.features.offers.schemas import (
     RawOfferRead,
 )
 from app.features.prices.service import PriceService
+from app.features.runs.schemas import Kind
 from app.schemas.pagination import Pagination
 
 # What a run's coverage is counted over. Availability is not here: it has a value for
@@ -71,6 +72,8 @@ class OfferService:
         # One query per category for the life of a request, not one per listing: a batch
         # carries five hundred of them and they all want the same words.
         self._vocabularies: dict[int, Vocabulary] = {}
+        # One lookup per run for the life of a request, not one per observation.
+        self._reparse_runs: dict[int, bool] = {}
         # Ingestion records a price change; it does not decide when one counts. That rule
         # is the same knowledge as what the history means, so it lives with the table.
         self.prices = PriceService(session)
@@ -190,11 +193,21 @@ class OfferService:
             # Unchanged bytes still get read again when the rules have moved on. Without
             # this a reparse re-runs the parser and stops there: the payload comes out
             # identical, the short circuit fires, and a shop that just gained a rule keeps
-            # the reading it had before anybody wrote one. The row is only written when the
-            # ruleset version differs, so a pass that changed nothing writes nothing.
+            # the reading it had before anybody wrote one.
+            #
+            # The version is not enough on its own, and finding that out cost an afternoon.
+            # A reading is a function of the rules *and* of the vocabulary handed to them,
+            # and `ruleset_version` only tracks the first: 117 colour spellings entered in
+            # the registry changed nothing, because no code had moved. So a reparse — whose
+            # whole purpose is to re-read what is stored with the reader as it is now —
+            # always recomputes, and the version check is left to ordinary ingestion, where
+            # unchanged bytes genuinely should not cost work.
             reading = await self._current_reading(existing.id)
-            if reading is None or reading.ruleset_version != version_for(
-                source.slug, category=await self._category_slug(source)
+            if (
+                reading is None
+                or await self._is_reparse(run_id)
+                or reading.ruleset_version
+                != version_for(source.slug, category=await self._category_slug(source))
             ):
                 reading = await self._store_reading(existing, source=source)
                 self._apply_reading_to_offer(offer, reading)
@@ -444,6 +457,21 @@ class OfferService:
         offer.price = reading.price
         offer.currency_code = reading.currency_code
         offer.availability = reading.availability
+
+    async def _is_reparse(self, run_id: int | None) -> bool:
+        """Whether this batch is a re-reading of what is already stored.
+
+        Read off the run rather than passed on the batch: the kind is already recorded
+        there, and a second place to say it is a second place for the two to disagree.
+        Cached for the life of the request because a batch is five hundred observations of
+        one run.
+        """
+        if run_id is None:
+            return False
+        if run_id not in self._reparse_runs:
+            kind = await self.session.scalar(select(Run.kind).where(Run.id == run_id))
+            self._reparse_runs[run_id] = kind == Kind.REPARSE.value
+        return self._reparse_runs[run_id]
 
     async def _vocabulary(self, source: Source) -> Vocabulary:
         """The words the rules need, loaded once for the batch rather than per listing.

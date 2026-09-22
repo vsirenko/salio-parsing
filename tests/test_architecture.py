@@ -42,6 +42,11 @@ ALLOWED_CROSS_FEATURE = {
     # which happened, to 1393 of 1396 products at once. The alternative was matching on the
     # string "quick", which breaks in silence the day the vocabulary moves.
     ("matching", "runs"): "a reading from a cheap pass is a price, not an identity",
+    # The same vocabulary, the other way round: ingestion has to know whether a batch is a
+    # re-reading of what is stored, because a reparse must recompute a reading that an
+    # ordinary pass would rightly leave alone. The kind is recorded on the run already, and
+    # a second place to say it is a second place for the two to disagree.
+    ("offers", "runs"): "a reparse re-reads what an ordinary pass would leave alone",
 }
 
 

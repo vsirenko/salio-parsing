@@ -7,7 +7,18 @@ Nothing here knows a colour. The whole vocabulary is in `attribute_value_aliases
 language it belongs to, and this only decides *which part of a phrase to look up*.
 """
 
+import re
+
 from app.features.offers.normalization.rules import Vocabulary
+
+# `(melns)`, `„mint green“`, `black (open box)`. Brackets and quotation marks are a
+# shop's punctuation around a word, never part of the word — the same reason an
+# attribute alias is stored without them.
+_WRAPPED = re.compile(r"[(\[{][^)\]}]*[)\]}]")
+_EDGES = re.compile(r"^[^\w]+|[^\w]+$")
+# Quotation marks travel inside the phrase rather than around it — `krāsa „mint green“`
+# — so they come out wherever they are.
+_QUOTES = re.compile(r"[\u201e\u201c\u201d\u00ab\u00bb\"']")
 
 
 def resolve(phrase: str, vocabulary: Vocabulary) -> str | None:
@@ -27,7 +38,13 @@ def resolve(phrase: str, vocabulary: Vocabulary) -> str | None:
     if not phrase or not vocabulary.colours:
         return None
 
-    words = phrase.strip().casefold().split()
+    # A bracketed aside is dropped whole; what is left keeps its own edges tidy. `(melns)`
+    # is a colour in brackets, and `black (open box)` is a colour with a note after it.
+    cleaned = _QUOTES.sub("", phrase)
+    cleaned = _WRAPPED.sub(" ", cleaned) if _WRAPPED.search(cleaned) else cleaned
+    cleaned = _EDGES.sub("", cleaned.strip()) or _EDGES.sub("", phrase.strip())
+
+    words = cleaned.casefold().split()
     for start in range(len(words)):
         found = vocabulary.colours.get(" ".join(words[start:]))
         if found:

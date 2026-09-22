@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "ksenukai-phones"
-VERSION = "ksenukai-4"
+VERSION = "ksenukai-5"
 
 # The shop's own article number. Every one of the 541 phones in the older corpus began
 # `Y0000`, without exception.
@@ -69,6 +69,12 @@ def color_from_title(
         return {}
     title = str(payload.get("title_lv") or fields.get("title") or "")
     parts = [found.group(1).strip().casefold() for found in COLOUR.finditer(title)]
+    if not parts:
+        # The group writes the word for colour on almost every title and then, on thirty-odd,
+        # simply does not: `…, 512 GB, krēmkrāsa`. The colour still sits where it always
+        # sits, last and behind a comma, so that is where it is looked for — and the
+        # registry is the gate, so a last segment that is not a colour gives nothing.
+        parts = [title.rsplit(",", 1)[-1]] if "," in title else []
     if not parts:
         return {}
 
@@ -129,6 +135,8 @@ RULESET = register(
                     " and what the registry knows resolves — the rest is the maker's"
                     " marketing (`glacier`, `obsidian`, `cobalt violet`) and stays"
                     " unresolved, which is the same decision `phones-color` makes."
+                    " Thirty-four titles leave the word out altogether and put the"
+                    " colour last behind a comma anyway; those are read from there."
                 ),
                 body=color_from_title,
             ),

@@ -9,6 +9,11 @@
 
 ## Checks
 - After any Python change: `.venv/bin/ruff check .` and `.venv/bin/pytest`.
+- **One test run at a time, and wait for it.** The suite shares one `app_test` database and
+  truncates it before every test, so two runs at once deadlock on each other: no output, no
+  error, just silence that looks like a slow machine. Never start a second run before the
+  first has finished, and do not put the suite in the background to get on with something
+  else — it takes under three minutes and the whole point is to read the result.
 - After any model change: `.venv/bin/alembic check`.
 - Before pushing: `.venv/bin/pre-commit run --all-files`.
 - Keep `TODO.md` current: tick an item off when it lands, add one when a gap is found.

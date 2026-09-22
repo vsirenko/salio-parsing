@@ -291,3 +291,11 @@ def test_an_invented_word_at_the_end_is_not_dropped():
     assert colours.resolve("silver shadow", words) is None
     assert colours.resolve("arctic seal", words) is None
     assert colours.resolve("midnight black", words) == "black"
+
+
+def test_a_title_that_leaves_the_word_out_still_names_a_colour():
+    """The group writes it on almost every title and then, on thirty-four, simply does not:
+    `…, 512 GB, krēmkrāsa`. The colour sits where it always sits, and the registry is still
+    the gate — a last segment that is not a colour gives nothing."""
+    assert coloured("Mobilais telefons Samsung Galaxy Fold 8 5G -, 256 GB, melna") == "black"
+    assert coloured("Mobilais telefons X, 128 GB, nezināms") is None
