@@ -105,6 +105,12 @@ and the questions that have to be answered with real data first, are written dow
       across 520 phones, of which the maker's marketing names (`obsidian`, `glacier`) are
       brand knowledge and the plain-English ones need a language table. `phones-color` is
       declared `pending` and says so.
+- [x] The first canonical attributes, entered from what the two shops actually write:
+      `storage_gb` and `color` bearing identity for phones, `ram_gb`, `screen_inch`, `os`
+      and `phone_type` beside them. Seven alias spellings collapsed into five rows.
+- [ ] **`color` has no values and no alias.** It bears identity for a phone and there is
+      nothing to resolve a colour to — 61 spellings across 520 products, three problems in
+      one shape. Its rule is declared `pending` and its registry row is empty on purpose.
 - [ ] **Nothing resolves an attribute name to the registry, so vocabulary sits in code.**
       `attribute_aliases` and `attribute_value_aliases` exist for exactly this and both carry
       a `language` column; nothing calls either, so `categories/phones.py` holds Latvian

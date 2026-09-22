@@ -94,6 +94,53 @@ def test_aliases_normalise_case_and_punctuation(client):
     assert stored == {"krāsa", "цвет", "colour"}
 
 
+def test_two_shops_spelling_one_name_differently_are_one_alias(client):
+    """A comma separates a qualifier a shop tacked on, never two names.
+
+    Met on real data: one shop writes `Operatīvā atmiņa (RAM)` and the other
+    `Operatīvā atmiņa, (RAM)`; one writes `Ekrāna izmērs` and the other `Ekrāna izmērs, "`,
+    the unit appended to the name of the thing. Each spelling as its own row leaves a
+    lookup guessing which it will meet.
+    """
+    token = admin_token(client)
+    ram = add_attribute(client, token, "ram_gb", "RAM", value_type="number")
+
+    first = client.post(
+        f"/api/admin/attributes/{ram['id']}/aliases",
+        headers=auth(token),
+        json={"alias": "Operatīvā atmiņa (RAM)", "language": "lv"},
+    )
+    assert first.status_code == 201
+    assert first.json()["alias_normalized"] == "operatīvā atmiņa (ram)"
+
+    # The other shop's spelling is the same alias, so the registry refuses a second row.
+    second = client.post(
+        f"/api/admin/attributes/{ram['id']}/aliases",
+        headers=auth(token),
+        json={"alias": "Operatīvā atmiņa, (RAM)", "language": "lv"},
+    )
+    assert second.status_code == 409
+
+
+def test_a_unit_written_into_the_name_is_not_part_of_it(client):
+    token = admin_token(client)
+    screen = add_attribute(client, token, "screen_inch", "Screen", value_type="number")
+    response = client.post(
+        f"/api/admin/attributes/{screen['id']}/aliases",
+        headers=auth(token),
+        json={"alias": 'Ekrāna izmērs, "', "language": "lv"},
+    )
+    assert response.json()["alias_normalized"] == "ekrāna izmērs"
+
+
+def test_a_bracket_is_part_of_the_name_and_survives(client):
+    """`(RAM)` names the thing; `®` decorates it."""
+    from app.features.attributes.schemas import _normalize
+
+    assert _normalize("Operatīvā atmiņa (RAM)").endswith("(ram)")
+    assert _normalize("Colour®") == "colour"
+
+
 def test_the_same_alias_twice_is_refused(client):
     token = admin_token(client)
     color = add_attribute(client, token, "color", "Colour")
