@@ -192,10 +192,24 @@ lifecycle changes.
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
+| `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
 
 `rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
 module says why its discovery walks the listing rather than the sitemap, and why the brand
 comes out of an analytics block instead of the microdata beside it.
+
+**`discover-phones`** is the cheapest channel here: `/catalog.xml` is the whole shop in one
+request — 2768 products, 560 of them phones — with no key and no header. There is no listing
+to page and no product page to open, and its ruleset reads the rest out of the name, which
+is the tidiest of the nine: `BRAND MODEL CAPACITY COLOUR`, 560 of 560 yielding a model.
+
+It has **no barcode and no part number anywhere** — not in the export, not on the page — so
+everything it is worth rests on brand, model, capacity and colour. Three things its module
+records: the product page is deliberately not opened (it adds a specification table nobody
+reads, and is windows-1257 with no charset header); one section arrives as
+`Mobilie telefoni >> <b>Apple`, with a bold tag that leaked out of the shop's own page; and
+`in_stock` is `1` on all 560, which means the export holds what the shop will sell and a
+product that leaves it has left the shop.
 
 **`cec-phones`** is the smallest channel here and the most targeted: 92 iPhones from an
 Apple Premium Reseller, in two requests. Apple is where this system is thinnest — bm.market

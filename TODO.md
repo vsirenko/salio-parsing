@@ -245,6 +245,15 @@ and the questions that have to be answered with real data first, are written dow
       the disagreements that were silent are visible. `variant_merges` exists and nothing
       produces a row in it: two entries that reach the same identity are the same thing, and
       saying so is the point of the table.
+- [x] A ninth channel, `discover-phones` (discover.lv), the first that reads XML and the
+      cheapest here: `/catalog.xml` is the whole shop in one request, 560 of its 2768
+      products are phones, and no product page is opened at all. Model 100% (135 distinct),
+      brand 100%, availability 100%, colour 92.3%, and no barcode or part number anywhere on
+      the shop. Its `trust` was set to `medium` at first and that was wrong: promotion
+      refused 335 of its listings as `source_not_trusted` and the shop sat at 36.6%. Its
+      data is as complete as onea's, which is `high` for the same reason — no identifiers
+      but a clean name — so it is `high` too, and it places 521 of 560 and brought 306
+      catalogue entries nobody else sells, mostly older iPhones.
 - [x] An eighth channel, `cec-phones` (shop.cec.lv), the smallest here and the most
       targeted: 92 iPhones from an Apple Premium Reseller in two requests. Its twelve
       catalogue entries are all configurable and the variants are the offers. It publishes
