@@ -33,6 +33,7 @@ from app.features.brands.normalization import normalize_brand
 from app.features.catalog.identity import normalize_model
 from app.features.catalog.schemas import (
     IdentifierCreate,
+    IdentifierOrigin,
     ProductCreate,
     SourceKind,
     ValueOrigin,
@@ -81,6 +82,22 @@ class BrandLookup(NamedTuple):
     # Present only when a stored judgement is what settled it. Carried so the match it
     # leads to can record that a model, not an alias, chose the brand.
     verdict: BrandVerdict | None = None
+
+
+class IdentityCheck(NamedTuple):
+    """What comparing the axes said about a set of candidates.
+
+    Three answers, not two. `agreed` and `unverifiable` are different enough that the rungs
+    treat them differently, and `checked` is the difference between "the axes confirmed it"
+    and "there was nothing to check with" — which look identical in `agreed` and mean
+    opposite things to anything that wants to learn from the match.
+    """
+
+    agreed: list[int]
+    unverifiable: list[int]
+    # False when the listing brought no axis at all. Then every candidate is in `agreed`
+    # because none could be ruled out, which is not the same as being confirmed.
+    checked: bool
 
 
 class MatchingService:
@@ -170,16 +187,28 @@ class MatchingService:
             #    brand has to be settled first.
             if reading.mpn:
                 found = await self._by_mpn(brand.id, reading.mpn)
-                if len(found) == 1:
+                # A part number is *meant* to name the thing you buy, and on one shop it
+                # does. On another it names the model: `CPH2865` is the Oppo Reno16 5G at
+                # 256 GB and at 512 GB alike, and five of twenty matches on this rung had
+                # pulled two capacities onto one variant. So a candidate that contradicts
+                # an axis is dropped — but one with nothing to compare is still taken,
+                # which is where this differs from the model rung below. There a family
+                # name has to be confirmed before it is believed; here a part number is
+                # believed until something says otherwise.
+                check = await self._identity_agrees(found, reading)
+                usable = sorted(check.agreed + check.unverifiable)
+                if len(usable) == 1:
                     return await self._link(
                         offer,
-                        found[0],
+                        usable[0],
                         Method.BRAND_MPN,
                         {"signal": "mpn", "brand_id": brand.id, "value": reading.mpn, **via},
                         decided_by=by,
                     )
-                if len(found) > 1:
-                    return await self._queue(offer, Reason.AMBIGUOUS, self._variants(found, "mpn"))
+                if len(usable) > 1:
+                    return await self._queue(offer, Reason.AMBIGUOUS, self._variants(usable, "mpn"))
+                # Everything the part number found is a different configuration. Not a
+                # miss — the listing goes on to look for a variant of its own.
 
             # 3. The model designation, normalized so that WW90T554DAX, ww90t554-dax and
             #    WW 90 T554 DAX are one string. Language-neutral, which matters when a
@@ -192,15 +221,18 @@ class MatchingService:
                 # filed fifteen listings spanning a thousand euros as one product. So the
                 # candidates it produces have to agree on the axes before one of them is
                 # accepted.
-                agreed, unverifiable = await self._identity_agrees(found, reading)
+                agreed, unverifiable, checked = await self._identity_agrees(found, reading)
                 if len(agreed) == 1:
-                    return await self._link(
+                    outcome = await self._link(
                         offer,
                         agreed[0],
                         Method.BRAND_MODEL,
                         {"signal": "model", "brand_id": brand.id, "value": model, **via},
                         decided_by=by,
                     )
+                    if checked:
+                        await self._learn_gtin(agreed[0], reading)
+                    return outcome
                 if len(agreed) > 1:
                     return await self._queue(
                         offer, Reason.AMBIGUOUS, self._variants(agreed, "model")
@@ -286,7 +318,7 @@ class MatchingService:
 
     async def _identity_agrees(
         self, variant_ids: list[int], reading: NormalizedOffer
-    ) -> tuple[list[int], list[int]]:
+    ) -> IdentityCheck:
         """Split candidates into the ones whose axes agree and the ones nothing can check.
 
         Compared on the axes both sides happen to carry. A candidate that disagrees on one
@@ -299,7 +331,7 @@ class MatchingService:
         firing at all until every category and every shop is furnished.
         """
         if not variant_ids:
-            return [], []
+            return IdentityCheck([], [], False)
         wanted = {
             key: Decimal(str(value))
             for key, value in (reading.identity or {}).items()
@@ -311,7 +343,7 @@ class MatchingService:
             # refusing on that basis would mean the model rung never fires until both sides
             # are furnished. It goes back to being what it was: a model string, at the
             # confidence a model string is worth.
-            return sorted(variant_ids), []
+            return IdentityCheck(sorted(variant_ids), [], False)
 
         rows = await self.session.execute(
             select(VariantAttribute.variant_id, Attribute.key, VariantAttribute.value_num)
@@ -334,7 +366,38 @@ class MatchingService:
                 unverifiable.append(variant_id)
             elif all(theirs[key] == wanted[key] for key in shared):
                 agreed.append(variant_id)
-        return sorted(agreed), sorted(unverifiable)
+        return IdentityCheck(sorted(agreed), sorted(unverifiable), True)
+
+    async def _learn_gtin(self, variant_id: int, reading: NormalizedOffer) -> None:
+        """Keep the barcode of a listing that was placed without it.
+
+        `variant_gtins` is plural for the ordinary reasons — regional packaging, a reissue,
+        a change of supplier — and this is a fourth: a shop that carries a barcode nobody
+        else has yet. Of 207 barcodes the two collected shops share, 88 were on no variant
+        at all, because the listings carrying them matched on the model instead and the
+        barcode was tried, missed and dropped. The same work was then redone on every pass,
+        and the strongest signal the matcher has stayed invisible on both shops.
+
+        Only from a match an axis confirmed. A model match is a conclusion, not proof, and
+        writing its barcode onto the variant turns that conclusion into proof: every later
+        listing with that barcode would match at confidence 1.00, and a wrong one could not
+        be argued with afterwards. Confirmed by an axis it is worth keeping; unconfirmed it
+        is exactly the guess that should not harden.
+
+        The barcode is known to be on no variant: this runs only below the first rung,
+        which looked it up and found nothing.
+        """
+        if not reading.gtin:
+            return
+        self.session.add(
+            VariantGtin(
+                variant_id=variant_id,
+                gtin=reading.gtin,
+                origin=IdentifierOrigin.RULE.value,
+            )
+        )
+        await self.session.flush()
+        audit.record_changes(learned_gtin=reading.gtin, onto_variant=variant_id)
 
     async def _resolve_brand(self, offer: Offer, reading: NormalizedOffer) -> BrandLookup:
         """A brand string to a brand, or an honest nothing with its reason attached.

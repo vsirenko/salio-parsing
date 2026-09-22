@@ -174,10 +174,19 @@ and the questions that have to be answered with real data first, are written dow
 - [x] Two pages to look at the result: `tools/preview.py` writes a storefront and a page
       of everything the matcher could not place, grouped by what is missing. Read-only and
       outside the app — the API serves JSON and there is no panel yet.
-- [ ] **282 of the 386 queued listings are promotable right now.** They carry a barcode, a
-      brand that resolves and a model; a promotion pass takes a bounded number of rows and
-      stopped before them. None of their barcodes is on a variant yet, so each becomes a new
-      catalogue entry rather than a match. Nothing automatic runs the pass.
+- [x] The queue was promoted: 195 new entries, 87 listings matched a variant the listing
+      before them had just created. Matched went 1118 → 1400 of 1504.
+- [x] The part-number rung checks the identity axes. Measured on bigbox, whose `mpn` is a
+      model code, not a variant code: `CPH2865` is the Oppo Reno16 5G at 256 GB and at
+      512 GB in two colours, and five of twenty matches on this rung had pulled two
+      capacities onto one variant. A contradicting candidate is now dropped; one with
+      nothing to compare is still taken, which is where it differs from the model rung.
+      Merges on every rung: 0.
+- [x] A confirmed model match keeps its barcode. 88 of the 207 barcodes the two shops share
+      were on no variant, because the listings carrying them matched on the model and the
+      barcode was tried, missed and dropped — the same work redone every pass. 492 barcodes
+      learned, shared barcodes on a variant 119 → 207, the barcode rung 728 → 846 matches,
+      variants present in both shops 134 → 173, products 100 → 129.
 - [ ] **Nothing fills a product's own fields.** It gets a brand, a category and a model, and
       its title is composed from those. A description, an image and a manufacturer URL are
       what a card actually shows, and none of them are set.

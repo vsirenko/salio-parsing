@@ -31,6 +31,24 @@ one hit is a match, several are `ambiguous`, none moves down a rung.
 `identity_key` is declared in the method list and not produced: it needs an offer's
 attributes resolved to the canonical registry, and nothing does that yet.
 
+**Every rung below the barcode is checked against the identity axes**, and they are checked
+differently, because the two signals fail differently.
+
+A model string names a family *on purpose*: `Galaxy S26 Ultra 5G` is the 256, the 512 and
+the terabyte alike, and matching on it alone once filed fifteen listings spanning a thousand
+euros as one entry. So a candidate has to be **confirmed** before it is believed, and one
+with no axis in common is `low_confidence` rather than a match.
+
+A part number is *meant* to name the thing you buy, and on one shop it does. On another it
+does not: `CPH2865` is bigbox's Oppo Reno16 5G at 256 GB and at 512 GB, in two colours, and
+five of its twenty matches on this rung had pulled two capacities onto one variant. So a
+candidate that **contradicts** an axis is dropped, while one with nothing to compare is
+still taken. Requiring confirmation here instead would stop the rung firing on every
+category whose axes nobody has written yet.
+
+That is the whole of the difference: below, nothing is believed until something confirms it;
+here, everything is believed until something contradicts it.
+
 **The brand is a hard filter, and has to be resolved first.** That is the blocking step —
 it turns matching from a scan into a lookup in a small drawer. It is also where it goes
 quietly wrong: a brand resolved to the wrong row means searching the wrong drawer and
@@ -114,6 +132,16 @@ a judge does. A bucket without them needs someone to go and look first.
   `brand_model`, `decided_by` is `judge`, and the evidence carries the answer and its
   confidence. Keeping both is what makes "which matches rest on a model's opinion" a query
   rather than an archaeology exercise.
+- **A confirmed model match keeps the barcode it was made without.** The rung below the
+  barcode is only reached because the barcode found nothing, and that barcode was then
+  dropped — so the next pass redid the same work, forever. Of 207 barcodes the two collected
+  shops share, 88 were on no variant for exactly this reason. Recording it moved 118
+  listings onto the barcode rung and took the shared barcodes on a variant from 119 to all
+  207. Only from a match an axis confirmed: a model match is a conclusion, not proof, and
+  writing its barcode onto the variant turns the conclusion into proof — every later listing
+  with that barcode would match at confidence 1.00, and a wrong one could not be argued with
+  afterwards. `variant_gtins.origin` is `rule` for these, so what was learned can be told
+  from what was collected.
 - **A match rewrites this listing's price and availability rows** to point at the variant.
   That is the cost of denormalizing the hint onto the series, and it is real: the number of
   rows rewritten grows with how long the listing has existed. Bounded to one listing, which

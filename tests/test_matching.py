@@ -752,3 +752,213 @@ def test_the_origin_of_a_variant_is_in_the_trail(client):
     origin = next(e for e in entries if e["changes"].get("created_from_offer"))
     assert origin["target_type"] == "variant"
     assert origin["changes"]["created_from_offer"] == offer
+
+
+# --- a part number is not always the thing you buy ---
+
+
+def test_a_part_number_that_covers_two_capacities_does_not_merge_them(client):
+    """Measured on bigbox: `CPH2865` is the Oppo Reno16 5G at 256 GB and at 512 GB alike,
+    and five of twenty matches on this rung had pulled two capacities onto one variant."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 15 256 GB",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "mpn": "CPH2865",
+                "ean": "4006381333931",
+                "attributes": {"storage": "256 GB"},
+            },
+            external_id="A-1",
+        ),
+    )
+
+    # The same part number, a barcode nothing has yet, and twice the capacity.
+    bigger = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 512 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "mpn": "CPH2865",
+            "ean": "5902983617747",
+            "attributes": {"storage": "512 GB"},
+        },
+        external_id="A-2",
+    )
+    assert run_on(client, token, bigger)["matched"] is False
+
+
+def test_a_part_number_with_nothing_to_check_is_still_believed(client):
+    """Where this rung differs from the model rung below it. A model string names a family
+    on purpose; a part number is meant to name the thing you buy, so it is believed until
+    something contradicts it — otherwise the rung would stop firing on every category that
+    has no axes yet."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 15",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "mpn": "MRXN3ZD/A",
+                "ean": "4006381333931",
+            },
+            external_id="A-1",
+        ),
+    )
+    # It states a capacity; the variant has none recorded, so there is nothing to compare.
+    described = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 512 GB",
+            "brand": "Apple",
+            "model": "iPhone something else",
+            "mpn": "MRXN3ZD/A",
+            "attributes": {"storage": "512 GB"},
+        },
+        external_id="A-2",
+    )
+    outcome = run_on(client, token, described)
+    assert (outcome["matched"], outcome["method"]) == (True, "brand_mpn")
+
+
+# --- keeping a barcode the match was made without ---
+
+
+def gtins_of(client, token, variant_id) -> set[str]:
+    response = client.get(f"/api/admin/variants/{variant_id}/gtins", headers=auth(token))
+    assert response.status_code == 200, response.text
+    return {row["gtin"] for row in response.json()}
+
+
+def test_a_confirmed_model_match_keeps_the_barcode_it_was_made_without(client):
+    """Of 207 barcodes the two collected shops share, 88 were on no variant: the listings
+    carrying them matched on the model, and the barcode was tried, missed and dropped."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    first = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, first)["variant_id"]
+
+    # Another shop's barcode for the same phone. The capacity confirms the model.
+    theirs = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "5902983617747",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-2",
+    )
+    assert run_on(client, token, theirs)["method"] == "brand_model"
+    assert gtins_of(client, token, variant_id) == {"4006381333931", "5902983617747"}
+
+
+def test_the_kept_barcode_is_what_places_the_next_listing(client):
+    """The point of keeping it: the same work is not redone on every pass."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    body = {
+        "name": "Apple iPhone 15 256 GB",
+        "brand": "Apple",
+        "model": "iPhone 15",
+        "attributes": {"storage": "256 GB"},
+    }
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {**body, "ean": "4006381333931"},
+            external_id="A-1",
+        ),
+    )
+    run_on(
+        client,
+        token,
+        offer_from(
+            client, token, source["id"], {**body, "ean": "5902983617747"}, external_id="A-2"
+        ),
+    )
+
+    # A third listing states only that barcode. Before it was kept, this was a miss.
+    bare = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "some phone", "ean": "5902983617747"},
+        external_id="A-3",
+    )
+    outcome = run_on(client, token, bare)
+    assert (outcome["matched"], outcome["method"]) == (True, "gtin")
+
+
+def test_an_unconfirmed_model_match_does_not_keep_the_barcode(client):
+    """A model match is a conclusion, not proof. Writing its barcode onto the variant turns
+    the conclusion into proof, and a wrong one could not be argued with afterwards."""
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+
+    first = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple iPhone 15", "brand": "Apple", "model": "iPhone 15", "ean": "4006381333931"},
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, first)["variant_id"]
+
+    # Nothing on either side to check the model against.
+    theirs = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple iPhone 15", "brand": "Apple", "model": "iPhone 15", "ean": "5902983617747"},
+        external_id="A-2",
+    )
+    assert run_on(client, token, theirs)["method"] == "brand_model"
+    assert gtins_of(client, token, variant_id) == {"4006381333931"}
