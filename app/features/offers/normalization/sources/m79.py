@@ -33,7 +33,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "m79-phones"
-VERSION = "m79-4"
+VERSION = "m79-5"
 
 # Both of the shop's words mean it can be bought. `Ir noliktavā` is the warehouse and
 # `Ir veikalā` the shop floor — a difference in where it sits, not in whether it is there.
@@ -50,8 +50,12 @@ SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB|Gt)\b", re.IGNORECASE)
 # one end or missing. The capacity pattern finds `128GB` inside `8/128GB`, which is the
 # middle of the configuration rather than its start, so the earliest match has to win.
 SLASH = re.compile(r"\b\d{1,4}\s*/\s*\d{1,4}(?:\s?(?:TB|GB|MB|Gt))?\b", re.IGNORECASE)
-# `(6932554496944)`, `(Enterprise Edition)`. A shop's parenthesis is never part of a model.
+# `(6932554496944)`, `(Enterprise Edition)`. A shop's parenthesis is not part of a model —
+# with one exception, `_BRACKETED_PLUS`, taken out first.
 _BRACKETED = re.compile(r"[(\[][^)\]]*[)\]]")
+# `Ulefone Armor 34 (Plus)`: the maker's own variant word, bracketed by one supplier. Cut
+# away with the rest it filed the plus phone under the plain one.
+_BRACKETED_PLUS = re.compile(r"[(\[]\s*(?:plus|\+)\s*[)\]]", re.IGNORECASE)
 # Where the name ends and the datasheet begins. This shop's feeds use four separators and no
 # two suppliers use the same one, so all four are tried and the earliest wins.
 _COMMA = re.compile(r",")
@@ -99,7 +103,7 @@ def _model(
     if not title:
         return {}
 
-    head = _BRACKETED.sub(" ", title)
+    head = _BRACKETED.sub(" ", _BRACKETED_PLUS.sub(" Plus ", title))
     # The earliest of them all, not the first one tried: on `A57 5G 8/128GB` the capacity
     # pattern matches `128GB`, which is the middle of the configuration rather than its
     # start, and cutting there leaves `A57 5G 8` — one entry per memory size.
@@ -231,7 +235,11 @@ RULESET = register(
                     "\n\n"
                     "Then the brackets, because this shop puts the barcode in them —"
                     " `Samsung Galaxy A57 5G 8GB/128GB Navy (8806099028282)` — and a"
-                    " catalogue entry named after one groups with nothing. Then the cut at"
+                    " catalogue entry named after one groups with nothing. All but one: a"
+                    " bracket holding nothing but `Plus` is the maker's variant word, and"
+                    " `Armor 34 (Plus)` and `Armor 34 Pro (Plus)` — two of the 2700, the only"
+                    " bracketed plus this shop has — were filed under the plain phones"
+                    " because of it. Then the cut at"
                     " the configuration, the same as every other shop here, with `Gt` beside"
                     " `GB` because the Finnish feed writes it that way — and at the"
                     " **earliest** of the two forms, not the first one tried. This shop"

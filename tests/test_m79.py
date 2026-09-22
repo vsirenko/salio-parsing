@@ -223,3 +223,18 @@ def test_a_reparse_cannot_readmit_what_discover_refused(event_loop):
     listing = discover(event_loop)[0]
     snapshot = event_loop.run_until_complete(M79().fetch(shop(), listing))
     assert M79().parse(snapshot)["url"].startswith(SITE + CATEGORY_PATH)
+
+
+def test_a_bracketed_plus_is_the_maker_s_and_stays_on_the_model():
+    """The shop's brackets hold a barcode or an edition and are cut away — all but `(Plus)`,
+    which is the variant word, and cutting it filed the plus phone under the plain one."""
+    from app.features.offers.normalization import read
+
+    def model(name: str) -> str:
+        return read(
+            {"name": name, "brand": "Ulefone"}, source_slug="m79-phones", category="phones"
+        )["model"]
+
+    assert model("Ulefone Armor 34 (Plus) 16/512GB 5G") == "Armor 34 Plus"
+    assert model("Ulefone Armor 34 Pro (Plus) 16/512GB 5G") == "Armor 34 Pro Plus"
+    assert model("Ulefone Armor 34 16/512GB (6937748736236)") == "Armor 34"
