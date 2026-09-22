@@ -152,7 +152,7 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     full = read(fields, source_slug="bigbox-phones", category="phones")
     assert full["gtin"] == "6941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-1+phones-4+bigbox-2"
+    assert full["ruleset_version"] == "generic-1+phones-4+bigbox-3"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):

@@ -249,12 +249,27 @@ and the questions that have to be answered with real data first, are written dow
       no barcode at all. Its index is a strict subset of ksenukai's — same engine, same
       field names — so the record shape and the colour rule are shared rather than copied.
       Variants carried by more than one shop 592 → 633, and 119 are now in all four.
-- [ ] **147 listings are `ambiguous`, and almost none of them need a judge.** Their
-      candidates differ only by colour, and the listing states its colour in its own title:
-      `Telefons Apple iPhone 18 Pro 256GB Black` against a black, a burgundy, a silver and a
-      blue entry. BigBox resolves 0 of 985 colours — it has no colour field and its titles
-      were never read for one, though they end in a plain English word the registry already
-      holds. That rule is the cheapest thing left on this list.
+- [x] BigBox resolved 0 colours of 985. It publishes no colour field and its titles were
+      never read for one, though they end in a word the registry already held — which is
+      why 147 listings reached a rung that found four entries differing only in colour and
+      refused to choose while the listing said `Black` in its own title. Cut at the last
+      capacity, drop a brand that follows the colour: 679 of 985. Plus 14 Latvian
+      declensions. Colour across four shops 79.7%, variants carried by more than one shop
+      633 → 732, by all four 119 → 132.
+- [ ] **Roughly 70 colour spellings are the maker's own marketing** — `obsidian`, `glacier`,
+      `silver shadow`, `cobalt violet` — covering some 700 listings. Nothing derives them:
+      obsidian means black because Google decided so. They are rows in
+      `attribute_value_aliases` and the cheapest way to get them is to write them, once, by
+      hand — seventy entries a person can read and check, against a model's probability and
+      a threshold the judge's own README calls a starting point rather than a measurement.
+      The judge earns this question when the list stops being finite and small: thirteen
+      shops, ten categories and three languages, with every flagship launch inventing more.
+      Same question, same table, different scale — and `judge/questions.py` already has the
+      shape for it.
+- [ ] **Colour merges are a visibility number, not a quality one.** They went 327 → 157 → 50
+      → 67 → 92 as colour reached more listings: each time more of them carry one, more
+      previously silent disagreements become countable. Counting how many *could* disagree
+      would say more.
 
 - [ ] **Two shops disagree about three barcodes.** BigBox says `Iekšējā atmiņa, GB: 512GB`
       for a phone whose own title reads `4/128GB`, and lists 256 GB and 64 GB where

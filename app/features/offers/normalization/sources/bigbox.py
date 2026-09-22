@@ -13,7 +13,7 @@ from app.features.offers.normalization import barcodes
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-2"
+VERSION = "bigbox-3"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -28,6 +28,9 @@ _FROM_DIAGONAL = re.compile(
     re.IGNORECASE,
 )
 _TRAILING = re.compile(r"[\s,/]+$")
+# Some titles put the brand *after* the colour — `… 256GB BLACK BLACKVIEW`. Nineteen of
+# them, and without this the colour is hidden behind a word that is not one.
+_LAST_CAPACITY = SIZE
 
 # The record calls its manufacturer code by its raw column name: the index only labels the
 # attributes it lets shoppers filter on, and this is not one of them.
@@ -85,6 +88,45 @@ def _model(
     head = _FROM_DIAGONAL.sub("", rest[: found.start()])
     model = _TRAILING.sub("", _RAM_PREFIX.sub("", head)).strip()
     return {"model": model[:200]} if model else {}
+
+
+def _color(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """Colour off the end of the title, resolved through the registry or dropped.
+
+    This shop states no colour anywhere else, and colour is one of the two axes a phone is
+    told apart by. Without it 147 of its listings reached a rung that found four candidates
+    differing only in colour and refused to choose — while the listing said `Black` in its
+    own title and four entries stood there, one of them black.
+
+    Cut at the **last** capacity rather than the first: a few titles carry two, and the
+    colour follows the last. Then a trailing brand comes off, because some titles close
+    `BLACK BLACKVIEW` and the colour would otherwise be hidden behind a word that is not
+    one. Two words are tried before one, for `Sand Dune` and `Deep Blue`.
+
+    Measured on 985: 626 resolve. The rest is the maker's marketing — `Obsidian`,
+    `Glacier`, `Moonstone` — which stays unresolved on purpose, the same refusal made
+    everywhere else in this reading.
+    """
+    if not vocabulary.colours:
+        return {}
+    title = (fields.get("title") or "").strip()
+    sizes = list(SIZE.finditer(title))
+    tail = title[sizes[-1].end() :] if sizes else title.rsplit(",", 1)[-1]
+
+    words = tail.strip(" ,/").split()
+    brand = (fields.get("brand_raw") or "").strip()
+    if brand and words and words[-1].casefold() == brand.casefold():
+        words = words[:-1]
+
+    for take in (2, 1):
+        if len(words) < take:
+            continue
+        canonical = vocabulary.colours.get(" ".join(words[-take:]).casefold())
+        if canonical:
+            return {"identity": {**fields.get("identity", {}), "color": canonical}}
+    return {}
 
 
 def _line(
@@ -150,6 +192,20 @@ RULESET = register(
                     " and what suffers is how the name reads rather than what it does."
                 ),
                 body=_model,
+            ),
+            Rule(
+                id="bigbox-color-from-title",
+                layer=SOURCE,
+                why=(
+                    "This shop resolved 0 colours of 985 — it publishes no colour field and"
+                    " its titles were never read for one, though they end in a word the"
+                    " registry already holds. The cost of that was visible in the queue:"
+                    " 147 listings reached a rung that found several entries differing only"
+                    " in colour and refused to choose, while the listing said `Black` in its"
+                    " own title. Cut at the last capacity, drop a brand that follows the"
+                    " colour, resolve through the registry or give nothing: 626 of 985."
+                ),
+                body=_color,
             ),
             Rule(
                 id="bigbox-line",
