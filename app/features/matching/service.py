@@ -595,7 +595,19 @@ class MatchingService:
         title is never weighed against a brand a shop stated correctly, and two words before
         one because a maker's name can be two — `Bang & Olufsen`, `Kruger&Matz`.
         """
-        words = (reading.title or reading.model or "").split()
+        # The title first, then the model. The title is where a maker's name usually
+        # begins; the model is the fallback for a shop that puts the kind in front of it —
+        # m79 writes `Smartphone Apple iPhone 16 Plus…`, so the first two words are the kind
+        # and the maker is third, and 79 listings with a barcode and a good model could not
+        # be placed for want of a brand nobody stated.
+        for source in ((reading.title or "").split(), (reading.model or "").split()):
+            found = await self._named_by(source)
+            if found is not None:
+                return found
+        return None
+
+    async def _named_by(self, words: list[str]) -> Brand | None:
+        """The maker the first word or two of these words name, if exactly one does."""
         for take in (2, 1):
             if len(words) < take:
                 continue

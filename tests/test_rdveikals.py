@@ -236,7 +236,7 @@ def test_the_shop_s_own_model_field_is_a_line_not_a_model(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert read_it(parsed())["ruleset_version"] == "generic-1+phones-6+rdveikals-4"
+    assert read_it(parsed())["ruleset_version"] == "generic-1+phones-7+rdveikals-4"
 
 
 # --- stock on the pass that opens no pages ---

@@ -74,6 +74,15 @@ products. At ninety-six a page the walk asks for 1..40 instead of 1..314, and al
 back as listings when this was written. A page that comes back with no cards is still
 treated as the hole it is rather than as the end of the category.
 
+## A filter in `discover` does not survive a reparse
+
+A reparse reads the snapshots on disk and calls `parse` on each; it never calls `discover`.
+So a product this channel decides not to collect stays on disk and comes back the next time
+the reader is improved — seven laptops did exactly that, and tet's refurbished filter had
+the same hole. The test therefore lives in `_keeps` and both doors use it: `discover` to
+decide what to fetch, `parse` to refuse what should never have been fetched. A snapshot it
+refuses is reported as unreadable, which is visible rather than silent.
+
 ## Crawl rate
 
 `robots.txt` asks for `Crawl-delay: 5`, which would make a pass 26 minutes. **We have the
@@ -135,7 +144,11 @@ _BUNDLE = re.compile(r"\+[^+]*\b(?:Watch|Buds|Band)\b|\b(?:incl|inkl)\.", re.IGN
 _SLUG_DIGITS = re.compile(r"(?<![0-9a-z])(\d{8,14})(?![0-9a-z])")
 # Spec keys no accessory in this shop carries. Kept as fragments: the shop writes the unit
 # into some of them and the entity-escaped form differs between the two record kinds.
-PHONE_SPECS = ("SIM kartes", "glabātuves ietilpība", "Akumulatora ietilpība")
+#
+# `Akumulatora ietilpība` was here and had to go: a power bank is a battery and states one,
+# so it let eleven of them in along with a pair of Bose headphones. A SIM slot and internal
+# storage are the two an accessory in this shop never has.
+PHONE_SPECS = ("SIM kartes", "glabātuves ietilpība")
 # Second-hand, in the four spellings this shop uses. 69 of its 1661 phones are one of them,
 # and a used phone on a new phone's entry shows as that phone's cheapest price.
 REFURBISHED = (
@@ -229,7 +242,12 @@ class M79:
         part = snapshot.part("card")
         if part is None:
             raise ValueError("snapshot has no card")
-        return json.loads(part.body)
+        card = json.loads(part.body)
+        # Also here, not only in `discover`: a reparse reads what is on disk and never asks
+        # the listing again, so a filter that lived only up there let seven laptops back in.
+        if not _keeps(card.get("url") or "", card.get("name") or "", card.get("specs") or {}):
+            raise ValueError(f"{snapshot.external_id} is not a phone in this shop's category")
+        return card
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:
         return dict(listing.card)
@@ -264,14 +282,8 @@ def _cards(body: str) -> list[Listing]:
         if not external_id or not url or not name:
             continue
 
-        # The listing shows a few products that live in another section — seven laptops
-        # among 2700 when this was written, at `/portativiedatori/`. Their own address is
-        # what says so, and it is cheaper and steadier than any reading of their titles.
-        if not url.startswith(SITE + CATEGORY_PATH):
-            continue
-
         specs = _specs(item)
-        if not _is_phone(name, specs) or _is_something_else(name):
+        if not _keeps(url, name, specs):
             continue
 
         code = _code(item)
@@ -296,6 +308,18 @@ def _cards(body: str) -> list[Listing]:
             )
         )
     return cards
+
+
+def _keeps(url: str, name: str, specs: dict[str, str]) -> bool:
+    """Whether this card is a product this channel collects.
+
+    One test, used by both doors. The listing shows a few products that live in another
+    section — seven laptops among 2700 when this was written, at `/portativiedatori/` — and
+    their own address is what says so, which is cheaper and steadier than reading a title.
+    """
+    if not url.startswith(SITE + CATEGORY_PATH):
+        return False
+    return _is_phone(name, specs) and not _is_something_else(name)
 
 
 def _is_phone(name: str, specs: dict[str, str]) -> bool:

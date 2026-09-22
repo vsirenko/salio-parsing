@@ -376,6 +376,19 @@ and the questions that have to be answered with real data first, are written dow
       why: it names a maker in a field on 28% of its listings and in the title on almost all
       of them, and without this 425 fully-read phones could not become a catalogue entry.
       Promotion refusals for `brand_unresolved` went 425 -> 84.
+- [x] **Three causes held two hundred listings, and all three were measured before they
+      were touched.** A power bank is a battery, so `Akumulatora ietilpība` could never say
+      "this is a phone" — it let eleven of them in along with a pair of Bose headphones, and
+      the channel now asks for a SIM slot or internal storage instead. A brand read off the
+      title failed where the shop puts the kind in front of the maker — m79 writes
+      `Smartphone Apple iPhone 16 Plus`, so 79 listings with a barcode and a good model sat
+      unplaced; the model is tried after the title now, because the shop's own ruleset has
+      already taken those words off it. And the colour rule refused every phrase: `Titanium
+      Silver`, `Midnight Blue` and `Glacier Blue` each carry two entries the registry knows,
+      and counting distinct values threw all of them away — 130 listings, of which 99 are a
+      single phrase. A run breaks on anything but a space, because `Black/Orange` means
+      both and joining those reads it as `orange`.
+      Corpus 96.4% -> 97.4%, queue 336 -> 245, `brand_unresolved` 113 -> 29.
 - [ ] **`titanium` is a material and the registry calls it a colour.** It is the single
       worst word in the corpus for disagreeing with what shops state in a field: 44 of the
       320 disagreements are `Titanium Silverblue` and friends, where the shop's own field

@@ -248,5 +248,5 @@ def test_the_ruleset_version_says_what_was_applied(event_loop):
     # The Samsung the fixture holds also selects the brand layer, which is the point of
     # the composed version: it names every ruleset that touched the reading.
     assert reading(event_loop)["ruleset_version"] == (
-        "generic-1+phones-6+euronics-1+samsung-phones-1"
+        "generic-1+phones-7+euronics-1+samsung-phones-1"
     )

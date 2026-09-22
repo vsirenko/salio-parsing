@@ -161,6 +161,38 @@ def test_a_page_without_the_data_block_still_parses(event_loop):
     assert read["price"] == "1499"
 
 
+def test_a_reparse_cannot_readmit_a_used_phone(event_loop):
+    """Three of them came back that way: a reparse reads the snapshots on disk and never
+    calls `discover`, where the filter used to live alone."""
+    listings = discover(event_loop)
+    snapshot = Snapshot(
+        external_id=IPHONE,
+        parts=[
+            Part(
+                role="detail",
+                url=SITE,
+                status=200,
+                body=PRODUCT.replace(
+                    "Apple iPhone 18 Pro 256GB Burgundy",
+                    "Apple iPhone 12 64GB Black Pre-owned C grade [Refurbished]",
+                ),
+            ),
+            Part(
+                role="card",
+                url=SITE + CATEGORY_PATH,
+                status=200,
+                body=json.dumps(
+                    card(listings)
+                    | {"name": "Apple iPhone 12 64GB Black Pre-owned C grade [Refurbished]"},
+                    ensure_ascii=False,
+                ),
+            ),
+        ],
+    )
+    with pytest.raises(ValueError, match="second-hand"):
+        Tet().parse(snapshot)
+
+
 def test_a_snapshot_with_no_product_page_is_an_error():
     with pytest.raises(ValueError, match="no product page"):
         Tet().parse(Snapshot(external_id="1", parts=[]))
@@ -223,4 +255,4 @@ def test_the_colour_comes_out_of_the_specification_table(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-6+tet-2")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-7+tet-2")

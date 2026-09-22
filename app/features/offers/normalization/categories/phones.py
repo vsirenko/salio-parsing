@@ -16,7 +16,7 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-6"
+VERSION = "phones-7"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -126,9 +126,10 @@ def _canonical(value: str, vocabulary: Vocabulary) -> str | None:
     return colours.resolve(value, vocabulary)
 
 
-# Letters only, so `12/256GB` and `(SM-A376B)` contribute nothing and a colour glued to
-# punctuation — `256GB Black,` — is still found.
-_WORDS = re.compile(r"[^\W\d_]+", re.UNICODE)
+# Words separated by spaces alone. Anything else between them — a slash, a comma, a bar —
+# is the shop separating two colours, and joining those is how `black/orange` becomes
+# `orange`: not a partial answer but a wrong one.
+_RUN = re.compile(r"[^\W\d_]+(?:[ \t]+[^\W\d_]+)*", re.UNICODE)
 
 
 def _color_from_title(
@@ -150,11 +151,32 @@ def _color_from_title(
     identity = fields.get("identity", {})
     if identity.get("color") or not vocabulary.colours:
         return {}
-    words = {word.casefold() for word in _WORDS.findall(fields.get("title") or "")}
-    found = {vocabulary.colours[word] for word in words if word in vocabulary.colours}
+    found = {colours.resolve(phrase, vocabulary) for phrase in _colour_phrases(fields, vocabulary)}
+    found.discard(None)
     if len(found) != 1:
         return {}
     return {"identity": {**identity, "color": found.pop()}}
+
+
+def _colour_phrases(fields: dict[str, Any], vocabulary: Vocabulary) -> list[str]:
+    """Every run of registry words in the title that is separated by spaces alone.
+
+    `Titanium Silver` and `Midnight Blue` are one phrase each and resolve through `colours`
+    exactly as a shop's own field would; `Black/Orange` is two, and stays two.
+    """
+    phrases: list[str] = []
+    for chunk in _RUN.findall(fields.get("title") or ""):
+        run: list[str] = []
+        for word in chunk.split():
+            if word.casefold() in vocabulary.colours:
+                run.append(word)
+                continue
+            if run:
+                phrases.append(" ".join(run))
+            run = []
+        if run:
+            phrases.append(" ".join(run))
+    return phrases
 
 
 def _megabytes(text: str) -> int | None:
@@ -277,6 +299,15 @@ RULESET = register(
                     " `black` 426, `blue` 209, `white` 110, `orange` 91, `silver` 85. Those"
                     " listings carry no barcode either, and colour is the axis that was"
                     " keeping them from becoming a catalogue entry."
+                    "\n\n"
+                    "Words side by side are one phrase, not two colours. `Titanium Silver`,"
+                    " `Midnight Blue` and `Glacier Blue` all carry two entries the registry"
+                    " knows, and counting distinct values refused every one of them: 130"
+                    " listings, of which 99 are a single phrase and only 31 name two"
+                    " colours. A run is broken by anything but a space, because a shop"
+                    " writing `Black/Orange` means both — and joining those is how"
+                    " `black/orange` becomes `orange`, which is not a partial answer but a"
+                    " wrong one."
                     "\n\n"
                     "One known cost. A maker's palette lives in the brand layer, which runs"
                     " after this, and a palette only fills a colour that is missing — so on"

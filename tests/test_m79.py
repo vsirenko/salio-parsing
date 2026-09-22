@@ -190,3 +190,36 @@ def test_a_snapshot_with_no_card_is_an_error():
 
 def test_the_page_size_is_the_one_the_shop_offers():
     assert PAGE_SIZE == 96
+
+
+def test_a_reparse_cannot_readmit_what_discover_refused(event_loop):
+    """A reparse reads the snapshots on disk and never calls `discover`, so a filter that
+    lived only up there let seven laptops back in the first time the reader improved."""
+    import pytest
+
+    from app.features.runs.channels.m79 import CATEGORY_PATH, SITE
+
+    laptop = Snapshot(
+        external_id="1",
+        parts=[
+            Part(
+                role="card",
+                url=f"{SITE}/portativiedatori/portativie-datori-veikala/lenovo-v15",
+                status=200,
+                body=json.dumps(
+                    {
+                        "url": f"{SITE}/portativiedatori/portativie-datori-veikala/lenovo-v15",
+                        "name": 'Lenovo V15 G4 AMN 15"FHD/R5-7520U/16GB/512GB SSD/DOS',
+                        "specs": {},
+                    }
+                ),
+            )
+        ],
+    )
+    with pytest.raises(ValueError, match="not a phone"):
+        M79().parse(laptop)
+
+    # And a card from the phones section still parses.
+    listing = discover(event_loop)[0]
+    snapshot = event_loop.run_until_complete(M79().fetch(shop(), listing))
+    assert M79().parse(snapshot)["url"].startswith(SITE + CATEGORY_PATH)

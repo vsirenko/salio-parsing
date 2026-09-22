@@ -105,7 +105,13 @@ class Tet:
         if page is None:
             raise ValueError("snapshot has no product page")
         card = snapshot.part("card")
-        return _from_page(page.body, card=json.loads(card.body) if card else {})
+        fields = _from_page(page.body, card=json.loads(card.body) if card else {})
+        # Also here, not only in `discover`: a reparse reads the snapshots on disk and never
+        # asks the listing again, so a filter that lived only up there let three used phones
+        # back in the first time the reader improved.
+        if _is_refurbished(str(fields.get("name") or ""), str(fields.get("brand") or "")):
+            raise ValueError(f"{snapshot.external_id} is a second-hand phone")
+        return fields
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:
         return dict(listing.card)

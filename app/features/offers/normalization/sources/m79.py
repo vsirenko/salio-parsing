@@ -33,7 +33,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "m79-phones"
-VERSION = "m79-3"
+VERSION = "m79-4"
 
 # Both of the shop's words mean it can be bought. `Ir noliktavā` is the warehouse and
 # `Ir veikalā` the shop floor — a difference in where it sits, not in whether it is there.
@@ -46,12 +46,21 @@ INTERNAL = "JOINEDIT"
 
 # `256GB`, `512 GB`, `16 Gt`. The plain way to write the configuration.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB|Gt)\b", re.IGNORECASE)
-# `8/128GB`, `512/16 Gt`, `12/512` — memory and capacity joined by a slash, with the unit on
+# `8/128GB`, `512/16 Gt`, `6+128GB` — memory and capacity joined by a slash or a plus, unit on
 # one end or missing. The capacity pattern finds `128GB` inside `8/128GB`, which is the
 # middle of the configuration rather than its start, so the earliest match has to win.
 SLASH = re.compile(r"\b\d{1,4}\s*/\s*\d{1,4}(?:\s?(?:TB|GB|MB|Gt))?\b", re.IGNORECASE)
 # `(6932554496944)`, `(Enterprise Edition)`. A shop's parenthesis is never part of a model.
 _BRACKETED = re.compile(r"[(\[][^)\]]*[)\]]")
+# Where the name ends and the datasheet begins. This shop's feeds use four separators and no
+# two suppliers use the same one, so all four are tried and the earliest wins.
+_COMMA = re.compile(r",")
+_PIPE = re.compile(r"\s*\|")
+# A spaced dash, never a hyphen inside a code: `XT2607-1` and `SM-A576B` keep theirs.
+_DASH = re.compile(r"\s+-\s+")
+# `17.2 cm`, `6.78"`, `16,7cm`. The screen is the first thing every datasheet states, and it
+# is what was leaving `Nothing 4a 17.2 cm Dual SIM Android 16.0` as a model.
+_SCREEN = re.compile(r"\b\d{1,2}[.,]?\d*\s*(?:cm|inch|”|\"|\'\')", re.IGNORECASE)
 _EDGES = re.compile(r"^[\s,./|-]+|[\s,./|-]+$")
 
 
@@ -90,14 +99,22 @@ def _model(
     if not title:
         return {}
 
-    # The first comma ends the name and begins the datasheet on the feed's records:
-    # `Xiaomi Redmi 17, 17,8 cm (6.99), 1600 x 720 Pixel, 4 GB, …`. The shop's own records
-    # carry no comma before the configuration, so this costs them nothing.
-    head = _BRACKETED.sub(" ", title).split(",", 1)[0]
-    # The earliest of the two, not the first one tried: on `A57 5G 8/128GB` the capacity
-    # pattern matches `128GB`, and cutting there leaves `A57 5G 8` — one entry per memory
-    # size, which is the mistake this shop's titles invite.
-    found = [match for match in (SIZE.search(head), SLASH.search(head)) if match]
+    head = _BRACKETED.sub(" ", title)
+    # The earliest of them all, not the first one tried: on `A57 5G 8/128GB` the capacity
+    # pattern matches `128GB`, which is the middle of the configuration rather than its
+    # start, and cutting there leaves `A57 5G 8` — one entry per memory size.
+    found = [
+        match
+        for match in (
+            SIZE.search(head),
+            SLASH.search(head),
+            _COMMA.search(head),
+            _PIPE.search(head),
+            _DASH.search(head),
+            _SCREEN.search(head),
+        )
+        if match
+    ]
     if found:
         head = head[: min(found, key=lambda match: match.start()).start()]
 
@@ -107,8 +124,24 @@ def _model(
     if brand and words and words[0].casefold() == brand.casefold():
         words = words[1:]
 
+    words = _without_colour(words, vocabulary)
     model = _EDGES.sub("", " ".join(words))
     return {"model": model[:200]} if model else {}
+
+
+def _without_colour(words: list[str], vocabulary: Vocabulary) -> list[str]:
+    """Drop a colour the registry knows off the end of the name.
+
+    `Leva L10 graphite`, `Redmi 15C Mint Green`, `Halo 3 Black` — a name with no capacity in
+    it has nothing to cut at, so the colour stays and one product becomes one entry per
+    colour. Only off the end, and only a word the registry was given: a colour in the middle
+    of a name is part of it, and a word nobody entered is not a colour.
+    """
+    if not vocabulary.colours:
+        return words
+    while len(words) > 1 and words[-1].strip(",.").casefold() in vocabulary.colours:
+        words = words[:-1]
+    return words
 
 
 def _without_kind(words: list[str], vocabulary: Vocabulary) -> list[str]:
@@ -206,11 +239,21 @@ RULESET = register(
                     " `128GB` inside it, and cutting there leaves `Galaxy A57 5G 8`: one"
                     " catalogue entry per memory size."
                     "\n\n"
-                    "And the first comma ends it, because on the feed's records the"
-                    " datasheet begins there: `Xiaomi Redmi 17, 17,8 cm (6.99), 1600 x 720"
-                    " Pixel, 4 GB, …` is one product and `Xiaomi Redmi 17` is its name. The"
-                    " shop's own records put no comma before the configuration, so they"
-                    " lose nothing to it."
+                    "And four separators end it, because no two of this shop's suppliers"
+                    " use the same one: a comma (`Xiaomi Redmi 17, 17,8 cm (6.99), …`), a"
+                    " pipe (`Apple iPhone 16 Plus | White | 6.7 | Super Retina XDR | …`), a"
+                    " spaced dash (`Apple iPhone 16e - 5G Smartphone - Dual-SIM - …`) and"
+                    " the screen size, which every datasheet states first and which was"
+                    " leaving `Nothing 4a 17.2 cm Dual SIM Android 16.0` standing as a"
+                    " model. A spaced dash only, so `XT2607-1` and `SM-A576B` keep theirs."
+                    " Measured over the 2700: models longer than 45 characters went from 271"
+                    " to 66 and the average length from 32 to 24."
+                    "\n\n"
+                    "Then a colour off the end, through the registry. A name with no"
+                    " capacity in it has nothing to cut at, so `Leva L10 graphite` and"
+                    " `Halo 3 Black` kept theirs and became one entry per colour. Only off"
+                    " the end and only a word the registry was given: a colour in the middle"
+                    " of a name is part of the name."
                 ),
                 body=_model,
             ),
