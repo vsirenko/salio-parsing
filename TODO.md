@@ -526,6 +526,21 @@ and the questions that have to be answered with real data first, are written dow
       30 promoted into entries of their own and 3 queued. Tick this off once it has run for
       real. Left after it: the display spelling (`Galaxy S25+` beside `Galaxy S25 Plus` as
       entry names) is registry work, and so are junk names like `S26+ 5G 256GB`.
+- [ ] **The registry reader cuts a model at the longest name it knows, so a missing name
+      becomes its sibling.** `iPhone 16 Pro` reads as `iPhone 16` because `iphone 16 pro` is
+      not in `model_aliases`: 21 readings on 22.09.2026, all bm and discover — `iPhone 16 Pro`
+      7, `iPhone 14 Pro`/`Pro Max` 6, `iPhone 15 Pro Max` 5, `Pixel 9 Pro Fold` 3, `Redmi Note
+      14 Pro+` 3. The rows are data entry and a reparse. The structural question is whether
+      `models.py` should decline a name the title continues with a variant word (`Pro`, `Max`,
+      `Ultra`, `Plus`, `Fold`, `FE`…), which is what the plus bug and this one have in common:
+      a name that is almost right, read confidently.
+- [ ] **Ask the judge whether a rule's match names the same model.** Probed over all 8982 live
+      matches on 22.09.2026 (title, brand and entry name only, never our parsed model): 315
+      flagged at P(same)<0.5, 108 of them the plus misfiles. Of the other 207, P(same)<0.1 held
+      63 and about 45 were real — `iPhone 16 Pro` on `iPhone 16`, an S25 FE barcode on `Galaxy
+      S26 FE`, `Blade A31` on an entry named `Blade`; between 0.1 and 0.5 it was mostly entry
+      names carrying `5G`, `Z` or `Enterprise Edition`. So a review queue at 0.1, not 0.5. Not
+      built: the probe was a script; the question belongs in `judge/questions.py`.
 - [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
       Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
       not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals
