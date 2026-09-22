@@ -101,6 +101,12 @@ class IdentityCheck(NamedTuple):
     # False when the listing brought no axis at all. Then every candidate is in `agreed`
     # because none could be ruled out, which is not the same as being confirmed.
     checked: bool
+    # The candidates where *every* axis the listing carried was compared and agreed —
+    # not merely one of them. The difference is what decides whether a match is solid
+    # enough to write a barcode onto, and it was the gap that let a black phone's barcode
+    # land on a blue one's entry: they agreed on capacity, and the entry had no colour to
+    # disagree with yet.
+    complete: frozenset[int] = frozenset()
 
 
 class MatchingService:
@@ -162,9 +168,12 @@ class MatchingService:
         if reading.gtin:
             found = await self._by_gtin(reading.gtin)
             if len(found) == 1:
-                return await self._link(
+                outcome = await self._link(
                     offer, found[0], Method.GTIN, {"signal": "gtin", "value": reading.gtin}
                 )
+                # Proof, so what this listing knows about the thing is worth keeping.
+                await self._reconcile(found[0], reading)
+                return outcome
             if len(found) > 1:
                 return await self._queue(offer, Reason.AMBIGUOUS, self._variants(found, "gtin"))
 
@@ -201,13 +210,16 @@ class MatchingService:
                 check = await self._identity_agrees(found, reading)
                 usable = sorted(check.agreed + check.unverifiable)
                 if len(usable) == 1:
-                    return await self._link(
+                    outcome = await self._link(
                         offer,
                         usable[0],
                         Method.BRAND_MPN,
                         {"signal": "mpn", "brand_id": brand.id, "value": reading.mpn, **via},
                         decided_by=by,
                     )
+                    if check.checked and usable[0] in check.agreed:
+                        await self._reconcile(usable[0], reading)
+                    return outcome
                 if len(usable) > 1:
                     return await self._queue(offer, Reason.AMBIGUOUS, self._variants(usable, "mpn"))
                 # Everything the part number found is a different configuration. Not a
@@ -224,7 +236,8 @@ class MatchingService:
                 # filed fifteen listings spanning a thousand euros as one product. So the
                 # candidates it produces have to agree on the axes before one of them is
                 # accepted.
-                agreed, unverifiable, checked = await self._identity_agrees(found, reading)
+                check = await self._identity_agrees(found, reading)
+                agreed, unverifiable = check.agreed, check.unverifiable
                 if len(agreed) == 1:
                     outcome = await self._link(
                         offer,
@@ -233,8 +246,14 @@ class MatchingService:
                         {"signal": "model", "brand_id": brand.id, "value": model, **via},
                         decided_by=by,
                     )
-                    if checked:
+                    # Only when every axis this listing carried was weighed. Agreeing on
+                    # capacity while the entry has no colour to disagree with is not the
+                    # same thing, and treating it as one is how a black phone's barcode
+                    # ended up on a blue one's entry — permanently, at confidence 1.00.
+                    if agreed[0] in check.complete:
                         await self._learn_gtin(agreed[0], reading)
+                    if check.checked:
+                        await self._reconcile(agreed[0], reading)
                     return outcome
                 if len(agreed) > 1:
                     return await self._queue(
@@ -374,6 +393,7 @@ class MatchingService:
 
         agreed: list[int] = []
         unverifiable: list[int] = []
+        complete: set[int] = set()
         for variant_id in variant_ids:
             theirs = held.get(variant_id, {})
             shared = set(theirs) & set(wanted)
@@ -381,7 +401,36 @@ class MatchingService:
                 unverifiable.append(variant_id)
             elif all(theirs[key] == wanted[key] for key in shared):
                 agreed.append(variant_id)
-        return IdentityCheck(sorted(agreed), sorted(unverifiable), True)
+                if shared == set(wanted):
+                    complete.add(variant_id)
+        return IdentityCheck(sorted(agreed), sorted(unverifiable), True, frozenset(complete))
+
+    async def _reconcile(self, variant_id: int, reading: NormalizedOffer) -> None:
+        """Fill in axes the variant does not have, from a listing that just matched it.
+
+        `variant_attributes` says of itself that it holds an attribute "reconciled across
+        its offers", and until now it was not: axes were written once, when a listing became
+        a catalogue entry, and never again. So an entry created from a shop that does not
+        state colour had none, for good — and the comparison that decides whether the next
+        listing is the same thing only looks at the axes both sides carry, so colour could
+        not separate anything. Three hundred and twenty-seven entries held two colours at
+        once because of it: one `Nokia 3210` for the black, the blue and the gold.
+
+        **Gaps only, never an answer already there.** A shop that states 512 GB for a phone
+        whose own title reads `4/128GB` is in the collected data; letting whichever listing
+        arrived second overwrite the first would make the catalogue depend on crawl order.
+
+        **And only from a match that proved something.** A barcode is proof. A model string
+        is a conclusion, and teaching the variant from one turns the conclusion into a fact
+        the next listing is then measured against — which is exactly how a learned barcode
+        hardened a wrong guess before. So a rung below the barcode teaches only when the
+        axes it did compare agreed.
+        """
+        if not reading.identity:
+            return
+        await self._carry_identity(
+            CatalogService(self.session), variant_id, reading, only_if_absent=True
+        )
 
     async def _learn_gtin(self, variant_id: int, reading: NormalizedOffer) -> None:
         """Keep the barcode of a listing that was placed without it.
@@ -744,7 +793,12 @@ class MatchingService:
         return product.id
 
     async def _carry_identity(
-        self, catalog: CatalogService, variant_id: int, reading: NormalizedOffer
+        self,
+        catalog: CatalogService,
+        variant_id: int,
+        reading: NormalizedOffer,
+        *,
+        only_if_absent: bool = False,
     ) -> None:
         """Put the axes the reading worked out onto the variant it just became.
 
@@ -769,6 +823,7 @@ class MatchingService:
                         source_kind=SourceKind.PARAM,
                         origin=ValueOrigin.CONSENSUS,
                     ),
+                    only_if_absent=only_if_absent,
                 )
                 continue
 
@@ -793,6 +848,7 @@ class MatchingService:
                         source_kind=SourceKind.PARAM,
                         origin=ValueOrigin.CONSENSUS,
                     ),
+                    only_if_absent=only_if_absent,
                 )
 
     async def _source_of(self, offer: Offer) -> Source | None:

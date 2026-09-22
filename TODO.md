@@ -215,6 +215,22 @@ and the questions that have to be answered with real data first, are written dow
       reads the newest reading from a pass that carried the catalogue.
 - [x] A guard against a rule body changing under an unchanged version, which had silently
       swallowed three fixes in one afternoon.
+- [x] Colour, once a shop stated it as a field: 37 canonical values with their Latvian and
+      plain-English spellings, read through the vocabulary the caller loads. `phones-color`
+      was declared and unwritten from the start. The marketing names are deliberately out —
+      the pairs learnable from one shop include `evening blue` meaning grey.
+- [x] 18 brands a third shop brought, Sony among them.
+- [x] An enum axis reaches the variant and takes part in the comparison, which the code said
+      it could not until something resolved a value.
+- [x] A match reconciles: it fills in axes the entry never had. Colour merges 327 → 157.
+- [ ] **157 entries still hold two colours, and the cause is missing data rather than a weak
+      comparison.** Two of the three shops state no colour at all, so their red and their
+      black listings are the same thing to anything that reads them, and a model match
+      between them looks fully confirmed because neither side carries the axis that would
+      disagree. The bar that settles it is every axis the *category* calls identity-bearing,
+      known on both sides: `category_attributes.identity_bearing` exists and nothing
+      consults it. Until then a barcode learned from such a match is the thing that hardens
+      the error, which is why the gate was tightened rather than the rule removed.
 - [ ] **Two shops disagree about three barcodes.** BigBox says `Iekšējā atmiņa, GB: 512GB`
       for a phone whose own title reads `4/128GB`, and lists 256 GB and 64 GB where
       rdveikals lists 128 GB and 256 GB for the same barcodes. We read the param over the

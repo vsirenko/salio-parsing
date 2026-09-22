@@ -233,14 +233,23 @@ class CatalogService:
         return [VariantAttributeRead.model_validate(row) for row in rows]
 
     async def set_variant_attribute(
-        self, variant_id: int, payload: VariantAttributeSet
-    ) -> VariantAttributeRead:
+        self, variant_id: int, payload: VariantAttributeSet, *, only_if_absent: bool = False
+    ) -> VariantAttributeRead | None:
+        """Set an axis, or — with `only_if_absent` — fill it in only where there is nothing.
+
+        Filling a gap and overwriting an answer are different acts and only one of them is
+        safe to do from a match. A shop that states 512 GB for a phone whose own title reads
+        `4/128GB` exists in the collected data; letting the second listing to arrive replace
+        the first one's value would make the catalogue's answer depend on crawl order.
+        """
         variant = await self._variant(variant_id)
         attribute = await self._attribute(payload.attribute_id)
         audit.set_target("variant", variant_id)
         await self._check_value_matches_type(attribute, payload)
 
         row = await self.session.get(VariantAttribute, (variant_id, payload.attribute_id))
+        if row is not None and only_if_absent:
+            return None
         if row is None:
             row = VariantAttribute(variant_id=variant_id, **payload.model_dump(mode="python"))
             self.session.add(row)

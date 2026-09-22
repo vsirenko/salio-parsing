@@ -132,6 +132,17 @@ a judge does. A bucket without them needs someone to go and look first.
   `brand_model`, `decided_by` is `judge`, and the evidence carries the answer and its
   confidence. Keeping both is what makes "which matches rest on a model's opinion" a query
   rather than an archaeology exercise.
+- **A match fills in axes the entry never had.** `variant_attributes` says of itself that
+  it holds an attribute "reconciled across its offers", and until recently it was not: axes
+  were written once, when a listing became an entry, and never again. An entry made from a
+  shop that states no colour therefore had none for good — and the comparison only weighs
+  the axes both sides carry, so colour could separate nothing. One `Nokia 3210` held the
+  black, the blue and the gold; 327 entries held two colours at once. Filling the gaps from
+  a match took that to 157.
+  Gaps only, never an answer already there: a shop states 512 GB for a phone whose own title
+  reads `4/128GB`, and letting whichever listing arrived second overwrite the first would
+  make the catalogue depend on crawl order. And only from a match that proved something — a
+  barcode always, a rung below it only where the axes it compared agreed.
 - **A confirmed model match keeps the barcode it was made without.** The rung below the
   barcode is only reached because the barcode found nothing, and that barcode was then
   dropped — so the next pass redid the same work, forever. Of 207 barcodes the two collected
@@ -142,6 +153,15 @@ a judge does. A bucket without them needs someone to go and look first.
   with that barcode would match at confidence 1.00, and a wrong one could not be argued with
   afterwards. `variant_gtins.origin` is `rule` for these, so what was learned can be told
   from what was collected.
+  The bar is every axis the listing carried, not one of them. Agreeing on capacity while the
+  entry has no colour to disagree with is not agreement, and treated as such it put a black
+  phone's barcode onto a blue one's entry — permanently, at confidence 1.00 from then on.
+  Tightening it took the learned barcodes from 758 to 478 with no loss of matching.
+  What remains is not a comparison that is too weak but data that is not there: two shops
+  state no colour at all, so their red and their black listings are indistinguishable to
+  anything that reads them. The bar that would settle it is every axis the *category* calls
+  identity-bearing, known on both sides — `category_attributes.identity_bearing` exists for
+  exactly that and nothing consults it yet.
 - **A match rewrites this listing's price and availability rows** to point at the variant.
   That is the cost of denormalizing the hint onto the series, and it is real: the number of
   rows rewritten grows with how long the listing has existed. Bounded to one listing, which

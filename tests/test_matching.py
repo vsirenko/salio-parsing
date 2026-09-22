@@ -962,3 +962,216 @@ def test_an_unconfirmed_model_match_does_not_keep_the_barcode(client):
     )
     assert run_on(client, token, theirs)["method"] == "brand_model"
     assert gtins_of(client, token, variant_id) == {"4006381333931"}
+
+
+# --- an entry learns what its listings know ---
+
+
+def a_colour_axis(client, token, category_id):
+    attribute = post(
+        client,
+        token,
+        "/api/admin/attributes",
+        {"key": "color", "name": "Colour", "value_type": "enum"},
+    )
+    post(
+        client,
+        token,
+        f"/api/admin/categories/{category_id}/attributes",
+        {"attribute_id": attribute["id"], "identity_bearing": True},
+    )
+    for canonical in ("black", "blue"):
+        value = post(
+            client,
+            token,
+            f"/api/admin/attributes/{attribute['id']}/values",
+            {"canonical": canonical},
+        )
+        post(
+            client,
+            token,
+            f"/api/admin/attributes/values/{value['id']}/aliases",
+            {"alias": canonical, "language": "en"},
+        )
+    return attribute
+
+
+def test_a_match_fills_in_an_axis_the_entry_never_had(client):
+    """A catalogue entry made from a shop that states no colour had none, for good — and the
+    comparison only weighs axes both sides carry, so colour could separate nothing. One
+    `Nokia 3210` held the black, the blue and the gold."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    # The entry is made from a listing that says nothing about colour.
+    plain = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, plain)["variant_id"]
+
+    # The same phone from a shop that does state colour, matching by barcode.
+    described = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="A-2",
+    )
+    assert run_on(client, token, described)["method"] == "gtin"
+
+    axes = client.get(f"/api/admin/variants/{variant_id}/attributes", headers=auth(token)).json()
+    assert any(a.get("value_id") for a in axes), "the entry learned a colour it did not have"
+
+
+def test_the_learned_axis_then_keeps_another_colour_out(client):
+    """The point of learning it. Before, a blue phone agreeing on capacity joined the black
+    one and the entry held both."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    body = {"brand": "Apple", "model": "iPhone 15", "attributes": {"storage": "256 GB"}}
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {**body, "name": "Apple iPhone 15 256 GB", "ean": "4006381333931"},
+            external_id="A-1",
+        ),
+    )
+    run_on(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                **body,
+                "name": "iPhone 15 black",
+                "ean": "4006381333931",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+            external_id="A-2",
+        ),
+    )
+
+    # A different colour, same model and capacity, no barcode of its own to fall back on.
+    blue = offer_from(
+        client,
+        token,
+        source["id"],
+        {**body, "name": "iPhone 15 blue", "attributes": {"storage": "256 GB", "color": "blue"}},
+        external_id="A-3",
+    )
+    assert run_on(client, token, blue)["matched"] is False
+
+
+def test_a_match_never_overwrites_an_axis_that_is_already_there(client):
+    """A shop states 512 GB for a phone whose own title reads `4/128GB`. Letting whichever
+    listing arrived second replace the first would make the catalogue depend on crawl order.
+    """
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    first = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, first)["variant_id"]
+
+    # Same barcode, and a capacity the other shop got wrong.
+    wrong = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "512 GB"},
+        },
+        external_id="A-2",
+    )
+    run_on(client, token, wrong)
+
+    axes = client.get(f"/api/admin/variants/{variant_id}/attributes", headers=auth(token)).json()
+    stored = next(a for a in axes if a["value_num"] is not None)
+    assert float(stored["value_num"]) == 256 * 1024, "the first answer stood"
+
+
+def test_a_barcode_is_kept_only_when_every_axis_was_weighed(client):
+    """Agreeing on capacity while the entry has no colour to disagree with is not the same
+    as agreeing. Treated as one, it put a black phone's barcode on a blue one's entry —
+    permanently, and at confidence 1.00 from then on."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    # The entry knows a capacity and nothing about colour.
+    plain = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, plain)["variant_id"]
+
+    # A listing that states a colour, and a barcode of its own. It matches on the model and
+    # the capacity — but the colour went unweighed, so its barcode is not worth keeping.
+    coloured = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "5902983617747",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="A-2",
+    )
+    assert run_on(client, token, coloured)["method"] == "brand_model"
+    assert gtins_of(client, token, variant_id) == {"4006381333931"}, "the barcode was not kept"
