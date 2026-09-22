@@ -516,15 +516,16 @@ and the questions that have to be answered with real data first, are written dow
       the eight clean sources on 22.09.2026. A fresh database has no names and the reader
       keeps every shop's own subtraction, which is the state before this was built. The
       seed is re-runnable; the hand-entered rows are not.
-- [ ] **`normalize_model` dropped the `+`, so `Galaxy S26` and `Galaxy S26+` shared a
+- [x] **`normalize_model` dropped the `+`, so `Galaxy S26` and `Galaxy S26+` shared a
       `model_normalized`.** It had already fired, not merely been waiting to: on 22.09.2026
       111 live matches on 40 entries disagreed with their entry about the plus and about
       nothing else, 70 of them held by a barcode the entry had learned from an earlier model
       match. The form now spells `+` out as `plus` (`S25+` = `S25 Plus`, still not `S25`).
       `tools/replus.py` recomputes every stored form and key and moves the misfiled listings
       by barcode vote; its dry run ends with 1 merge, 49 rekeyed entries, 76 listings moved,
-      30 promoted into entries of their own and 3 queued. Tick this off once it has run for
-      real. Left after it: the display spelling (`Galaxy S25+` beside `Galaxy S25 Plus` as
+      30 promoted into entries of their own and 2 queued. Run for real on 22.09.2026 with the
+      same numbers; a re-run finds one listing left, `Redmi Note 15 Pro + 8GB`, which is on
+      the right entry and whose shop wrote the plus apart. Left after it: the display spelling (`Galaxy S25+` beside `Galaxy S25 Plus` as
       entry names) is registry work, and so are junk names like `S26+ 5G 256GB`.
 - [x] **The registry reader cut a model at the longest name it knew, so a missing name
       became its sibling.** `iPhone 16 Pro` read as `iPhone 16`: 21 readings, bm and discover.

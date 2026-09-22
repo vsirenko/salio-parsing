@@ -233,6 +233,11 @@ async def untangle(session, matching: MatchingService) -> Counter:
         offer = await session.get(Offer, offer_id)
         reading = await matching._reading(offer_id)
         async with session.begin_nested():
+            # The old match goes first. A decision that links replaces it anyway, but one
+            # that queues does not, and the first real run left two listings standing on
+            # the entry they had just been judged not to be.
+            await matching._supersede(offer_id)
+            await matching._carry_variant_into_history(offer_id, None)
             outcome = await matching._decide(offer, reading)
         if outcome.matched and outcome.variant_id == was:
             report["stayed: its identifier votes for the entry"] += 1
