@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "ksenukai-phones"
-VERSION = "ksenukai-2"
+VERSION = "ksenukai-3"
 
 # The shop's own article number. Every one of the 541 phones in the older corpus began
 # `Y0000`, without exception.
@@ -29,7 +29,7 @@ INTERNAL_PREFIX = "Y0000"
 # `…, 256 GB, melna krās.` — the shop closes a title with the colour and the word for
 # it, and a two-tone case repeats the word: `melna krās./oranža krās.`. Anchored on the
 # word rather than on the last comma for exactly that reason.
-_COLOUR = re.compile(r"([^,/]+?)\s+kr[āa]s\.?(?=\s*[/,]|\s*$)", re.IGNORECASE)
+COLOUR = re.compile(r"([^,/]+?)\s+kr[āa]s\.?(?=\s*[/,]|\s*$)", re.IGNORECASE)
 
 
 def _barcode(
@@ -45,10 +45,13 @@ def _model(
     return {"model": str(model).strip()[:200]} if model else {}
 
 
-def _color(
+def color_from_title(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
     """Colour out of the one place this shop always puts it.
+
+    Shared with `onea`, the group's other shop, which writes the same title: two copies
+    of this would be two places to fix the day the group changes its wording.
 
     Not the loose "cut a colour out of a title" this project refuses elsewhere. The shape is
     fixed and the shop keeps it: the title ends with the colour and the Latvian word for
@@ -63,7 +66,7 @@ def _color(
     if not vocabulary.colours:
         return {}
     title = str(payload.get("title_lv") or fields.get("title") or "")
-    parts = [found.group(1).strip().casefold() for found in _COLOUR.finditer(title)]
+    parts = [found.group(1).strip().casefold() for found in COLOUR.finditer(title)]
     if not parts:
         return {}
 
@@ -135,7 +138,7 @@ RULESET = register(
                     " marketing (`glacier`, `obsidian`, `cobalt violet`) and stays"
                     " unresolved, which is the same decision `phones-color` makes."
                 ),
-                body=_color,
+                body=color_from_title,
             ),
             Rule(
                 id="ksenukai-article-is-not-a-part-number",

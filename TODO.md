@@ -245,12 +245,16 @@ and the questions that have to be answered with real data first, are written dow
       the disagreements that were silent are visible. `variant_merges` exists and nothing
       produces a row in it: two entries that reach the same identity are the same thing, and
       saying so is the point of the table.
-- [ ] **1a.lv is researched and unbuilt.** Same LupaSearch engine as ksenukai, index
-      `qwxb4ncf8r99`, 446 phones, and a strict subset of ksenukai's fields: no barcodes at
-      all, no base64 attribute columns, no images. Its product pages answer Cloudflare, so
-      the index is the only door. What it does have is the same title shape, so the colour
-      rule written for ksenukai reads it unchanged, and a manufacturer part number in about
-      a quarter of the titles — which is the rung it would have to live on.
+- [x] A fourth channel, `onea-phones` (1a.lv): 443 phones, model 99.6%, part number 44.5%,
+      no barcode at all. Its index is a strict subset of ksenukai's — same engine, same
+      field names — so the record shape and the colour rule are shared rather than copied.
+      Variants carried by more than one shop 592 → 633, and 119 are now in all four.
+- [ ] **147 listings are `ambiguous`, and almost none of them need a judge.** Their
+      candidates differ only by colour, and the listing states its colour in its own title:
+      `Telefons Apple iPhone 18 Pro 256GB Black` against a black, a burgundy, a silver and a
+      blue entry. BigBox resolves 0 of 985 colours — it has no colour field and its titles
+      were never read for one, though they end in a plain English word the registry already
+      holds. That rule is the cheapest thing left on this list.
 
 - [ ] **Two shops disagree about three barcodes.** BigBox says `Iekšējā atmiņa, GB: 512GB`
       for a phone whose own title reads `4/128GB`, and lists 256 GB and 64 GB where

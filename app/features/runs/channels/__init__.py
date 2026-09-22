@@ -5,6 +5,6 @@ imported is a channel the worker cannot find. Adding a shop is adding a module a
 here; nothing about the scheduler or the run lifecycle changes.
 """
 
-from app.features.runs.channels import bigbox, ksenukai, rdveikals
+from app.features.runs.channels import bigbox, ksenukai, onea, rdveikals
 
-__all__ = ("bigbox", "ksenukai", "rdveikals")
+__all__ = ("bigbox", "ksenukai", "onea", "rdveikals")

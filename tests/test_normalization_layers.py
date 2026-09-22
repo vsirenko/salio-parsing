@@ -27,9 +27,9 @@ FIXTURE = json.loads((pathlib.Path(__file__).parent / "fixtures/ksenukai_phones.
 
 def item(external_id: str = "1102611") -> dict:
     """One real index record, flattened the way the channel hands it over."""
-    from app.features.runs.channels.ksenukai import _fields
+    from app.features.runs.channels.ksenukai import fields_of
 
-    return _fields(next(i for i in FIXTURE["items"] if str(i["id"]) == external_id))
+    return fields_of(next(i for i in FIXTURE["items"] if str(i["id"]) == external_id))
 
 
 # --- the rules are readable before anything runs ---
@@ -99,11 +99,11 @@ def test_a_rule_can_be_declared_and_not_written():
 def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
-    assert version_for(KSENUKAI) == "generic-1+ksenukai-2"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-4+ksenukai-2"
+    assert version_for(KSENUKAI) == "generic-1+ksenukai-3"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-4+ksenukai-3"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-4+ksenukai-2"
+        == "generic-1+phones-4+ksenukai-3"
     )
 
 
@@ -316,12 +316,12 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "phones-4": "e6b091ef5728",
-    "bigbox-2": "5498c9d00fab",
-    "ksenukai-2": "a3b805d59019",
-    "rdveikals-4": "f5078e0afc82",
     "apple-phones-1": "12a9fce3575e",
-    # Nothing but declared rules so far, so there is no code to fingerprint yet.
+    "bigbox-2": "5498c9d00fab",
+    "ksenukai-3": "2fde141c1374",
+    "onea-1": "3f30745390d5",
+    "phones-4": "e6b091ef5728",
+    "rdveikals-4": "f5078e0afc82",
     "samsung-phones-0": "pending",
 }
 

@@ -90,10 +90,10 @@ class Ksenukai:
         part = snapshot.part("index")
         if part is None:
             raise ValueError("snapshot has no index record")
-        return _fields(json.loads(part.body))
+        return fields_of(json.loads(part.body))
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:  # pragma: no cover - no quick pass
-        return _fields(listing.card)
+        return fields_of(listing.card)
 
     async def _page(self, fetcher: Fetcher, offset: int) -> dict[str, Any]:
         part = await fetcher.post(
@@ -117,8 +117,13 @@ class Ksenukai:
         return json.loads(part.body)
 
 
-def _fields(item: dict[str, Any]) -> dict[str, Any]:
+def fields_of(item: dict[str, Any], *, site: str = SITE) -> dict[str, Any]:
     """The shop's own record, flattened and nothing more.
+
+    Shared with `onea`, the group's other shop: same engine, same field names, same shapes,
+    and a sister index that is a strict subset of this one. Copying it there would be two
+    copies of one decision about what a Kesko record looks like, drifting apart the first
+    time either shop adds a field.
 
     Deliberately not our shape. In particular the barcode is **not** picked out of
     `alternative_codes` here: that list mixes barcodes with the shop's internal numbering,
@@ -131,7 +136,7 @@ def _fields(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": item.get("id"),
         "title": _text(item.get("title_lv")),
-        "url": SITE + (item.get("url_lv") or ""),
+        "url": site + (item.get("url_lv") or ""),
         "brand": _text(item.get("brand_lv")),
         "product_code": item.get("product_code"),
         "article_number": item.get("article_number"),
