@@ -259,9 +259,26 @@ and the questions that have to be answered with real data first, are written dow
       `Astromelns` black. Entered; cec went from 19 unplaced to 8. `Ledāju krāsas` (white
       17 / blue 8) and `Night Sky` (no evidence at all) are left as visible gaps, which is
       what the disagreement is for.
-- [ ] **`Ledāju krāsas` and `Night Sky` want a photograph.** Apple's marketing names for
-      two colours, on 12 cec listings. The shops that carry the same codes disagree about
-      the first and say nothing about the second, so neither can be entered from evidence.
+- [x] `Ledāju krāsas` — Apple's `Glacier` — entered as white, and the first reading of the
+      evidence was wrong because it was counted at the wrong grain. Summed over the label as
+      a whole the shops looked split, white 17 against blue 8. Counted **per part number**
+      they are not: on every one of the eight codes, bigbox, onea and dateks say white and
+      only euronics says blue, and the catalogue entry those three already share is white.
+      cec is now placed in full, 92 of 92.
+- [ ] **`Night Sky` still wants a photograph.** Apple's name for an iPhone Duo colour, on 4
+      cec listings. bigbox carries the same codes and does not resolve it either, so there
+      is no evidence to read — unlike Glacier, this one really is unknown.
+- [ ] **euronics reads `glacier` as blue where three other shops read white.** It did no
+      harm — those listings matched on a stronger signal and sit on the same entry — but it
+      is a wrong colour on a reading, and the next product where it is the only signal will
+      not be so lucky.
+- [ ] **155 part numbers sit on more than one variant**, which is one phone wearing two
+      catalogue entries and splitting its prices between them. Worth more than the 78
+      listings still unplaced. Two causes, both visible in the data: a model string that
+      differs between shops — `Find X9 Ultra` against bm's whole spec sheet used as one,
+      `Reno16 F` against `Reno16 F 5G CPH2859`, `600 Smart` against `600 Smart 5G` — and a
+      colour two shops disagree about, as on `631011008288`, black at bm and white at
+      bigbox. `variant_merges` exists for exactly this and still has no producer.
 - [ ] **bigbox's 50 unplaced listings are reachable, and not yet worth reaching.** Its
       model rule declines a title with no capacity in it, deliberately: on that shop it is a
       feature phone or a desk phone, and the colour runs into the name. Cutting a trailing
