@@ -441,13 +441,22 @@ and the questions that have to be answered with real data first, are written dow
       same three lines end up written twice with the same bug — which is exactly what
       produced `naming.without_brand` earlier. Measure what ksenukai loses if its own rule
       goes, then delete one of them.
-- [ ] **OnePlus, Motorola and Honor have palettes waiting and nobody has written them.**
-      Measured the same way: OnePlus `charcoal` black (3 shops of 3), `eclipse` black (2 of
-      2), `pitch` black (3 of 3), `mist` grey (5 of 6), `marble` grey (5 of 6); Honor
-      `forest` green (4 of 4), `meteor` silver (3 of 3), `desert` gold (3 of 3); Motorola has
-      forty of them, all PANTONE two-word names — `Arctic Seal` grey in 6 shops of 6,
-      `Spruce Shaded` green in 5 of 5 — which is a different shape from a one-word name and
-      wants the phrase, not the word.
+- [x] **OnePlus has a palette now**, counted the same way as the others: `charcoal` black
+      3 shops of 3, `pitch` black 3 of 3, `phantom` grey 3 of 3, `eclipse` black 2 of 2,
+      `mist` grey 5 of 6, `marble` grey 5 of 6, and `dry ice` blue by a decision — one shop,
+      3 listings, nothing against it, and a phrase because neither half names a colour.
+- [x] **`coral` is gone from the registry and `Coralred` is red.** bm said red on 4 and
+      rdveikals coral on 3, one shop each, and it was never a disagreement about the colour
+      — only about how finely to name it. 2 catalogue entries and 2 listings sat under
+      `coral` against 73 and 169 under `red`, so it divided the red phones and distinguished
+      nothing. Same shape as `titanium`, much smaller.
+- [x] **A shop that contradicts itself is no vote at all.** `Awesome Charcoal` read as 3
+      shops for black against 2 for grey, which is not a majority worth acting on — until
+      the votes were read: dateks says black on the Enterprise Edition of the A37 and grey
+      on the plain one, the same phrase on the same phone. Without it the count is two shops
+      to one, which is the ordinary bar, and the answer is black. Worth remembering as a
+      way of counting rather than as a fact about charcoal.
+- [ ] **Motorola and Honor still have palettes waiting.**
 - [ ] **The word method is a script that was run by hand and ought to be a tool.** It is the
       answer to the registry gap this project has been carrying since the first shop, and it
       runs against the corpus rather than against anybody's judgement. Worth an endpoint that

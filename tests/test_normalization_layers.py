@@ -389,17 +389,29 @@ def test_a_name_that_contains_a_colour_word_is_not_read_as_that_colour():
     assert graygreen["identity"]["color"] == "green"
 
 
-def test_the_names_the_shops_disagree_about_are_declared_and_unwritten():
-    """`Awesome Charcoal` is black in three shops and grey in two, and dateks says both of
-    them for the same phrase on the same phone."""
-    brand_rules = [r for r in rules_for(category=PHONES, brand="samsung") if r.layer == BRAND]
-    contested = next(r for r in brand_rules if r.id == "samsung-contested-names")
-    assert contested.pending
+def test_a_shop_that_contradicts_itself_is_no_vote_at_all():
+    """`Awesome Charcoal` looked like three shops for black against two for grey, until the
+    votes were read: dateks says black on the Enterprise Edition of the A37 and grey on the
+    plain one — the same phrase on the same phone. Without it, two shops to one."""
     fields = read(
         {"name": "Samsung Galaxy A37 5G 6+128GB Awesome Charcoal", "brand": "Samsung"},
         category=PHONES,
     )
-    assert "color" not in fields["identity"]
+    assert fields["identity"]["color"] == "black"
+
+
+def test_the_name_with_one_shop_behind_it_is_declared_and_unwritten():
+    brand_rules = [r for r in rules_for(category=PHONES, brand="samsung") if r.layer == BRAND]
+    assert next(r for r in brand_rules if r.id == "samsung-pinkgold").pending
+
+
+def test_a_maker_s_phrase_is_read_where_neither_half_is_a_colour():
+    """`Dry Ice` is OnePlus's, and neither word names a colour on its own."""
+    fields = read(
+        {"name": "OnePlus Nord 5 5G 12/512GB Dual SIM Dry Ice", "brand": "OnePlus"},
+        category=PHONES,
+    )
+    assert fields["identity"]["color"] == "blue"
 
 
 def test_samsung_is_declared_and_unwritten():
@@ -445,11 +457,12 @@ FINGERPRINTS = {
     "google-phones-3": "b11089929d14",
     "ksenukai-5": "89aa740d025f",
     "m79-4": "9aa38c660bc8",
+    "oneplus-phones-1": "8d9ee7915042",
     "onea-1": "3f30745390d5",
     "euronics-1": "e61bf95a7a78",
     "phones-7": "a9b123a7ff8a",
     "rdveikals-4": "f5078e0afc82",
-    "samsung-phones-1": "7e2a01b9bdf8",
+    "samsung-phones-2": "5fa9e1989091",
     "tet-2": "a49facbac61d",
 }
 

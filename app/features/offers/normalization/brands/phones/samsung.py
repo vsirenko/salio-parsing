@@ -54,7 +54,7 @@ from app.features.offers.normalization.rules import (
 
 CATEGORY = "phones"
 BRAND_KEY = "samsung"
-VERSION = "samsung-phones-1"
+VERSION = "samsung-phones-2"
 
 # Samsung's own names for a colour, each counted across the shops that state one in a field
 # beside it. A closed list on purpose: a name not here is not guessed at.
@@ -67,6 +67,9 @@ PALETTE = {
     "blueberry": "purple",
     "graygreen": "green",
     "amber": "yellow",
+    # Settled by a decision, with the counts in the rule below.
+    "charcoal": "black",
+    "coralred": "red",
 }
 
 
@@ -126,26 +129,31 @@ RULESET = register(
                 body=_palette,
             ),
             Rule(
-                id="samsung-contested-names",
+                id="samsung-pinkgold",
                 layer=BRAND,
                 why=(
-                    "`Awesome Charcoal`, `Coralred` and `Titanium Pinkgold` are declared and"
-                    " left unwritten, which is the whole point of declaring them."
+                    "`Titanium Pinkgold` is declared and left unwritten: one shop,"
+                    " rdveikals on 3 listings, and the bar the others cleared is two."
                     "\n\n"
-                    "`charcoal` is black in 3 shops and grey in 2, and **dateks says both**"
-                    " — black on the Enterprise Edition of the A37 and grey on the plain"
-                    " one, which is the same phrase and the same phone. A shop contradicting"
-                    " itself is not evidence, and 3 against 2 is not a majority worth acting"
-                    " on. The judge was asked and answered black at 0.66 and 0.73, under the"
-                    " threshold: a fourth opinion, no more decisive than the other three."
+                    "`charcoal` and `coralred` were here beside it and are now in the"
+                    " palette, both by a decision, and the reasoning belongs where somebody"
+                    " changing them will read it."
                     "\n\n"
-                    "`coralred` is red at bm and coral at rdveikals, one shop each. The"
-                    " registry holds both values, so this is not two shops disagreeing about"
-                    " a colour so much as about how fine a colour is — which is a question"
-                    " about the registry and is answered there, not here."
+                    "`charcoal` looked like 3 shops for black against 2 for grey, which is"
+                    " not a majority worth acting on — until the votes were read. **dateks"
+                    " says both**: black on the Enterprise Edition of the A37 and grey on"
+                    " the plain one, the same phrase on the same phone. A shop contradicting"
+                    " itself is not one vote on each side, it is no vote at all, and without"
+                    " it the count is black at tet and bm against grey at rdveikals: two"
+                    " shops to one, which is the ordinary bar. The judge answered black at"
+                    " 0.66 and 0.73 — under the threshold, but pointing the same way."
                     "\n\n"
-                    "`pinkgold` has one shop behind it, rdveikals on 3 listings. One shop is"
-                    " one opinion, and the bar the other eight names cleared is two."
+                    "`coralred` is red at bm on 4 and coral at rdveikals on 3, one shop"
+                    " each, and it was never a disagreement about the colour — only about"
+                    " how finely to name it. It is settled by removing `coral` from the"
+                    " registry rather than by choosing here: 2 catalogue entries and 2"
+                    " listings sat under it against 73 and 169 under `red`, so it divided"
+                    " the red phones and distinguished nothing."
                 ),
             ),
         ),
