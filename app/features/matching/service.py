@@ -4,7 +4,7 @@ import logging
 from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -50,10 +50,11 @@ from app.features.catalog.service import CatalogService
 from app.features.judge.schemas import (
     BrandRequest,
     BrandVerdict,
+    ColourRequest,
     JudgeReport,
     VariantRequest,
 )
-from app.features.judge.service import JudgeService
+from app.features.judge.service import COLOUR_KEY, JudgeService
 from app.features.matching.schemas import (
     DecidedBy,
     ManualMatch,
@@ -190,6 +191,7 @@ class MatchingService:
             if len(found) > 1:
                 return await self._queue(offer, Reason.AMBIGUOUS, self._variants(found, "gtin"))
 
+        identity = await self._identity(offer, reading)
         lookup = await self._resolve_brand(offer, reading)
         brand = lookup.brand
         # A brand a model chose is not a brand an alias stated, and a match built on one
@@ -220,7 +222,7 @@ class MatchingService:
                 # which is where this differs from the model rung below. There a family
                 # name has to be confirmed before it is believed; here a part number is
                 # believed until something says otherwise.
-                check = await self._identity_agrees(found, reading)
+                check = await self._identity_agrees(found, identity)
                 usable = sorted(check.agreed + check.unverifiable)
                 if len(usable) == 1:
                     outcome = await self._link(
@@ -261,7 +263,7 @@ class MatchingService:
                 # filed fifteen listings spanning a thousand euros as one product. So the
                 # candidates it produces have to agree on the axes before one of them is
                 # accepted.
-                check = await self._identity_agrees(found, reading)
+                check = await self._identity_agrees(found, identity)
                 agreed, unverifiable = check.agreed, check.unverifiable
                 if len(agreed) > 1:
                     # An entry that records no colour agrees with every colour, because it
@@ -375,8 +377,44 @@ class MatchingService:
         )
         return sorted(set(rows))
 
+    async def _identity(self, offer: Offer, reading: NormalizedOffer) -> dict[str, Any]:
+        """The axes this listing is taken to name — what it said, plus what was bought.
+
+        A reading is a pure function of a payload and the rules that apply to it, and it
+        stays that way: a bought answer is not a rule and cannot be one. It is consulted
+        here instead, exactly where a bought brand is consulted, and for the same reason —
+        the ladder and the promotion bar are the two places that have to know.
+
+        Only the colour, and only when the reading found none. The category's rule reads a
+        colour out of a field and never out of a title, because cutting one out of a title
+        takes 358 forms across one shop and canonicalising those by guessing splits one
+        product into several. 53 of the 57 listings this was written for keep their colour
+        in the title, so there is no field to read and nothing left to count.
+
+        It is deliberately not written into `attribute_value_aliases`, which is where the
+        plan started. That table is global and a marketing colour is not: `Canyon` is pink
+        on a Google and orange on an Oppo, both proved by two shops, so an alias learned
+        from one listing would be applied by the reading to a different maker's phone — the
+        confident wrong answer the colour rule exists to avoid. A verdict is keyed by the
+        title and the maker together, which is the granularity a marketing name has.
+        """
+        identity = dict(reading.identity or {})
+        if identity.get(COLOUR_KEY):
+            return identity
+        verdict = await self.judge.stored_colour_verdict(
+            ColourRequest(
+                key=offer.id,
+                title=reading.title,
+                brand=reading.brand_raw,
+                model=reading.model,
+            )
+        )
+        if verdict is not None and verdict.accepted and verdict.canonical:
+            identity[COLOUR_KEY] = verdict.canonical
+        return identity
+
     async def _identity_agrees(
-        self, variant_ids: list[int], reading: NormalizedOffer
+        self, variant_ids: list[int], identity: dict[str, Any]
     ) -> IdentityCheck:
         """Split candidates into the ones whose axes agree and the ones nothing can check.
 
@@ -395,7 +433,7 @@ class MatchingService:
         # resolve `Melna` to anything, and leaving it out is how two colours of one phone
         # stayed one catalogue entry.
         wanted: dict[str, Decimal | str] = {}
-        for key, value in (reading.identity or {}).items():
+        for key, value in identity.items():
             if isinstance(value, bool):
                 continue
             if isinstance(value, int | float | Decimal):
@@ -494,8 +532,14 @@ class MatchingService:
         if not reading.identity:
             return
         try:
+            # What the shop itself said, and not a colour the judge named for it. This
+            # writes onto an entry somebody else created, where a bought answer would spread
+            # from the listing it was bought for to every listing that entry ever matches.
             await self._carry_identity(
-                CatalogService(self.session), variant_id, reading, only_if_absent=True
+                CatalogService(self.session),
+                variant_id,
+                dict(reading.identity or {}),
+                only_if_absent=True,
             )
         except ConflictError:
             # Filling in the last axis is exactly when a duplicate surfaces: two entries
@@ -1043,12 +1087,13 @@ class MatchingService:
             return "source_not_trusted"
         if reading.gtin:
             return None
-        if await self._identity_is_complete(reading, source.category_id):
+        identity = await self._identity(offer, reading)
+        if await self._identity_is_complete(identity, source.category_id):
             return None
         return "no_barcode"
 
     async def _identity_is_complete(
-        self, reading: NormalizedOffer, category_id: int | None
+        self, identity: dict[str, Any], category_id: int | None
     ) -> bool:
         """Whether the reading names every axis its category says tells its products apart."""
         if category_id is None:
@@ -1066,7 +1111,7 @@ class MatchingService:
         }
         if not required:
             return False
-        named = {key for key, value in (reading.identity or {}).items() if value not in (None, "")}
+        named = {key for key, value in identity.items() if value not in (None, "")}
         return required <= named
 
     async def _variant_from(self, offer: Offer, reading: NormalizedOffer) -> Variant:
@@ -1114,7 +1159,7 @@ class MatchingService:
             await catalog.add_gtin(variant.id, IdentifierCreate(value=reading.gtin))
         if reading.mpn:
             await catalog.add_mpn(variant.id, IdentifierCreate(value=reading.mpn))
-        await self._carry_identity(catalog, variant.id, reading)
+        await self._carry_identity(catalog, variant.id, await self._identity(offer, reading))
 
         # The trail is where a catalogue entry's origin lives: nothing on the row says
         # which listing it was built from, and that is the first thing anybody will ask.
@@ -1155,7 +1200,7 @@ class MatchingService:
         self,
         catalog: CatalogService,
         variant_id: int,
-        reading: NormalizedOffer,
+        identity: dict[str, Any],
         *,
         only_if_absent: bool = False,
     ) -> None:
@@ -1167,7 +1212,7 @@ class MatchingService:
         thousand euros. The axes are what `identity_key` is computed from, and setting them
         is what makes that key mean anything.
         """
-        for key, value in (reading.identity or {}).items():
+        for key, value in identity.items():
             attribute = await self.session.scalar(select(Attribute).where(Attribute.key == key))
             if attribute is None:
                 # An axis a rule produced and nobody entered in the registry. Not an error:
@@ -1334,6 +1379,68 @@ class MatchingService:
                 decided_by=DecidedBy.JUDGE,
             )
             placed += 1
+
+        report = report.model_copy(update={"placed": placed})
+        audit.record_changes(**report.model_dump(mode="json"))
+        return report
+
+    async def judge_colours(self, *, limit: int = 50) -> JudgeReport:
+        """Buy the colour for the listings a colour is the only thing missing from.
+
+        The third question, and the one that unblocks the second. `variant_choice` refused
+        30 listings of 30 and was right to: at confidence 1.00 a `Coralred` Samsung is
+        neither of the black and grey entries the catalogue holds. Those listings do not
+        need an entry chosen for them, they need one made — and what stops that is the
+        promotion bar, which asks for every axis the category calls identity-bearing.
+        Colour is one, the shop wrote it in its title rather than in a field, and no rule
+        may cut it out of there.
+
+        Both buckets, because it is the same gap wearing two shapes: `ambiguous` is a
+        listing whose colour would have told two entries apart, `signals_unmatched` one
+        whose colour is all that keeps it from becoming an entry of its own. A listing with
+        no model is skipped — a colour would not save it, and a shop's title is not a model.
+
+        Re-run rather than placed, as brands are: the verdict is in the store, so the ladder
+        consults it on its own and takes whichever rung actually fires.
+        """
+        rows = (
+            await self.session.scalars(
+                select(MatchQueue)
+                .where(
+                    MatchQueue.reason.in_((Reason.AMBIGUOUS.value, Reason.SIGNALS_UNMATCHED.value))
+                )
+                .order_by(MatchQueue.offer_id)
+                .limit(limit)
+            )
+        ).all()
+
+        requests: list[ColourRequest] = []
+        for row in rows:
+            reading = await self._reading(row.offer_id)
+            if reading is None or not reading.model:
+                continue
+            if (reading.identity or {}).get(COLOUR_KEY):
+                continue
+            requests.append(
+                ColourRequest(
+                    key=row.offer_id,
+                    title=reading.title,
+                    brand=reading.brand_raw,
+                    model=reading.model,
+                )
+            )
+
+        verdicts, report = await self.judge.decide_colours(requests)
+
+        placed = 0
+        for offer_id, verdict in verdicts.items():
+            if not verdict.accepted:
+                continue
+            reading = await self._reading(offer_id)
+            if reading is None:
+                continue
+            outcome = await self._decide(await self._offer(offer_id), reading)
+            placed += outcome.matched
 
         report = report.model_copy(update={"placed": placed})
         audit.record_changes(**report.model_dump(mode="json"))

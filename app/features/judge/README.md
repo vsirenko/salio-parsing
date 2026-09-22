@@ -3,8 +3,9 @@
 Asking an outside model a bounded question, and remembering what it said.
 
 Backed by [TypeSafe](https://docs.typesafe.ai), whose System One models return a typed
-answer and a probability rather than text. The judge here asks two kinds of question: which of several brands a listing means, and
-which of several catalogue entries it is.
+answer and a probability rather than text. The judge here asks three kinds of question:
+which of several brands a listing means, which of several catalogue entries it is, and what
+plain colour the maker's own name for one stands for.
 
 ## Endpoints
 
@@ -13,9 +14,9 @@ which of several catalogue entries it is.
 | `GET /api/admin/judge/verdicts` | every answer bought, with what it was asked, filterable by `kind` |
 
 Running the judge is deliberately **not** here. For brands that is
-`POST /api/admin/matching/judge` and for entries `POST /api/admin/matching/judge/ambiguous`,
-because deciding a question is worth asking belongs to whoever owns the work — this feature
-only answers and remembers.
+`POST /api/admin/matching/judge`, for entries `POST /api/admin/matching/judge/ambiguous`
+and for colours `POST /api/admin/matching/judge/colours`, because deciding a question is
+worth asking belongs to whoever owns the work — this feature only answers and remembers.
 
 ## How it works
 
@@ -39,6 +40,30 @@ ambiguous, so any other description would describe every option the same way and
 nothing. The brand is named in the state separately from the title, because the word being
 judged belongs to a maker.
 
+**The third question: `colour_choice`.** A `Choice` over the plain colours the registry
+holds, plus `none_of_these`, asked about the **whole title** and the maker rather than about
+a word cut out of it. It exists because the second question answered itself: `variant_choice`
+refused 30 listings of 30, at confidence 1.00, and was right to — a `Coralred` Samsung is
+neither of the black and grey entries the catalogue holds. Those listings do not need an
+entry chosen for them, they need one made, and what stops that is the promotion bar asking
+for every identity-bearing axis. The colour is the missing one.
+
+**It asks about the title because that is where the colour is.** The category's rule reads a
+colour out of a field and never out of a title, deliberately: across one shop's 1153 titled
+products the word takes 358 forms and canonicalising those by guessing splits one product
+into several, confidently. Only a shop's own ruleset knows where that shop puts its colour,
+and 53 of the 57 listings this was written for keep it in the title and nowhere else. So the
+title goes over whole, with the maker beside it, and the answer is one of the registry's
+canonical colours — each option described by the spellings the registry knows for it, which
+is what makes `Tumši zils` and `dark blue` visibly one option rather than two.
+
+**A colour verdict is not written into `attribute_value_aliases`,** which is where the plan
+for it started. That table is global and a marketing colour is not: an alias learned from one
+`Canyon` listing would be applied by the reading to a different maker's phone, which is the
+confident wrong answer the colour rule exists to avoid. The verdict is keyed by the title and
+the maker together — the granularity a marketing name actually has — and the matcher consults
+it exactly where it consults a bought brand.
+
 **A verdict here places the listing**, unlike a brand's, which goes into the store for the
 ladder to resolve on its own. No rung consults this one: the model rung found the candidates
 and the judge chose among them, so that is what the link records — `method` the rung that
@@ -54,7 +79,9 @@ in it, and not before.
 **Every Choice carries `none_of_these`.** Without a way out the model can only pick one of
 the options it was handed, and it will do that as confidently as any other answer — the one
 failure mode that produces a wrong match rather than no match. Answered "neither" is treated
-as a decision: the listing moves to `brand_unknown`, which is different work.
+as a decision: the listing moves to `brand_unknown`, which is different work. On a colour
+it means the title names no colour the registry holds, which is a registry gap and is
+recorded as one rather than filed under the nearest value.
 
 **A verdict is an input to matching, never a match.** The matcher reads the verdict store
 and cannot reach the network through it, so running the ladder stays offline, deterministic

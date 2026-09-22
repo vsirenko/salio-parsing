@@ -474,3 +474,175 @@ def test_none_of_these_places_nothing_either(judged):
     report = client.post("/api/admin/matching/judge/ambiguous", headers=auth(token)).json()
     assert report["no_match"] == 1
     assert report["placed"] == 0
+
+
+# --- the third question: what colour is this ---
+
+COLOUR_ANSWER = "colour_choice"
+
+
+def colour_reply(choice: str, confidence: float) -> dict:
+    return {
+        "model": "jev-1.13.0",
+        "usage": {"input_tokens": 90, "output_tokens": 6},
+        "answers": {
+            COLOUR_ANSWER: {
+                "type": "choice",
+                "choice": choice,
+                "confidence": confidence,
+                "probabilities": {choice: confidence},
+            }
+        },
+    }
+
+
+def a_colourless_listing(client, token):
+    """A listing whose colour is in its title, where no rule may cut it out.
+
+    The catalogue already holds the phone in two colours, so the listing is `ambiguous`: it
+    reaches the model rung, finds two entries that differ in the one axis it cannot name,
+    and stops there. 53 of the 57 real listings this was written for look exactly like it.
+
+    Returns the listing and the entry each colour ended up as, because which of the two a
+    bought colour picks is the whole question.
+    """
+    from tests.test_matching import (
+        a_colour_axis,
+        a_shop_we_can_build_from,
+        promote,
+    )
+
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_colour_axis(client, token, category["id"])
+
+    entries = {}
+    for external_id, colour in (("C-1", "black"), ("C-2", "blue")):
+        said = offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Apple Pixel 11 {colour}",
+                "brand": "Apple",
+                "model": "Pixel 11",
+                "attributes": {"color": colour},
+            },
+            external_id=external_id,
+        )
+        promote(client, token, said)
+        entries[colour] = client.get(
+            f"/api/admin/offers/{said}/matches", headers=auth(token)
+        ).json()[0]["variant_id"]
+
+    # The same phone under a name for the colour that nothing resolves. `Canyon` is pink on
+    # a Google and orange on an Oppo, both proved by two shops, so no registry row holds it.
+    unsaid = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple Pixel 11 Canyon", "brand": "Apple", "model": "Pixel 11"},
+        external_id="C-3",
+    )
+    assert run_on(client, token, unsaid)["reason"] == "ambiguous"
+    return unsaid, entries
+
+
+def test_a_bought_colour_places_the_listing(judged):
+    """The rung that fires is still the rung: the judge supplied an axis, not a match."""
+    client, stub = judged
+    token = admin_token(client)
+    offer, entries = a_colourless_listing(client, token)
+    stub.answers(colour_reply("blue", 0.93))
+
+    report = client.post("/api/admin/matching/judge/colours", headers=auth(token)).json()
+    assert report["asked"] == 1
+    assert report["accepted"] == 1
+    assert report["placed"] == 1
+
+    matches = client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json()
+    assert matches[0]["method"] == "brand_model"
+    assert matches[0]["decided_by"] == "rule"
+    # And it went to the blue entry rather than to whichever one was made first.
+    assert matches[0]["variant_id"] == entries["blue"]
+
+
+def test_the_options_are_the_registry_s_colours_and_the_title_is_the_state(judged):
+    """The whole title, because only a shop's own ruleset knows where that shop puts its
+    colour — and most of them put it nowhere but there."""
+    client, stub = judged
+    token = admin_token(client)
+    a_colourless_listing(client, token)
+    stub.answers(colour_reply("blue", 0.93))
+    client.post("/api/admin/matching/judge/colours", headers=auth(token))
+
+    criteria = stub.asked[0]["questions"][COLOUR_ANSWER]["criteria"]
+    assert set(criteria) == {"black", "blue", NO_MATCH}
+    state = stub.asked[0]["state"]
+    assert state["listing_title"] == "Apple Pixel 11 Canyon"
+    # The maker travels with the title: `Canyon` is pink on a Google and orange on an Oppo.
+    assert state["brand"] == "Apple"
+
+
+def test_an_unconfident_colour_is_recorded_and_not_used(judged):
+    client, stub = judged
+    token = admin_token(client)
+    offer, _ = a_colourless_listing(client, token)
+    stub.answers(colour_reply("blue", 0.42))
+
+    report = client.post("/api/admin/matching/judge/colours", headers=auth(token)).json()
+    assert report["unconfident"] == 1
+    assert report["placed"] == 0
+    assert client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json() == []
+
+
+def test_the_answer_is_bought_once(judged):
+    client, stub = judged
+    token = admin_token(client)
+    a_colourless_listing(client, token)
+    stub.answers(colour_reply("blue", 0.93))
+
+    client.post("/api/admin/matching/judge/colours", headers=auth(token))
+    again = client.post("/api/admin/matching/judge/colours", headers=auth(token)).json()
+    assert again["asked"] == 0
+    assert len(stub.asked) == 1
+
+
+def test_a_bought_colour_completes_an_identity_and_makes_an_entry(judged):
+    """The case the question was written for. A listing with no barcode clears the promotion
+    bar only by naming every axis the category calls identity-bearing, and the colour it
+    cannot read is the one it is missing — so it sits in `signals_unmatched` fully read."""
+    from tests.test_matching import a_colour_axis, a_shop_we_can_build_from
+
+    client, stub = judged
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_colour_axis(client, token, category["id"])
+
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple Pixel 12 Canyon", "brand": "Apple", "model": "Pixel 12"},
+        external_id="P-1",
+    )
+    assert run_on(client, token, offer)["reason"] == "signals_unmatched"
+
+    refused = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert refused["promoted"] == 0
+    assert refused["reasons"] == {"no_barcode": 1}
+
+    stub.answers(colour_reply("black", 0.91))
+    assert (
+        client.post("/api/admin/matching/judge/colours", headers=auth(token)).json()["accepted"]
+        == 1
+    )
+
+    promoted = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert promoted["promoted"] == 1
+
+    # And the entry carries the colour, which is what makes its identity key mean anything.
+    variant_id = client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json()[0][
+        "variant_id"
+    ]
+    axes = client.get(f"/api/admin/variants/{variant_id}/attributes", headers=auth(token)).json()
+    assert any(axis.get("value_id") for axis in axes)

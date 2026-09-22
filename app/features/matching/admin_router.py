@@ -8,6 +8,7 @@ POST   /api/admin/matching/run          work through what is unplaced
 GET    /api/admin/match-queue           what could not be placed, and why
 GET    /api/admin/match-queue/summary   the breakdown that says what to build next
 POST   /api/admin/matching/judge        ask the judge about the brand choices, then retry
+POST   /api/admin/matching/judge/colours  buy the colour a title carries and no rule reads
 POST   /api/admin/offers/{id}/promote   make the variant this listing was looking for
 POST   /api/admin/matching/promote      do that for everything identifiable in the queue
 """
@@ -183,6 +184,22 @@ async def judge_ambiguous(
     """Only `ambiguous`, and only after the corpus has been asked and could not answer: a
     marketing colour belongs to a maker, and no global registry row can hold it."""
     return await service.judge_ambiguous(limit=limit)
+
+
+@router.post(
+    "/judge/colours",
+    response_model=JudgeReport,
+    summary="Ask the judge what colour a listing is",
+)
+async def judge_colours(
+    service: MatchingServiceDep,
+    limit: Annotated[int, Query(ge=1, le=200, description="How many to ask about")] = 50,
+) -> JudgeReport:
+    """For listings whose colour is in the title, where no rule may cut it out: 53 of the 57
+    this was written for keep it there. The answer is kept against the title and the maker
+    rather than entered in the registry — `Canyon` is pink on a Google and orange on an
+    Oppo, so a global alias would be wrong somewhere."""
+    return await service.judge_colours(limit=limit)
 
 
 @router.post(

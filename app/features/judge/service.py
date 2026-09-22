@@ -27,6 +27,7 @@ from app.core.exceptions import ValidationError
 from app.db.models import (
     Attribute,
     AttributeValue,
+    AttributeValueAlias,
     Brand,
     Category,
     CategoryAttribute,
@@ -36,10 +37,12 @@ from app.db.models import (
 )
 from app.db.query import paginated
 from app.features.judge import questions
-from app.features.judge.questions import Candidate, Option, Question
+from app.features.judge.questions import Candidate, Colour, Option, Question
 from app.features.judge.schemas import (
     BrandRequest,
     BrandVerdict,
+    ColourRequest,
+    ColourVerdict,
     JudgeReport,
     VariantRequest,
     VariantVerdict,
@@ -66,10 +69,20 @@ def build_client() -> AsyncTypeSafeClient:
     )
 
 
+COLOUR_KEY = "color"
+
+
 class JudgeService:
     def __init__(self, session: AsyncSession, client_factory: ClientFactory = build_client) -> None:
         self.session = session
         self._client_factory = client_factory
+        # The registry's colours, loaded at most once per instance. A pass asks about
+        # hundreds of listings and gets the same list every time; the list is also part of
+        # every colour question's identity, so loading it once keeps the hashes stable
+        # within a pass as well as saving the queries. A colour entered while a pass is
+        # running is therefore not seen by it, which is the correct trade: a question that
+        # changed its options halfway through a pass would be two questions.
+        self._colour_cache: list[Colour] | None = None
 
     # --- reading a stored answer, which never leaves the process ---
 
@@ -181,6 +194,123 @@ class JudgeService:
             output_tokens=usage[1],
             error=error,
         )
+
+    async def stored_colour_verdict(self, request: ColourRequest) -> ColourVerdict | None:
+        """An answer already bought, without reaching the network.
+
+        The matcher reads colours through this, exactly as it reads brands: running the
+        ladder or a promotion stays offline and deterministic, and buying an answer is a
+        separate pass somebody starts.
+        """
+        question = await self._colour_question(request)
+        if question is None:
+            return None
+        stored = await self._stored(question.hash)
+        return None if stored is None else self._read_colour(stored, question)
+
+    async def decide_colours(
+        self, requests: list[ColourRequest]
+    ) -> tuple[dict[int, ColourVerdict], JudgeReport]:
+        """What plain colour each of these listings is, by the maker's own name for it.
+
+        The third question, and the one that unblocks the second: `variant_choice` refused
+        30 of 30 listings and was right to — at confidence 1.00 a `Coralred` Samsung is
+        neither of the black and grey entries the catalogue holds. They do not need matching
+        to an entry, they need one of their own, and what stops that is the missing colour.
+        """
+        if not settings.judge_enabled:
+            raise ValidationError(
+                "No TypeSafe API key is configured, so nothing can be judged."
+                " Set TYPESAFE_API_KEY.",
+                code="judge_disabled",
+            )
+
+        built = [(request, await self._colour_question(request)) for request in requests]
+        pending = [(request, q) for request, q in built if q is not None]
+
+        verdicts: dict[int, ColourVerdict] = {}
+        unanswered: list[tuple[ColourRequest, Question]] = []
+        cached = 0
+        for request, question in pending:
+            stored = await self._stored(question.hash)
+            if stored is None:
+                unanswered.append((request, question))
+            else:
+                cached += 1
+                verdicts[request.key] = self._read_colour(stored, question)
+
+        asked, failed, error, usage = await self._ask_all(unanswered, verdicts, self._read_colour)
+        return verdicts, JudgeReport(
+            considered=len(requests),
+            asked=asked,
+            cached=cached,
+            accepted=sum(1 for v in verdicts.values() if v.accepted),
+            unconfident=sum(
+                1 for v in verdicts.values() if not v.accepted and v.choice != questions.NO_MATCH
+            ),
+            no_match=sum(1 for v in verdicts.values() if v.choice == questions.NO_MATCH),
+            failed=failed,
+            placed=0,
+            input_tokens=usage[0],
+            output_tokens=usage[1],
+            error=error,
+        )
+
+    @staticmethod
+    def _read_colour(stored: JudgeVerdict, question: Question) -> ColourVerdict:
+        known = stored.choice in question.by_option
+        confident = float(stored.confidence) >= settings.judge_min_confidence
+        accepted = known and confident
+        return ColourVerdict(
+            canonical=stored.choice if accepted else None,
+            choice=stored.choice,
+            confidence=stored.confidence,
+            accepted=accepted,
+            no_match=stored.choice == questions.NO_MATCH,
+        )
+
+    async def _colour_question(self, request: ColourRequest) -> Question | None:
+        """None when the registry holds no colours to choose between."""
+        if not request.title:
+            return None
+        colours = await self._colours()
+        if len(colours) < 2:
+            return None
+        return questions.colour_choice(
+            title=request.title,
+            brand=request.brand,
+            model=request.model,
+            colours=colours,
+        )
+
+    async def _colours(self) -> list[Colour]:
+        """Every plain colour the registry holds, with the spellings it knows for each.
+
+        The spellings are the only true thing there is to say about a colour beyond its
+        name, and they are what makes `Tumši zils` and `dark blue` visibly one option
+        rather than two.
+        """
+        if self._colour_cache is not None:
+            return self._colour_cache
+        rows = await self.session.execute(
+            select(AttributeValue.canonical, AttributeValueAlias.alias_normalized)
+            .join(Attribute, Attribute.id == AttributeValue.attribute_id)
+            .outerjoin(
+                AttributeValueAlias,
+                AttributeValueAlias.attribute_value_id == AttributeValue.id,
+            )
+            .where(Attribute.key == COLOUR_KEY)
+        )
+        spellings: dict[str, set[str]] = {}
+        for canonical, alias in rows.all():
+            held = spellings.setdefault(canonical, set())
+            if alias and alias != canonical:
+                held.add(alias)
+        self._colour_cache = [
+            Colour(canonical=canonical, spellings=tuple(sorted(aliases)))
+            for canonical, aliases in sorted(spellings.items())
+        ]
+        return self._colour_cache
 
     async def _ask_all(
         self,

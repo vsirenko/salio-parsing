@@ -323,6 +323,20 @@ and the questions that have to be answered with real data first, are written dow
       grey 4, and a three-tone UleFone where the catalogue genuinely holds no such entry.
       The third answer, `titanium` at 0.81, fell below the 0.85 threshold and was a
       refurbished phone that should not have been in the question at all.
+- [x] **The judge names a colour, which is what the entry question turned out to need.**
+      `variant_choice` refused 30 of 30 and was right to: at confidence 1.00 a `Coralred`
+      Samsung is neither of the entries the catalogue holds. Those listings do not want an
+      entry chosen, they want one made, and the promotion bar stops them because it asks for
+      every identity-bearing axis and the colour is missing. `colour_choice` asks about the
+      **whole title** plus the maker — 53 of the 57 keep the colour there and no rule may cut
+      it out of a title — and answers with one of the registry's 37 plain colours.
+      `POST /api/admin/matching/judge/colours`.
+      The answer does **not** become an `attribute_value_aliases` row, which is where the
+      plan started and is wrong for the same reason the counting was: that table is global,
+      `Canyon` is pink on a Google and orange on an Oppo, and an alias learned from one
+      listing would be applied by the reading to the other maker's phone. It is read where a
+      bought brand is read — `MatchingService._identity` — so the reading stays a pure
+      function of a payload and its rules.
 - [ ] **A title that names a different maker than the field is a question for the judge.**
       discover.lv files `Umidigi Bison X10` under `CAT`, its own section name, and now that
       `CAT` resolves the listing goes there confidently — the title fallback deliberately

@@ -8,6 +8,7 @@ from app.core.config import settings
 
 BRAND_CHOICE = "brand_choice"
 VARIANT_CHOICE = "variant_choice"
+COLOUR_CHOICE = "colour_choice"
 
 # A Choice has to be able to answer "neither". Without a way out the model can only pick
 # one of the options it was handed, and it will do that as confidently as any other
@@ -35,6 +36,18 @@ VARIANT_INSTRUCTIONS = (
 
 VARIANT_NO_MATCH_DESCRIPTION = (
     "The listing is none of the versions above, or its title does not say which one it is."
+)
+
+COLOUR_INSTRUCTIONS = (
+    "A shop has listed a product whose title carries the maker's own name for its colour —"
+    " a word like Coralred or Blueberry rather than a plain one. Decide which of the plain"
+    " colours below that name is. Judge from the maker as well as the word: the same"
+    " invented name belongs to different colours at different makers."
+)
+
+COLOUR_NO_MATCH_DESCRIPTION = (
+    "The title does not name a colour at all, or the colour it names is none of those"
+    " above — a two-tone case, or a shade with no plain name here."
 )
 
 
@@ -82,6 +95,24 @@ class Option:
             # so there is nothing true to say and the answer should come back unconfident.
             return None
         return ", ".join(f"{name}: {value}" for name, value in self.axes)
+
+
+@dataclass(frozen=True)
+class Colour:
+    """One plain colour a maker's invented name might mean.
+
+    Described by the spellings the registry already holds for it, which is the only true
+    thing there is to say about a colour beyond its name — and which is what makes
+    `Tumši zils` and `dark blue` visibly the same option rather than two.
+    """
+
+    canonical: str
+    spellings: tuple[str, ...]
+
+    def describe(self) -> str | None:
+        if not self.spellings:
+            return None
+        return "also written: " + ", ".join(self.spellings)
 
 
 @dataclass(frozen=True)
@@ -180,4 +211,50 @@ def variant_choice(
         criteria=criteria,
         by_option={option.slug: option.variant_id for option in ordered},
         hash=_identity(VARIANT_CHOICE, state, criteria),
+    )
+
+
+def colour_choice(
+    *,
+    title: str | None,
+    brand: str | None,
+    model: str | None,
+    colours: list[Colour],
+) -> Question:
+    """Which plain colour the maker's name in this title stands for.
+
+    The title rather than the word, because only a shop's own ruleset knows where in a
+    title that shop puts its colour, and 53 of the 57 listings this is for keep it there
+    rather than in a field. Asking about the title needs no such knowledge and works the
+    same for every shop.
+
+    The answer is a plain colour and not a catalogue entry on purpose. The entry question
+    was asked first and refused 30 listings of 30: what those listings need is an entry of
+    their own, and the only thing stopping one being made is the axis nobody can read. A
+    colour fills that axis; a chosen entry would have been the wrong answer.
+
+    It is deliberately not turned into a registry alias afterwards. `attribute_value_aliases`
+    is global and a marketing colour is not — `Canyon` is pink on a Google and orange on an
+    Oppo, both proved by two shops — so the word alone cannot be the key. The maker is in
+    the state here, which is why this question may be asked at all.
+    """
+    state = {
+        "listing_title": title,
+        "brand": brand,
+        "model": model,
+    }
+    ordered = sorted(colours, key=lambda colour: colour.canonical)
+    criteria: dict[str, str | None] = {colour.canonical: colour.describe() for colour in ordered}
+    criteria[NO_MATCH] = COLOUR_NO_MATCH_DESCRIPTION
+
+    return Question(
+        kind=COLOUR_CHOICE,
+        state=state,
+        instructions=COLOUR_INSTRUCTIONS,
+        criteria=criteria,
+        # The option key is the canonical value itself — the answer is a word, not a row,
+        # so a stored verdict stays readable with no join. The value is the position, which
+        # nothing reads: what this map is for here is saying which answers are real ones.
+        by_option={colour.canonical: index for index, colour in enumerate(ordered)},
+        hash=_identity(COLOUR_CHOICE, state, criteria),
     )

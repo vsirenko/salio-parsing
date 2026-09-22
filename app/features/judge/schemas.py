@@ -62,6 +62,29 @@ class VariantVerdict(NamedTuple):
     no_match: bool
 
 
+class ColourRequest(NamedTuple):
+    """One listing to decide a colour for.
+
+    The title rather than a word cut out of it: only a shop's own ruleset knows where that
+    shop puts its colour, and most of them keep it in the title rather than in a field.
+    """
+
+    key: int
+    title: str | None
+    brand: str | None
+    model: str | None
+
+
+class ColourVerdict(NamedTuple):
+    """A plain colour, and whether policy allows acting on it."""
+
+    canonical: str | None
+    choice: str
+    confidence: Decimal
+    accepted: bool
+    no_match: bool
+
+
 class VerdictRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

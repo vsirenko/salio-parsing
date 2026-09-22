@@ -14,6 +14,7 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `GET /api/admin/match-queue` | what could not be placed, filterable by `reason` |
 | `GET /api/admin/match-queue/summary` | the breakdown that says what to build next |
 | `POST /api/admin/matching/judge` | ask the judge about the brand choices, then retry them |
+| `POST /api/admin/matching/judge/colours` | buy the colour a title carries and no rule may read |
 | `POST /api/admin/offers/{offer_id}/promote` | make the variant this listing was looking for |
 | `POST /api/admin/matching/promote` | do that for everything identifiable in the queue |
 
@@ -64,6 +65,20 @@ and the only place an outside judgement earns its cost: `POST /api/admin/matchin
 asks [the judge](../judge/README.md) about exactly that bucket and retries what it answers.
 The ladder itself never calls out; it reads stored verdicts and nothing else, so running the
 matcher stays offline, deterministic and as fast as its indexes.
+
+**A colour a shop only wrote in its title is the other bought answer.** The category's
+rule reads a colour out of a field and never out of a title, because across one shop's 1153
+titled products the word takes 358 forms and canonicalising those by guessing splits one
+product into several. 53 of the 57 listings stuck on a missing colour keep it in the title
+and nowhere else, so there is nothing left to read and nothing left to count:
+`POST /api/admin/matching/judge/colours` buys the answer, and the ladder and the promotion
+bar consult the stored verdict exactly where they consult a bought brand — in `_identity`,
+which is the one place a reading's axes and a bought axis meet.
+
+**A bought colour is not taught to an entry somebody else made.** `_reconcile` writes what
+the shop itself said and nothing else. A verdict is bought for one listing against one title
+and one maker; written onto a shared entry it would reach every listing that entry ever
+matches, which is more than was asked and more than was paid for.
 
 **The category is deliberately not a filter.** A brand arrives stated in a feed field; a
 category is *inferred* by us, through a mapping or from text. Filtering on our own
