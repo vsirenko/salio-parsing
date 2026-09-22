@@ -284,6 +284,24 @@ and the questions that have to be answered with real data first, are written dow
       they are not: on every one of the eight codes, bigbox, onea and dateks say white and
       only euronics says blue, and the catalogue entry those three already share is white.
       cec is now placed in full, 92 of 92.
+- [x] **A marketing colour name can be settled from the corpus, and there are two ways —
+      which one applies depends on whether the shop names its products.** Where a listing
+      carries a per-product identifier, ask the shops holding the same one: that settled
+      cec's `Sudraba krāsas`, `Lavandas krāsas`, `Astromelns` and `Ledāju krāsas`, and it is
+      exact. Where it does not — discover.lv publishes only a family code, `SM-A576B` — that
+      method returns every colour the phone comes in and is useless. The second way keys on
+      the **word**: a marketing name appears in many shops' titles, and those shops state
+      the colour in a field of their own, independently of it. Measured across the ten:
+      `Obsidian` black on 97 of 97 across seven shops, `Midnight` black on 61 of 70 across
+      eight, `Lilac` purple on 8 of 8 across four, `Lightgray` grey, `Iris` blue,
+      `Mint Breeze` green. Entered. `Fog` (green 9, light-green 4, grey 2), `Frost` (blue 6,
+      purple 3, black 3), `Canyon` (pink 8, orange 3) and `Charcoal` (black 11, grey 6) are
+      genuinely contested and were left alone — a marketing word can mean different colours
+      to different makers, and the registry has no brand to hang that on.
+- [ ] **The word method is a script that was run by hand and ought to be a tool.** It is the
+      answer to the registry gap this project has been carrying since the first shop, and it
+      runs against the corpus rather than against anybody's judgement. Worth an endpoint that
+      proposes aliases with their votes, for a person to accept — not one that enters them.
 - [ ] **`Night Sky` still wants a photograph.** Apple's name for an iPhone Duo colour, on 4
       cec listings. bigbox carries the same codes and does not resolve it either, so there
       is no evidence to read — unlike Glacier, this one really is unknown.
