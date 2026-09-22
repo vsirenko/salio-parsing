@@ -314,4 +314,4 @@ def test_without_the_registry_the_gap_stays_visible():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-1+phones-4+dateks-2"
+    assert reading()["ruleset_version"] == "generic-1+phones-5+dateks-2"

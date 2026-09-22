@@ -8,9 +8,10 @@ from app.features.offers.normalization.sources import (
     bigbox,
     bm,
     dateks,
+    euronics,
     ksenukai,
     onea,
     rdveikals,
 )
 
-__all__ = ("bigbox", "bm", "dateks", "ksenukai", "onea", "rdveikals")
+__all__ = ("bigbox", "bm", "dateks", "euronics", "ksenukai", "onea", "rdveikals")

@@ -9,13 +9,14 @@ shop that sells them.
 import re
 from typing import Any
 
+from app.features.offers.normalization import colours
 from app.features.offers.normalization.rules import CATEGORY, Rule, Ruleset, Vocabulary, register
 
 SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-4"
+VERSION = "phones-5"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -94,10 +95,35 @@ def _color(
     for name, value in (fields.get("attributes") or {}).items():
         if not any(word in name.lower() for word in COLOR_NAMES):
             continue
-        canonical = vocabulary.colours.get(str(value).strip().casefold())
+        canonical = _canonical(str(value).strip(), vocabulary)
         if canonical:
             return {"identity": {**fields.get("identity", {}), "color": canonical}}
     return {}
+
+
+def _canonical(value: str, vocabulary: Vocabulary) -> str | None:
+    """The registry's value for what a shop wrote in its colour field.
+
+    Through `colours`, not a dictionary lookup. An exact lookup is what this was for as long
+    as the only shops here stated one word; the two that state a phrase — `light blue`,
+    `tumši zils` — got nothing from it, 104 products between them.
+
+    A field naming more than one colour is a two-tone case and is resolved as a pair, never
+    by taking one of them. Dropping words off the front, which is what resolves `light blue`,
+    reads `black, orange` as `orange`: not a partial answer but a wrong one, and a product
+    filed under the wrong colour cannot be told from one filed under the right one.
+    """
+    # The registry first, on the phrase exactly as the shop wrote it. It knows some whole
+    # phrases — `Melna / Oranža` is one alias, not two — and taking those apart to put them
+    # back together again is how a known answer turns into a guess.
+    known = vocabulary.colours.get(value.casefold())
+    if known:
+        return known
+
+    parts = [part.strip() for part in re.split(r"[,/]", value) if part.strip()]
+    if len(parts) > 1:
+        return colours.pair(parts, vocabulary)
+    return colours.resolve(value, vocabulary)
 
 
 def _megabytes(text: str) -> int | None:
@@ -182,6 +208,16 @@ RULESET = register(
                     " in it: the pairs that could be learned from that one shop include"
                     " `evening blue` meaning grey and `desert titanium` meaning gold, which"
                     " is the confident wrong answer this rule existed to avoid."
+                    "\n\n"
+                    "The lookup was exact for as long as every shop that stated a colour"
+                    " stated one word. Two of them state a phrase — `light blue`,"
+                    " `tumši zils` — and got nothing at all: 104 products between dateks and"
+                    " euronics. It resolves through `colours` now, which reads a phrase by"
+                    " dropping words off the front, and that brings 93 of them in. The other"
+                    " 11 are a field naming two or three colours at once, and they are"
+                    " refused rather than reduced: dropping words off the front reads"
+                    " `black, orange` as `orange`, which is not a partial answer but a wrong"
+                    " one. A separated field is resolved as a pair or not at all."
                 ),
                 body=_color,
             ),

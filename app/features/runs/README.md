@@ -190,10 +190,35 @@ lifecycle changes.
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
+| `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |
 
 `rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
 module says why its discovery walks the listing rather than the sitemap, and why the brand
 comes out of an analytics block instead of the microdata beside it.
+
+**`euronics-phones`** is the best-stated source here and the one with the shortest
+ruleset — one rule. Its product page states the brand, the part number, `gtin13` **and the
+model** as JSON-LD, so generic finds all four without help: 100%, 100%, 100% and 99.7%. No
+other shop here states a model at all.
+
+**Discovery is one request.** The listing pages are cumulative and the `?f=` token that
+selects one is a protobuf message whose sixth field is the page number, so a token built for
+a page past the end returns the whole category at once — 319 phones in 2 MB, with the `Load
+more` anchor gone. The token this builds for page 2 is byte for byte the shop's own, which
+is what says the shape was read rather than guessed. Walking the pages in order, as the
+previous parser did, downloads the same cards over and over.
+
+Two things it would be read wrongly without, both measured on all 319:
+
+- **`data-product-price` is not always the price.** On 51 of them the card leads with
+  `Friends price` and keeps the real one in a `discount__old__loyal` block beside it: 599.99
+  against 839.99. The comparable price is the old one where a loyalty discount is shown.
+- **`data-product-brand` is `Vaikimisi`** — Estonian for "default" — on every card, so the
+  brand comes off the product page and the placeholder is dropped rather than carried.
+
+Its JSON-LD `availability` is a constant `InStock`, including on all 58 the listing itself
+marks `On order`. That is the third shop in a row, after dateks and bm.market, whose
+structured data means the shop will sell the thing rather than that it has it.
 
 **`bm-phones`** is the first that reads GraphQL, and the cheapest channel here by a wide
 margin: Magento 2 with `POST /graphql` open — no key, no signature — answering 200 products

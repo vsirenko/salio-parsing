@@ -245,6 +245,22 @@ and the questions that have to be answered with real data first, are written dow
       the disagreements that were silent are visible. `variant_merges` exists and nothing
       produces a row in it: two entries that reach the same identity are the same thing, and
       saying so is the point of the table.
+- [x] A seventh channel, `euronics-phones`, and the first that reads JSON-LD: 319 phones,
+      discovery in **one request** — the `?f=` token is protobuf and its sixth field is the
+      page, so a token built past the end returns the whole cumulative listing. Barcode
+      100%, part number 100%, model 99.7%, price 100%, availability 100%, colour 97.5%, and
+      the ruleset is a single rule because the shop states the rest outright. Two traps:
+      `data-product-price` is the loyalty price on 51 of 319 (599.99 against 839.99), and
+      `data-product-brand` is `Vaikimisi` — Estonian for "default" — on every card.
+- [x] The category's colour rule looked its value up exactly, which is why the two shops
+      that state a phrase rather than a word got nothing from it: `light blue`,
+      `tumši zils`, 104 products between dateks and euronics. It resolves through `colours`
+      now, which reads a phrase by dropping words off the front — 93 of them come in. The
+      other 11 name two or three colours at once and are refused rather than reduced, since
+      dropping words off the front reads `black, orange` as `orange`. The registry is asked
+      about the whole phrase first: it knows `Melna / Oranža` as one alias, and taking that
+      apart to put it back together turned a known answer into a guess — caught by a test
+      that already existed.
 - [x] A sixth channel, `bm-phones` (bm.market), and the first that reads GraphQL: 937
       phones in 5 requests and 74 seconds, no product page opened. Brand 99.9%, model
       100%, availability 100%, colour 90.1%, barcode 50.8%, part number 45.8% → 58.6%.
