@@ -33,8 +33,10 @@ class DecidedBy(StrEnum):
 class Reason(StrEnum):
     """Why a listing could not be placed.
 
-    Six different problems that route to six different kinds of work. One
-    undifferentiated pile is a pile nobody sorts.
+    Seven different problems that route to seven different kinds of work. One
+    undifferentiated pile is a pile nobody sorts — and a pile that says `ambiguous` when
+    nothing can settle it is worse than undifferentiated, because it sends somebody to
+    choose with nothing to choose from.
     """
 
     # The brand string resolved to nothing at all. There is no drawer to look in and no
@@ -51,6 +53,13 @@ class Reason(StrEnum):
     SIGNALS_UNMATCHED = "signals_unmatched"
     # Several plausible candidates. A human or a judge picks.
     AMBIGUOUS = "ambiguous"
+    # Several candidates that differ in an axis this shop never published. Kept apart from
+    # `ambiguous` because that one promises a choice somebody can make, and here nobody can:
+    # not a person, not the judge. m79's German feed states the model, the memory, the
+    # screen and the refresh rate and never the colour, and the catalogue holds that phone
+    # in three of them. 52 of 58 `ambiguous` rows were this, and the judge was being asked
+    # about every one of them — `variant_choice` refused 30 of 30 and was right each time.
+    AXIS_UNPUBLISHED = "axis_unpublished"
     # One candidate, not strong enough. No fuzzy rung produces this yet.
     LOW_CONFIDENCE = "low_confidence"
 

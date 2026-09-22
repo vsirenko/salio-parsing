@@ -1110,6 +1110,58 @@ def test_two_makers_in_one_title_name_neither(client):
     assert run_on(client, token, offer)["matched"] is False
 
 
+def test_several_candidates_split_on_an_axis_nobody_published(client):
+    """`ambiguous` promises a choice somebody can make. Where the candidates differ in an
+    axis the listing never states, nobody can — not a person and not the judge, which
+    refused 30 of 30 such questions before they were told apart."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_colour_axis(client, token, category["id"])
+
+    for external_id, colour in (("A-1", "black"), ("A-2", "blue")):
+        promote(
+            client,
+            token,
+            offer_from(
+                client,
+                token,
+                source["id"],
+                {
+                    "name": f"Apple Zeta 7 {colour}",
+                    "brand": "Apple",
+                    "model": "Zeta 7",
+                    "attributes": {"color": colour},
+                },
+                external_id=external_id,
+            ),
+        )
+
+    silent = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple Zeta 7", "brand": "Apple", "model": "Zeta 7"},
+        external_id="A-3",
+    )
+    assert run_on(client, token, silent)["reason"] == "axis_unpublished"
+
+    # And the same listing with the axis stated is not in the bucket at all: it says which
+    # of them it is, so the rung that found them can choose.
+    said = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple Zeta 7 blue",
+            "brand": "Apple",
+            "model": "Zeta 7",
+            "attributes": {"color": "blue"},
+        },
+        external_id="A-4",
+    )
+    assert run_on(client, token, said)["matched"] is True
+
+
 def test_a_barcode_we_inferred_yields_to_a_contradiction(client):
     """A bigbox `White Titanium` listing with no barcode became an entry; an rdveikals
     `Natural Titanium` listing matched it on the model while both still read `titanium`,

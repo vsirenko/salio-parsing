@@ -315,7 +315,9 @@ class MatchingService:
                     return outcome
                 if len(agreed) > 1:
                     return await self._queue(
-                        offer, Reason.AMBIGUOUS, self._variants(agreed, "model")
+                        offer,
+                        await self._why_several(agreed, identity),
+                        self._variants(agreed, "model"),
                     )
                 if unverifiable:
                     # The model agreed and there was no axis in common to check it with.
@@ -325,6 +327,37 @@ class MatchingService:
                     )
 
         return await self._queue(offer, *self._why(reading, lookup))
+
+    async def _why_several(self, agreed: list[int], identity: dict[str, Any]) -> Reason:
+        """Whether anybody could choose between these, or the shop never said.
+
+        `ambiguous` promises a choice a person or a judge can make. Where the candidates
+        differ in an axis the listing does not carry, nobody can: m79's German feed states
+        the model, the memory, the screen and the refresh rate and never the colour, and the
+        catalogue holds that phone in three of them. 52 of 58 rows in that bucket were this,
+        and the judge was being asked about every one — `variant_choice` refused 30 of 30
+        and was right each time.
+
+        It is not a weaker `ambiguous`, it is a different kind of waiting: for another shop
+        to carry the same barcode, or for this one to start publishing the axis.
+        """
+        rows = await self.session.execute(
+            select(Attribute.key, func.count(func.distinct(VariantAttribute.value_id)))
+            .join(VariantAttribute, VariantAttribute.attribute_id == Attribute.id)
+            .join(
+                CategoryAttribute,
+                (CategoryAttribute.attribute_id == Attribute.id)
+                & (CategoryAttribute.identity_bearing.is_(True)),
+            )
+            .where(VariantAttribute.variant_id.in_(agreed))
+            .group_by(Attribute.key)
+        )
+        # An axis these candidates are split on and the listing is silent about. If every
+        # axis that separates them is one the listing carries, then it really is a choice.
+        for key, distinct in rows.all():
+            if distinct > 1 and not identity.get(key):
+                return Reason.AXIS_UNPUBLISHED
+        return Reason.AMBIGUOUS
 
     @staticmethod
     def _why(reading: NormalizedOffer, lookup: BrandLookup) -> tuple[Reason, list[dict]]:
@@ -1449,10 +1482,16 @@ class MatchingService:
     async def judge_ambiguous(self, *, limit: int = 50) -> JudgeReport:
         """Put the entries nobody could choose between in front of the judge.
 
-        Only `ambiguous`, and only because the corpus has been asked first and cannot
-        answer. These listings reach the model rung, find several entries that differ in one
-        axis and agree on every other, and carry nothing to tell them apart — almost always
-        a colour the maker invented a name for. Counting what the shops call it settles some
+        Only `ambiguous`, which is now the bucket where a choice is actually possible: the
+        listing carries every axis the candidates are split on and they still all fit. Where
+        the shop never published the axis the answer turns on, the row is
+        `axis_unpublished` and this does not ask — the judge refused 30 of 30 such questions
+        before they were told apart, and each refusal was right and paid for.
+
+        And only because the corpus has been asked first and cannot answer. These listings
+        reach the model rung, find several entries that differ in one axis and agree on
+        every other, and what tells them apart is almost always a colour the maker invented
+        a name for. Counting what the shops call it settles some
         of those names and proves the rest cannot be settled that way at all: `Canyon` is
         pink on a Google and orange on an Oppo, both by two shops, so no global registry row
         can hold it. What is left is to ask.
@@ -1538,7 +1577,15 @@ class MatchingService:
             await self.session.scalars(
                 select(MatchQueue)
                 .where(
-                    MatchQueue.reason.in_((Reason.AMBIGUOUS.value, Reason.SIGNALS_UNMATCHED.value))
+                    MatchQueue.reason.in_(
+                        (
+                            Reason.AMBIGUOUS.value,
+                            Reason.SIGNALS_UNMATCHED.value,
+                            # The bucket this question was written for: the axis the
+                            # candidates are split on is the one nobody published.
+                            Reason.AXIS_UNPUBLISHED.value,
+                        )
+                    )
                 )
                 .order_by(MatchQueue.offer_id)
                 .limit(limit)

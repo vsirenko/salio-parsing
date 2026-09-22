@@ -1198,7 +1198,7 @@ class MatchQueue(Base):
     __table_args__ = (
         CheckConstraint(
             "reason in ('brand_unknown', 'brand_ambiguous', 'no_signals',"
-            " 'signals_unmatched', 'ambiguous', 'low_confidence')",
+            " 'signals_unmatched', 'ambiguous', 'low_confidence', 'axis_unpublished')",
             name="reason_known",
         ),
         Index("ix_match_queue_reason", "reason"),

@@ -495,6 +495,22 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **The colour registry exists only in this database.** 235 rows, of which 31 were
       entered today, and `cad9caa29396` creates the table without seeding it. A fresh
       database starts with no colours at all and every reading loses its colour.
+- [x] **`ambiguous` was two buckets wearing one name.** It promises a choice a person or a
+      judge can make; for 51 of its 58 rows nobody could, because the candidates differ in
+      an axis the shop never publishes — m79's German feed states the model, the memory, the
+      screen and the refresh rate and never the colour. `axis_unpublished` is the new name
+      for that, and it matters beyond tidiness: `judge_ambiguous` was asking about all 58
+      and `variant_choice` refused 30 of 30, correctly and at cost. It now asks about 7.
+      `judge_colours` takes the new bucket instead, which is its question.
+- [ ] **`axis_unpublished` is a work queue, not a graveyard.** Of the 18 rows that are not
+      the German feed, about half close with work already measured: `szary` is Polish for
+      grey and was missed when the other eight Polish words went in; `Pantone Shaded Spruce`
+      is the Motorola palette; `Starlight` and `Polar` are Apple's; `TIT/SIL` is m79's own
+      shorthand for Titanium Silver. The other half state no colour anywhere. The 31 German
+      ones wait for another shop to carry the same barcode — eight of them already have one.
+- [ ] **`PANTONE Evening Blue (Violet)` loses the answer the shop wrote in brackets.** The
+      colour rule strips bracketed groups before it looks, because a shop's parenthesis is
+      usually a code. Here it is the translation. Worth measuring how many.
 - [ ] **Motorola and Honor still have palettes waiting.**
 - [ ] **The word method is a script that was run by hand and ought to be a tool.** It is the
       answer to the registry gap this project has been carrying since the first shop, and it

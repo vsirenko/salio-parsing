@@ -383,6 +383,9 @@ def two_colours(client, token):
     _, source, category, _ = a_shop_we_can_build_from(client, token)
     a_colour_axis(client, token, category["id"])
 
+    # Both colours of one phone carry the maker's part number, which is what makes this a
+    # choice rather than an absence: the part number names them both, so the rung that
+    # fires has two candidates in hand and the listing is not short of anything.
     for external_id, colour in (("C-1", "black"), ("C-2", "blue")):
         promote(
             client,
@@ -395,6 +398,7 @@ def two_colours(client, token):
                     "name": f"Apple Pixel 11 {colour}",
                     "brand": "Apple",
                     "model": "Pixel 11",
+                    "mpn": "MJXP4HX/A",
                     "attributes": {"color": colour},
                 },
                 external_id=external_id,
@@ -406,7 +410,12 @@ def two_colours(client, token):
         client,
         token,
         source["id"],
-        {"name": "Apple Pixel 11 Canyon", "brand": "Apple", "model": "Pixel 11"},
+        {
+            "name": "Apple Pixel 11 Canyon",
+            "brand": "Apple",
+            "model": "Pixel 11",
+            "mpn": "MJXP4HX/A",
+        },
         external_id="C-3",
     )
     assert run_on(client, token, unsaid)["reason"] == "ambiguous"
@@ -543,7 +552,9 @@ def a_colourless_listing(client, token):
         {"name": "Apple Pixel 11 Canyon", "brand": "Apple", "model": "Pixel 11"},
         external_id="C-3",
     )
-    assert run_on(client, token, unsaid)["reason"] == "ambiguous"
+    # Not `ambiguous`: the entries differ in a colour this listing never states, so there
+    # is nothing for anybody to choose with until one is bought.
+    assert run_on(client, token, unsaid)["reason"] == "axis_unpublished"
     return unsaid, entries
 
 

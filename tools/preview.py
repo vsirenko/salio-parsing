@@ -31,7 +31,14 @@ OUT = Path(__file__).resolve().parent.parent / "var" / "preview"
 # The order `MatchingService.promote_queue` checks these in, mirrored here so a listing is
 # filed under the first thing that stops it rather than under all of them. Keep it in step
 # with `_why_not_promotable` and `_variant_from`; the page says which it came from.
-LADDER = ("no_barcode", "source_not_trusted", "brand_unresolved", "category_unknown", "no_model")
+LADDER = (
+    "axis_unpublished",
+    "no_barcode",
+    "source_not_trusted",
+    "brand_unresolved",
+    "category_unknown",
+    "no_model",
+)
 
 WHY = {
     "no_barcode": (
@@ -53,6 +60,12 @@ WHY = {
         "Nothing is missing. The last promotion pass stopped before these — it takes a"
         " bounded number of rows — so another pass turns each of them into a catalogue"
         " entry. Not a gap: work that has not been run yet."
+    ),
+    "axis_unpublished": (
+        "The catalogue holds this phone and the shop never said which colour it is. Several"
+        " entries fit and nothing can tell them apart — not a person and not the judge,"
+        " which refused thirty such questions of thirty. It waits for another shop to carry"
+        " the same barcode, or for this one to start publishing the axis."
     ),
     "not_read": "No reading of this listing was stored, so there is nothing to judge it by.",
 }
@@ -174,6 +187,11 @@ def _refusal(row: dict, brands: dict[str, set[int]]) -> str:
     """Why this listing cannot start a catalogue entry, by the promoter's own ladder."""
     if row["title"] is None and row["gtin"] is None and row["model"] is None:
         return "not_read"
+    # Ahead of the ladder, because it is a better answer than any rung of it: the catalogue
+    # already holds this phone and the only thing missing is which of its colours this is.
+    # `no_barcode` is true of these and tells nobody anything.
+    if row["reason"] == "axis_unpublished":
+        return "axis_unpublished"
     if not row["gtin"]:
         return "no_barcode"
     if row["trust"] != "high":
