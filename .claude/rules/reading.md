@@ -71,6 +71,13 @@
 - A channel returns the **shop's own shapes**: its field names, its attribute labels, its
   codes as it listed them. Turning them into ours is a reading decision, done against stored
   bytes and re-runnable.
+- **`schema.org/InStock` means the shop will sell the thing, not that it has it.** Four
+  shops in a row now: dateks says it for all 745 while its own words call 524 to order,
+  bm.market for 936 of 937 against an `availability_type` that says 934 are to order,
+  euronics for all 319 including the 58 its listing marks `On order`, tet for all 40 sampled
+  including the 3 it flags `Drīzumā`. Treat the field as decoration and find the shop's own
+  word — it is on the listing card in three of those four. A channel that reads the markup
+  reports a warehouse nobody has.
 - In particular a channel does not choose which of a shop's numbers is a barcode.
   `normalization/barcodes.py` does, once, for every shop: check digits and GS1's reserved
   prefixes are a standard, not something a shop invented.

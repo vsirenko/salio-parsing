@@ -245,6 +245,16 @@ and the questions that have to be answered with real data first, are written dow
       the disagreements that were silent are visible. `variant_merges` exists and nothing
       produces a row in it: two entries that reach the same identity are the same thing, and
       saying so is the point of the table.
+- [x] A tenth channel, `tet-phones` (tet.lv), the first operator and the one that states
+      most on its listing: the price, the stock flag and the manufacturer's code on 333 of
+      333 cards, so six requests are a complete cheap pass. Barcode 98.1%, model 100% (126
+      distinct), price 100%, availability 100%; it places 319 of 319. The contract-price
+      worry that kept the operators waiting does not apply to it — its shop sells outright
+      at a full price and the monthly figure beside it is a payment plan, the same one
+      euronics shows.
+- [x] `schema.org/InStock` means the shop will sell the thing rather than that it has it,
+      on four shops in a row. Written into `.claude/rules/reading.md` rather than into a
+      fifth module docstring.
 - [x] A ninth channel, `discover-phones` (discover.lv), the first that reads XML and the
       cheapest here: `/catalog.xml` is the whole shop in one request, 560 of its 2768
       products are phones, and no product page is opened at all. Model 100% (135 distinct),

@@ -193,10 +193,30 @@ lifecycle changes.
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
 | `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
+| `tet-phones` | tet.lv | retail | markup | 319 | not yet run |
 
 `rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
 module says why its discovery walks the listing rather than the sitemap, and why the brand
 comes out of an analytics block instead of the microdata beside it.
+
+**`tet-phones`** states more on its listing than any other channel here: every card
+carries the price, the stock flag **and the manufacturer's code**, on 333 of 333. Six
+requests of sixty are therefore a complete cheap pass, and the product page adds the one
+thing the card has not got — `#i-product-data` states the barcode, on 98.1% of the 319
+collected.
+
+Three things its module records:
+
+- **Page seven is not empty and not a repeat of page six.** It answers with sixty products
+  the walk has already seen — the listing wraps round rather than ending — so the walk stops
+  on a page that brings nothing new.
+- **Fourteen refurbished phones sit in the same category and are left out.** `Apple iPhone
+  12 64GB Black Pre-owned C grade [Refurbished]` costs 198 euro, and with nothing here
+  distinguishing condition it would attach to the entry for a new one and show as its
+  cheapest price. Same decision as cec's refurbished section.
+- **Its JSON-LD says `InStock` for everything**, including what the shop itself flags
+  `Drīzumā`. That is the fourth shop in a row, and it is now written down in
+  `.claude/rules/reading.md` rather than in a fifth module docstring.
 
 **`discover-phones`** is the cheapest channel here: `/catalog.xml` is the whole shop in one
 request — 2768 products, 560 of them phones — with no key and no header. There is no listing

@@ -14,6 +14,7 @@ from app.features.offers.normalization.sources import (
     ksenukai,
     onea,
     rdveikals,
+    tet,
 )
 
 __all__ = (
@@ -26,4 +27,5 @@ __all__ = (
     "ksenukai",
     "onea",
     "rdveikals",
+    "tet",
 )

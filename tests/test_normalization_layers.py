@@ -328,6 +328,7 @@ FINGERPRINTS = {
     "phones-5": "431fc8bf0c77",
     "rdveikals-4": "f5078e0afc82",
     "samsung-phones-0": "pending",
+    "tet-1": "e22213de8034",
 }
 
 
