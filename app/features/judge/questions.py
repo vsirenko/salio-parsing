@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from app.core.config import settings
 
 BRAND_CHOICE = "brand_choice"
+VARIANT_CHOICE = "variant_choice"
 
 # A Choice has to be able to answer "neither". Without a way out the model can only pick
 # one of the options it was handed, and it will do that as confidently as any other
@@ -23,6 +24,17 @@ BRAND_INSTRUCTIONS = (
 NO_MATCH_DESCRIPTION = (
     "None of the companies above makes this kind of product, or the listing does not say"
     " enough to tell them apart."
+)
+
+VARIANT_INSTRUCTIONS = (
+    "A shop has listed a product that this catalogue already holds in several versions,"
+    " and they differ only in the ways listed below — usually the colour the maker gave"
+    " it. Decide which version the listing is. The maker's own name for a colour is the"
+    " thing to judge on: it is in the listing's title and it is not a plain colour word."
+)
+
+VARIANT_NO_MATCH_DESCRIPTION = (
+    "The listing is none of the versions above, or its title does not say which one it is."
 )
 
 
@@ -49,6 +61,27 @@ class Candidate:
         return f"{self.canonical_name}, which this catalogue lists under: " + ", ".join(
             self.categories
         )
+
+
+@dataclass(frozen=True)
+class Option:
+    """One catalogue entry a listing might be, described by what tells it from the others.
+
+    The description is the axes it holds — `colour: black`, `capacity: 256 GB` — and
+    nothing else. Those are what the entries differ in, and they are what the catalogue
+    actually knows; a title would describe every option the same way and decide nothing.
+    """
+
+    variant_id: int
+    slug: str
+    axes: tuple[tuple[str, str], ...]
+
+    def describe(self) -> str | None:
+        if not self.axes:
+            # An entry that records none of the axes cannot be told from its neighbours,
+            # so there is nothing true to say and the answer should come back unconfident.
+            return None
+        return ", ".join(f"{name}: {value}" for name, value in self.axes)
 
 
 @dataclass(frozen=True)
@@ -116,3 +149,35 @@ def _identity(kind: str, state: dict, criteria: dict) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def variant_choice(
+    *,
+    title: str | None,
+    brand: str | None,
+    model: str | None,
+    options: list[Option],
+) -> Question:
+    """Which of these catalogue entries the listing is.
+
+    The state names the maker separately from the title on purpose: a marketing colour
+    belongs to a maker — `Canyon` is pink on a Google and orange on an Oppo, both proved by
+    two shops — so the brand is part of the question and not decoration.
+    """
+    state = {
+        "listing_title": title,
+        "brand": brand,
+        "model": model,
+    }
+    ordered = sorted(options, key=lambda option: option.slug)
+    criteria: dict[str, str | None] = {option.slug: option.describe() for option in ordered}
+    criteria[NO_MATCH] = VARIANT_NO_MATCH_DESCRIPTION
+
+    return Question(
+        kind=VARIANT_CHOICE,
+        state=state,
+        instructions=VARIANT_INSTRUCTIONS,
+        criteria=criteria,
+        by_option={option.slug: option.variant_id for option in ordered},
+        hash=_identity(VARIANT_CHOICE, state, criteria),
+    )

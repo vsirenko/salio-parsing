@@ -343,3 +343,134 @@ def test_judging_is_off_without_a_key(client):
 def test_judging_requires_an_admin_token(client):
     assert client.post("/api/admin/matching/judge").status_code == 401
     assert client.get("/api/admin/judge/verdicts").status_code == 401
+
+
+# --- the second question: which entry a listing is ---
+
+
+VARIANT_ANSWER = "variant_choice"
+
+
+def variant_reply(choice: str, confidence: float) -> dict:
+    return {
+        "model": "jev-1.13.0",
+        "usage": {"input_tokens": 140, "output_tokens": 8},
+        "answers": {
+            VARIANT_ANSWER: {
+                "type": "choice",
+                "choice": choice,
+                "confidence": confidence,
+                "probabilities": {choice: confidence},
+            }
+        },
+    }
+
+
+def two_colours(client, token):
+    """One phone the catalogue holds in two colours, and a listing that says neither.
+
+    `Canyon` is the maker's name for one of them. No registry row can hold it: the same
+    word is pink on a Google and orange on an Oppo, both proved by two shops.
+    """
+    from tests.test_matching import (
+        a_colour_axis,
+        a_shop_we_can_build_from,
+        offer_from,
+        promote,
+        run_on,
+    )
+
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_colour_axis(client, token, category["id"])
+
+    for external_id, colour in (("C-1", "black"), ("C-2", "blue")):
+        promote(
+            client,
+            token,
+            offer_from(
+                client,
+                token,
+                source["id"],
+                {
+                    "name": f"Apple Pixel 11 {colour}",
+                    "brand": "Apple",
+                    "model": "Pixel 11",
+                    "attributes": {"color": colour},
+                },
+                external_id=external_id,
+            ),
+        )
+
+    # The same phone under a name for the colour that nothing resolves.
+    unsaid = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple Pixel 11 Canyon", "brand": "Apple", "model": "Pixel 11"},
+        external_id="C-3",
+    )
+    assert run_on(client, token, unsaid)["reason"] == "ambiguous"
+    return unsaid
+
+
+def test_the_judge_chooses_between_entries_that_differ_in_one_axis(judged):
+    client, stub = judged
+    token = admin_token(client)
+    offer = two_colours(client, token)
+
+    slug = client.get("/api/admin/variants", headers=auth(token)).json()["items"][0]["slug"]
+    stub.answers(variant_reply(slug, 0.93))
+
+    report = client.post("/api/admin/matching/judge/ambiguous", headers=auth(token)).json()
+    assert report["considered"] == 1
+    assert report["asked"] == 1
+    assert report["accepted"] == 1
+    assert report["placed"] == 1
+
+    # The rung that found the candidates is what the link records; the judge is who chose.
+    matches = client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json()
+    assert matches[0]["method"] == "brand_model"
+    assert matches[0]["decided_by"] == "judge"
+
+
+def test_the_options_are_described_by_the_axes_that_tell_them_apart(judged):
+    """A title would describe every option the same way and decide nothing."""
+    client, stub = judged
+    token = admin_token(client)
+    two_colours(client, token)
+
+    slug = client.get("/api/admin/variants", headers=auth(token)).json()["items"][0]["slug"]
+    stub.answers(variant_reply(slug, 0.93))
+    client.post("/api/admin/matching/judge/ambiguous", headers=auth(token))
+
+    criteria = stub.asked[0]["questions"][VARIANT_ANSWER]["criteria"]
+    assert NO_MATCH in criteria
+    described = [value for key, value in criteria.items() if key != NO_MATCH]
+    assert all("Colour" in (value or "") for value in described)
+    # The maker is asked about separately: a marketing colour belongs to one.
+    assert stub.asked[0]["state"]["brand"] == "Apple"
+
+
+def test_an_unconfident_answer_places_nothing(judged):
+    client, stub = judged
+    token = admin_token(client)
+    offer = two_colours(client, token)
+
+    slug = client.get("/api/admin/variants", headers=auth(token)).json()["items"][0]["slug"]
+    stub.answers(variant_reply(slug, 0.42))
+
+    report = client.post("/api/admin/matching/judge/ambiguous", headers=auth(token)).json()
+    assert report["unconfident"] == 1
+    assert report["placed"] == 0
+    assert client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json() == []
+
+
+def test_none_of_these_places_nothing_either(judged):
+    client, stub = judged
+    token = admin_token(client)
+    two_colours(client, token)
+    stub.answers(variant_reply(NO_MATCH, 0.97))
+
+    report = client.post("/api/admin/matching/judge/ambiguous", headers=auth(token)).json()
+    assert report["no_match"] == 1
+    assert report["placed"] == 0

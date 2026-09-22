@@ -3,8 +3,8 @@
 Asking an outside model a bounded question, and remembering what it said.
 
 Backed by [TypeSafe](https://docs.typesafe.ai), whose System One models return a typed
-answer and a probability rather than text. The judge here asks one kind of question so far:
-which of several brands a listing means.
+answer and a probability rather than text. The judge here asks two kinds of question: which of several brands a listing means, and
+which of several catalogue entries it is.
 
 ## Endpoints
 
@@ -13,8 +13,9 @@ which of several brands a listing means.
 | `GET /api/admin/judge/verdicts` | every answer bought, with what it was asked, filterable by `kind` |
 
 Running the judge is deliberately **not** here. For brands that is
-`POST /api/admin/matching/judge`, because deciding a question is worth asking belongs to
-whoever owns the work — this feature only answers and remembers.
+`POST /api/admin/matching/judge` and for entries `POST /api/admin/matching/judge/ambiguous`,
+because deciding a question is worth asking belongs to whoever owns the work — this feature
+only answers and remembers.
 
 ## How it works
 
@@ -23,6 +24,25 @@ resolves to, plus `none_of_these`. It exists because an alias cannot settle this
 will: `Delta` belongs to the tap company and the tool company equally legitimately, so which
 one a listing means is decided per listing, not once for the string. That is the one gap in
 brand resolution that more data does not close.
+
+**The second question: `variant_choice`.** A `Choice` over the catalogue entries a listing
+could be, plus `none_of_these`. It exists because the corpus was asked first and cannot
+answer: a marketing colour name belongs to a maker, and `Canyon` is pink on a Google and
+orange on an Oppo — both proved by two shops each — so no row in a registry keyed on the
+word alone can hold it. Counting settles some names (`Obsidian` black on 97 of 97 across
+seven shops, `Midnight` black on 61 of 70 across eight) and proves the rest unsettleable
+that way.
+
+**Its options are described by the axes that tell them apart** — `Colour: black` — and by
+nothing else. The model string is identical on all of them, which is why the listing was
+ambiguous, so any other description would describe every option the same way and decide
+nothing. The brand is named in the state separately from the title, because the word being
+judged belongs to a maker.
+
+**A verdict here places the listing**, unlike a brand's, which goes into the store for the
+ladder to resolve on its own. No rung consults this one: the model rung found the candidates
+and the judge chose among them, so that is what the link records — `method` the rung that
+fired, `decided_by` the judge.
 
 **The options are described by what the catalogue already holds under each brand** — the
 categories its variants sit in, and nothing else. That is the only true thing available

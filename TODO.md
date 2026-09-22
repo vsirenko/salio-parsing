@@ -311,6 +311,18 @@ and the questions that have to be answered with real data first, are written dow
       added beside `CAT`. All four resolved to nothing. Self-aliases added, plus `HTC` and
       `Umidigi`, which were missing outright. `brand_unknown` in the queue: 12 → 0, corpus
       98.4% → 98.5%.
+- [x] **The judge was asked something, for the first time.** Not the question it already
+      knew — a brand string meaning two companies does not occur here, no alias in the
+      registry leads to two brands and the queue has never held a `brand_ambiguous` row. And
+      not the brand disagreement either: measured across 6321 listings, a field and a title
+      naming different known makers happens **twice** (`HMD 2660 FLIP` filed under Nokia,
+      `Umidigi Bison X10` under CAT), which is not worth touching the ladder for.
+      What it was asked is `variant_choice`: which of several entries differing in one axis
+      a listing is. Five real questions, 3103 input tokens. It placed nothing and every
+      refusal was right — `Awesome Charcoal` at 0.48 where the corpus is split black 5 /
+      grey 4, and a three-tone UleFone where the catalogue genuinely holds no such entry.
+      The third answer, `titanium` at 0.81, fell below the 0.85 threshold and was a
+      refurbished phone that should not have been in the question at all.
 - [ ] **A title that names a different maker than the field is a question for the judge.**
       discover.lv files `Umidigi Bison X10` under `CAT`, its own section name, and now that
       `CAT` resolves the listing goes there confidently — the title fallback deliberately
@@ -360,6 +372,14 @@ and the questions that have to be answered with real data first, are written dow
       merged. 189 found, 142 renamed, 47 merged; then 14 more after tet was fixed. Junk
       entries carrying memory in their name: 251 → 62, and some of those 62 are real names
       like `Armor Mini 4`.
+- [ ] **Six refurbished phones stand on entries for new ones**, showing their lower price
+      as the cheapest. Three were tet's, whose filter knew `RENEWD`, `REFURBISHED` and
+      `PRE-OWNED` and not the Latvian `[Mazlietots]` — widened, and the ones already
+      collected are still there. The other three are at bigbox (`Renew Grade A+`), ksenukai
+      and onea, whose channels have no such filter. Filtering in each channel is a
+      workaround done three times now and missed once; the real answer is `offers.condition`,
+      which exists, is `new` on all 6321 rows, and is read by neither matching nor the
+      storefront.
 - [ ] **145 part numbers still sit on more than one variant.** A barcode does not accuse
       them and never will, so this wants a different kind of evidence — the causes are a
       model string that differs between shops (`Find X9 Ultra` against bm's whole spec sheet

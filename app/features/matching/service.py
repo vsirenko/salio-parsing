@@ -47,7 +47,12 @@ from app.features.catalog.schemas import (
     VariantUpdate,
 )
 from app.features.catalog.service import CatalogService
-from app.features.judge.schemas import BrandRequest, BrandVerdict, JudgeReport
+from app.features.judge.schemas import (
+    BrandRequest,
+    BrandVerdict,
+    JudgeReport,
+    VariantRequest,
+)
 from app.features.judge.service import JudgeService
 from app.features.matching.schemas import (
     DecidedBy,
@@ -1260,6 +1265,75 @@ class MatchingService:
                 continue
             outcome = await self._decide(await self._offer(offer_id), reading)
             placed += outcome.matched
+
+        report = report.model_copy(update={"placed": placed})
+        audit.record_changes(**report.model_dump(mode="json"))
+        return report
+
+    async def judge_ambiguous(self, *, limit: int = 50) -> JudgeReport:
+        """Put the entries nobody could choose between in front of the judge.
+
+        Only `ambiguous`, and only because the corpus has been asked first and cannot
+        answer. These listings reach the model rung, find several entries that differ in one
+        axis and agree on every other, and carry nothing to tell them apart — almost always
+        a colour the maker invented a name for. Counting what the shops call it settles some
+        of those names and proves the rest cannot be settled that way at all: `Canyon` is
+        pink on a Google and orange on an Oppo, both by two shops, so no global registry row
+        can hold it. What is left is to ask.
+
+        A verdict places the listing rather than being re-run like a brand's, because no
+        rung consults it: the model rung found the candidates and the judge chose among
+        them, so that is exactly what the link records — `method` the rung that fired,
+        `decided_by` the judge.
+        """
+        rows = (
+            await self.session.scalars(
+                select(MatchQueue)
+                .where(MatchQueue.reason == Reason.AMBIGUOUS.value)
+                .order_by(MatchQueue.offer_id)
+                .limit(limit)
+            )
+        ).all()
+
+        requests: list[VariantRequest] = []
+        for row in rows:
+            reading = await self._reading(row.offer_id)
+            if reading is None:
+                continue
+            candidates = [
+                entry["variant_id"]
+                for entry in row.candidates
+                if entry.get("variant_id") is not None
+            ]
+            requests.append(
+                VariantRequest(
+                    key=row.offer_id,
+                    title=reading.title,
+                    brand=reading.brand_raw,
+                    model=reading.model,
+                    variant_ids=candidates,
+                )
+            )
+
+        verdicts, report = await self.judge.decide_variants(requests)
+
+        placed = 0
+        for offer_id, verdict in verdicts.items():
+            if not verdict.accepted or verdict.variant_id is None:
+                continue
+            offer = await self._offer(offer_id)
+            await self._link(
+                offer,
+                verdict.variant_id,
+                Method.BRAND_MODEL,
+                {
+                    "signal": "model",
+                    "judged": verdict.choice,
+                    "confidence": str(verdict.confidence),
+                },
+                decided_by=DecidedBy.JUDGE,
+            )
+            placed += 1
 
         report = report.model_copy(update={"placed": placed})
         audit.record_changes(**report.model_dump(mode="json"))

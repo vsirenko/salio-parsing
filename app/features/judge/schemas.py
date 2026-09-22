@@ -38,6 +38,30 @@ class BrandVerdict(NamedTuple):
     no_match: bool
 
 
+class VariantRequest(NamedTuple):
+    """One listing to choose a catalogue entry for.
+
+    The brand is named separately from the title because a marketing colour belongs to a
+    maker: `Canyon` is pink on a Google and orange on an Oppo, both proved by two shops.
+    """
+
+    key: int
+    title: str | None
+    brand: str | None
+    model: str | None
+    variant_ids: list[int]
+
+
+class VariantVerdict(NamedTuple):
+    """An answer about which entry a listing is, and whether policy allows acting on it."""
+
+    variant_id: int | None
+    choice: str
+    confidence: Decimal
+    accepted: bool
+    no_match: bool
+
+
 class VerdictRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

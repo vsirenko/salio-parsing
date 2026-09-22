@@ -9,6 +9,7 @@ through the matcher.
 import asyncio
 from collections.abc import Callable
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -23,11 +24,27 @@ from typesafe_sdk import (
 
 from app.core.config import settings
 from app.core.exceptions import ValidationError
-from app.db.models import Brand, Category, JudgeVerdict, Variant
+from app.db.models import (
+    Attribute,
+    AttributeValue,
+    Brand,
+    Category,
+    CategoryAttribute,
+    JudgeVerdict,
+    Variant,
+    VariantAttribute,
+)
 from app.db.query import paginated
 from app.features.judge import questions
-from app.features.judge.questions import Candidate, Question
-from app.features.judge.schemas import BrandRequest, BrandVerdict, JudgeReport, VerdictRead
+from app.features.judge.questions import Candidate, Option, Question
+from app.features.judge.schemas import (
+    BrandRequest,
+    BrandVerdict,
+    JudgeReport,
+    VariantRequest,
+    VariantVerdict,
+    VerdictRead,
+)
 from app.schemas.pagination import Pagination
 
 ClientFactory = Callable[[], AsyncTypeSafeClient]
@@ -100,7 +117,55 @@ class JudgeService:
                 cached += 1
                 verdicts[request.key] = self._read(stored, question)
 
-        asked, failed, error, usage = await self._ask_all(unanswered, verdicts)
+        asked, failed, error, usage = await self._ask_all(unanswered, verdicts, self._read)
+        return verdicts, JudgeReport(
+            considered=len(requests),
+            asked=asked,
+            cached=cached,
+            accepted=sum(1 for v in verdicts.values() if v.accepted),
+            unconfident=sum(
+                1 for v in verdicts.values() if not v.accepted and v.choice != questions.NO_MATCH
+            ),
+            no_match=sum(1 for v in verdicts.values() if v.choice == questions.NO_MATCH),
+            failed=failed,
+            placed=0,
+            input_tokens=usage[0],
+            output_tokens=usage[1],
+            error=error,
+        )
+
+    async def decide_variants(
+        self, requests: list[VariantRequest]
+    ) -> tuple[dict[int, VariantVerdict], JudgeReport]:
+        """Which catalogue entry each of these listings is.
+
+        The second question this asks, and the one the corpus could not answer on its own.
+        A marketing colour name belongs to a maker — `Canyon` is pink on a Google and orange
+        on an Oppo, both proved by two shops — so no global registry row can hold it, and
+        there is nothing left to count. What is left is to ask.
+        """
+        if not settings.judge_enabled:
+            raise ValidationError(
+                "No TypeSafe API key is configured, so nothing can be judged."
+                " Set TYPESAFE_API_KEY.",
+                code="judge_disabled",
+            )
+
+        built = [(request, await self._variant_question(request)) for request in requests]
+        pending = [(request, q) for request, q in built if q is not None]
+
+        verdicts: dict[int, VariantVerdict] = {}
+        unanswered: list[tuple[VariantRequest, Question]] = []
+        cached = 0
+        for request, question in pending:
+            stored = await self._stored(question.hash)
+            if stored is None:
+                unanswered.append((request, question))
+            else:
+                cached += 1
+                verdicts[request.key] = self._read_variant(stored, question)
+
+        asked, failed, error, usage = await self._ask_all(unanswered, verdicts, self._read_variant)
         return verdicts, JudgeReport(
             considered=len(requests),
             asked=asked,
@@ -119,8 +184,9 @@ class JudgeService:
 
     async def _ask_all(
         self,
-        unanswered: list[tuple[BrandRequest, Question]],
-        verdicts: dict[int, BrandVerdict],
+        unanswered: list[tuple[Any, Question]],
+        verdicts: dict[int, Any],
+        read: Callable[[JudgeVerdict, Question], Any],
     ) -> tuple[int, int, str | None, tuple[int, int]]:
         """Send what is left, then write what came back.
 
@@ -180,7 +246,7 @@ class JudgeService:
         for request, question in unanswered:
             stored = answered.get(question.hash)
             if stored is not None:
-                verdicts[request.key] = self._read(stored, question)
+                verdicts[request.key] = read(stored, question)
 
         return asked, failed, error, (tokens_in, tokens_out)
 
@@ -277,6 +343,74 @@ class JudgeService:
             candidates=candidates,
         )
 
+    @staticmethod
+    def _read_variant(stored: JudgeVerdict, question: Question) -> VariantVerdict:
+        variant_id = question.by_option.get(stored.choice)
+        confident = float(stored.confidence) >= settings.judge_min_confidence
+        accepted = variant_id is not None and confident
+        return VariantVerdict(
+            variant_id=variant_id if accepted else None,
+            choice=stored.choice,
+            confidence=stored.confidence,
+            accepted=accepted,
+            no_match=stored.choice == questions.NO_MATCH,
+        )
+
+    async def _variant_question(self, request: VariantRequest) -> Question | None:
+        """None when there is nothing to choose between."""
+        if len(request.variant_ids) < 2:
+            return None
+        options = await self._options(request.variant_ids)
+        if len(options) < 2:
+            return None
+        return questions.variant_choice(
+            title=request.title,
+            brand=request.brand,
+            model=request.model,
+            options=options,
+        )
+
+    async def _options(self, variant_ids: list[int]) -> list[Option]:
+        """Describe each entry by the axes it holds and nothing else.
+
+        The axes are what these entries differ in — the model string is the same on all of
+        them, which is why the listing was ambiguous in the first place — so describing
+        them by anything else would describe them identically and decide nothing.
+        """
+        variants = (
+            await self.session.scalars(select(Variant).where(Variant.id.in_(variant_ids)))
+        ).all()
+        rows = await self.session.execute(
+            select(
+                VariantAttribute.variant_id,
+                Attribute.name,
+                VariantAttribute.value_num,
+                AttributeValue.canonical,
+            )
+            .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+            .outerjoin(AttributeValue, AttributeValue.id == VariantAttribute.value_id)
+            .join(
+                CategoryAttribute,
+                (CategoryAttribute.attribute_id == VariantAttribute.attribute_id)
+                & (CategoryAttribute.identity_bearing.is_(True)),
+            )
+            .where(VariantAttribute.variant_id.in_(variant_ids))
+        )
+        held: dict[int, list[tuple[str, str]]] = {}
+        for variant_id, name, number, canonical in rows.all():
+            value = canonical if canonical is not None else _plain(number)
+            if value:
+                held.setdefault(variant_id, []).append((name, value))
+
+        return [
+            Option(
+                variant_id=variant.id,
+                slug=variant.slug,
+                axes=tuple(sorted(held.get(variant.id, []))),
+            )
+            for variant in variants
+        ]
+
     async def _candidates(self, brand_ids: list[int]) -> list[Candidate]:
         """Describe each brand by what the catalogue already has under it.
 
@@ -306,3 +440,11 @@ class JudgeService:
             )
             for brand in brands
         ]
+
+
+def _plain(number: object) -> str:
+    """A number as a person would write it: `256` rather than `256.000000`."""
+    if number is None:
+        return ""
+    text = f"{number}".rstrip("0").rstrip(".")
+    return text or "0"

@@ -1250,7 +1250,7 @@ class JudgeVerdict(Base):
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
     __table_args__ = (
-        CheckConstraint("kind in ('brand_choice')", name="kind_known"),
+        CheckConstraint("kind in ('brand_choice', 'variant_choice')", name="kind_known"),
         CheckConstraint("confidence between 0 and 1", name="confidence_is_a_fraction"),
         Index("ix_judge_verdicts_kind_created", "kind", "created_at"),
     )

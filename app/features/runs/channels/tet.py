@@ -17,9 +17,11 @@ sampled that the shop itself flags `Drīzumā` — coming soon. That is the four
 a row whose structured data means the shop will sell the thing rather than that it has it,
 after dateks, bm.market and euronics. The flag is what travels.
 
-**Fourteen refurbished phones sit in the same category and are deliberately left out.** They
-are plain about it — `Apple iPhone 12 64GB Black Pre-owned C grade [Refurbished]`, brand
-`APPLE RENEWD` — and their part numbers are the refurbisher's own, so nothing would confuse
+**Refurbished phones sit in the same category and are deliberately left out.** Fourteen say
+so in English — `Apple iPhone 12 64GB Black Pre-owned C grade [Refurbished]`, brand
+`APPLE RENEWD` — and three more say so in Latvian, `[Mazlietots]`, which this channel missed
+at first and which is how a used `Galaxy S24+` at 799 euro came to stand as the cheapest
+price for a new one. Their part numbers are the refurbisher's own, so nothing would confuse
 them by code. By brand and model it would: that iPhone 12 costs 198 euro and would attach to
 the entry for a new one and show as its cheapest price. Nothing in this system distinguishes
 condition yet, which is the same reason cec's refurbished section is not collected either.
@@ -44,9 +46,11 @@ CATEGORY_PATH = "/veikals/telefoni/telefoni-un-aksesuari/viedtalruni.html"
 # Sixty to a page, six pages of them when this was written. The bound is against a listing
 # that stopped paging rather than against a shop that grew.
 MAX_PAGES = 40
-# What the shop calls the condition it does not sell as new. Both are on the card, and
-# either is enough — see the module docstring on why they are left out.
-REFURBISHED = ("RENEWD", "REFURBISHED", "PRE-OWNED")
+# What the shop calls the condition it does not sell as new — in both its languages. The
+# Latvian one was missing when this was written and three used phones went through: a
+# `Galaxy S24+ 512GB` at 799 euro attached to the entry for a new one and stood there as its
+# cheapest price. See the module docstring on why they are left out at all.
+REFURBISHED = ("RENEWD", "REFURBISHED", "PRE-OWNED", "MAZLIETOT")
 # The shop's flag for a product it has not got yet. Its absence is the availability: 325 of
 # 333 carry nothing at all.
 SOON = "Drīzumā"

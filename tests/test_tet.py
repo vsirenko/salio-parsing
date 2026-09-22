@@ -115,6 +115,15 @@ def test_a_refurbished_phone_is_left_out(event_loop):
     assert "PRE-OWNED" not in names
 
 
+def test_the_shop_says_it_in_two_languages(event_loop):
+    """The Latvian word was missing at first and three used phones went through: a
+    `Galaxy S24+ 512GB` at 799 euro stood as the cheapest price for a new one."""
+    from app.features.runs.channels.tet import _is_refurbished
+
+    assert _is_refurbished("Samsung Galaxy S24+ 12+512GB Amber Yellow [Mazlietots]", "SAMSUNG")
+    assert not _is_refurbished("Apple iPhone 18 Pro 256GB Burgundy", "APPLE")
+
+
 def test_the_stock_flag_is_the_shop_s_own_and_its_absence_is_the_answer(event_loop):
     listings = discover(event_loop)
     flags = {x.card["availability"] for x in listings}

@@ -172,6 +172,20 @@ async def rebuild_stale(
 
 
 @router.post(
+    "/judge/ambiguous",
+    response_model=JudgeReport,
+    summary="Ask the judge which entry a listing is",
+)
+async def judge_ambiguous(
+    service: MatchingServiceDep,
+    limit: Annotated[int, Query(ge=1, le=200, description="How many to ask about")] = 50,
+) -> JudgeReport:
+    """Only `ambiguous`, and only after the corpus has been asked and could not answer: a
+    marketing colour belongs to a maker, and no global registry row can hold it."""
+    return await service.judge_ambiguous(limit=limit)
+
+
+@router.post(
     "/judge",
     response_model=JudgeReport,
     summary="Ask the judge about the brand choices",
