@@ -50,11 +50,20 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         "phones-color",
         "phones-storage",
         "ksenukai-barcode",
+        # Within a layer the registry orders by id, not by where a rule was declared.
+        "ksenukai-color-from-title",
         "ksenukai-model",
         "ksenukai-article-is-not-a-part-number",
     ]
     # General to specific: the category before the shop, canonicalisation last.
-    assert [rule.layer for rule in rules] == [CATEGORY, CATEGORY, SOURCE, SOURCE, FINISH]
+    assert [rule.layer for rule in rules] == [
+        CATEGORY,
+        CATEGORY,
+        SOURCE,
+        SOURCE,
+        SOURCE,
+        FINISH,
+    ]
 
 
 def test_the_layers_run_general_to_specific():
@@ -90,11 +99,11 @@ def test_a_rule_can_be_declared_and_not_written():
 def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
-    assert version_for(KSENUKAI) == "generic-1+ksenukai-1"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-4+ksenukai-1"
+    assert version_for(KSENUKAI) == "generic-1+ksenukai-2"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-4+ksenukai-2"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-4+ksenukai-1"
+        == "generic-1+phones-4+ksenukai-2"
     )
 
 
@@ -309,7 +318,7 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 FINGERPRINTS = {
     "phones-4": "e6b091ef5728",
     "bigbox-2": "5498c9d00fab",
-    "ksenukai-1": "e46bf1d3782f",
+    "ksenukai-2": "a3b805d59019",
     "rdveikals-4": "f5078e0afc82",
     "apple-phones-1": "12a9fce3575e",
     # Nothing but declared rules so far, so there is no code to fingerprint yet.

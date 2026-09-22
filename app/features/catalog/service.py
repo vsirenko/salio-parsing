@@ -368,28 +368,36 @@ class CatalogService:
             identity_values={key: value.raw for key, value in values.items()},
             expected_keys={axis.key for axis in axes},
         )
-        variant.identity_key = key
+        # Asked before it is written, not discovered afterwards. A failed flush leaves the
+        # session needing a rollback, and a rollback here empties the caller's whole
+        # transaction — a pass that meant to skip one listing would lose every listing
+        # before it, and the answer to this conflict is itself a query the broken session
+        # can no longer serve.
+        taken = (
+            None
+            if key is None
+            else await self.session.scalar(
+                select(Variant.id).where(Variant.identity_key == key, Variant.id != variant.id)
+            )
+        )
+        if taken is not None:
+            raise ConflictError(
+                f"Variant {taken} already has this identity: the two describe the same"
+                " thing, and one should be merged into the other",
+                code="identity_taken",
+                details={"variant_id": taken},
+            )
 
+        variant.identity_key = key
         try:
             await self.session.flush()
         except IntegrityError as exc:
-            await self.session.rollback()
-            raise await self._identity_taken(key) from exc
-
-    async def _identity_taken(self, key: str | None) -> ConflictError:
-        """Filling in the last axis is exactly when a duplicate surfaces.
-
-        Two variants that arrive at the same key are the same thing, so this is the design
-        working rather than failing — but it has to say so, and say which row to merge
-        into. A bare integrity error would reach the caller as a 500 and tell them nothing.
-        """
-        other = await self.session.scalar(select(Variant.id).where(Variant.identity_key == key))
-        return ConflictError(
-            f"Variant {other} already has this identity: the two describe the same thing,"
-            " and one should be merged into the other",
-            code="identity_taken",
-            details={"variant_id": other},
-        )
+            # Two writers reached the same key between the question and the answer. Rare,
+            # and there is nothing to look up any more — the session is spent either way.
+            raise ConflictError(
+                "Another variant took this identity while this one was being written",
+                code="identity_taken",
+            ) from exc
 
     async def _identity_axes(self, category_id: int) -> list[Attribute]:
         """The category's identity-bearing attributes, in its own display order."""

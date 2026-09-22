@@ -6,6 +6,7 @@ this shape; what it cannot guess is where the barcode and the model are hidden, 
 looks like a part number and is not.
 """
 
+import re
 from typing import Any
 
 from app.features.offers.normalization import barcodes
@@ -19,11 +20,16 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "ksenukai-phones"
-VERSION = "ksenukai-1"
+VERSION = "ksenukai-2"
 
 # The shop's own article number. Every one of the 541 phones in the older corpus began
 # `Y0000`, without exception.
 INTERNAL_PREFIX = "Y0000"
+
+# `…, 256 GB, melna krās.` — the shop closes a title with the colour and the word for
+# it, and a two-tone case repeats the word: `melna krās./oranža krās.`. Anchored on the
+# word rather than on the last comma for exactly that reason.
+_COLOUR = re.compile(r"([^,/]+?)\s+kr[āa]s\.?(?=\s*[/,]|\s*$)", re.IGNORECASE)
 
 
 def _barcode(
@@ -37,6 +43,42 @@ def _model(
 ) -> dict[str, Any]:
     model = (payload.get("attributes") or {}).get("Modelis")
     return {"model": str(model).strip()[:200]} if model else {}
+
+
+def _color(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """Colour out of the one place this shop always puts it.
+
+    Not the loose "cut a colour out of a title" this project refuses elsewhere. The shape is
+    fixed and the shop keeps it: the title ends with the colour and the Latvian word for
+    colour, 487 times in 525. A case in two colours says the word twice —
+    `melna krās./oranža krās.` — and the pair is its own value, because it is its own
+    product with its own article number.
+
+    Everything is resolved through the registry, so a word the registry does not know
+    produces nothing rather than a guess. That is most of what this shop invents: `glacier`,
+    `obsidian`, `cobalt violet` are a maker's marketing and stay unresolved on purpose.
+    """
+    if not vocabulary.colours:
+        return {}
+    title = str(payload.get("title_lv") or fields.get("title") or "")
+    parts = [found.group(1).strip().casefold() for found in _COLOUR.finditer(title)]
+    if not parts:
+        return {}
+
+    named = [vocabulary.colours.get(part) for part in parts]
+    if any(value is None for value in named):
+        # Half a two-tone name is not a colour, and the half that resolved is the wrong
+        # answer rather than a partial one.
+        return {}
+
+    canonical = "-".join(named)
+    if canonical not in set(vocabulary.colours.values()):
+        # `black-orange` exists as a value; an unseen pairing does not, and inventing one
+        # here would put a value in a reading that the registry has never agreed to.
+        return {}
+    return {"identity": {**fields.get("identity", {}), "color": canonical}}
 
 
 def _not_a_part_number(
@@ -76,6 +118,24 @@ RULESET = register(
                     " reason to look. It is what brand-and-model matching stands on."
                 ),
                 body=_model,
+            ),
+            Rule(
+                id="ksenukai-color-from-title",
+                layer=SOURCE,
+                why=(
+                    "This shop publishes no colour field, and colour is one of the two axes"
+                    " a phone is told apart by — without it a model match between two of its"
+                    " listings looks fully confirmed while nothing has compared the property"
+                    " that differs. What it does have is a title that always ends the same"
+                    " way: `…, 256 GB, melna krās.`, on 487 of 525. Reading a fixed position"
+                    " is not the loose title-cutting this project refuses; the refusal is"
+                    " about inventing a canonical value, and every word here is resolved"
+                    " through the registry or dropped. Measured: 484 titles yield a word,"
+                    " and what the registry knows resolves — the rest is the maker's"
+                    " marketing (`glacier`, `obsidian`, `cobalt violet`) and stays"
+                    " unresolved, which is the same decision `phones-color` makes."
+                ),
+                body=_color,
             ),
             Rule(
                 id="ksenukai-article-is-not-a-part-number",

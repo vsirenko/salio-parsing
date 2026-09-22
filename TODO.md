@@ -227,12 +227,31 @@ and the questions that have to be answered with real data first, are written dow
       known on both sides — not every axis the listing happened to carry. Two of three shops
       state no colour, so their listings agreed on everything they had, and that silence
       counted as agreement. Learned barcodes 478 → 35, entries holding two colours 157 → 50.
-- [ ] **50 entries still hold two colours**, all of them between listings of the two shops
-      that publish no colour at all. Nothing in the reading can separate them, so this is a
-      collection problem rather than a matching one: either those shops state it somewhere
-      not yet read, or a third shop's barcode has to arrive and split them. Worth measuring
-      before anything is built — bigbox leaves colour in the title, which is the 358-form
-      problem `phones-color` refuses on purpose.
+- [x] ksenukai states no colour field, but its titles end the same way on 487 of 525 —
+      `…, 256 GB, melna krās.` — and a case in two colours says the word twice. Reading that
+      fixed position through the registry took its colour from 0 to 63.4%, and variants
+      carried by more than one shop from 499 to 592. Four Latvian declensions were the bulk
+      of what did not resolve: `melns` alone is 101 listings.
+- [x] `identity_key` has values for the first time — 1191 variants. It needs every
+      identity-bearing axis, so before colour existed it could not be computed for any.
+- [x] The promotion pass runs each listing in a savepoint. A service answering a conflict
+      with `session.rollback()` inside a bounded loop does not undo one listing: it empties
+      the transaction and the pass then fails on the *next* listing with a lazy load that
+      cannot run.
+- [x] A clash on `identity_key` is asked about before the write rather than discovered by a
+      failed flush. The answer to that conflict is itself a query, and a spent session
+      cannot serve it — which is how a real duplicate surfaced as a 500.
+- [ ] **67 entries hold two colours**, up from 50 because more listings now carry one and
+      the disagreements that were silent are visible. `variant_merges` exists and nothing
+      produces a row in it: two entries that reach the same identity are the same thing, and
+      saying so is the point of the table.
+- [ ] **1a.lv is researched and unbuilt.** Same LupaSearch engine as ksenukai, index
+      `qwxb4ncf8r99`, 446 phones, and a strict subset of ksenukai's fields: no barcodes at
+      all, no base64 attribute columns, no images. Its product pages answer Cloudflare, so
+      the index is the only door. What it does have is the same title shape, so the colour
+      rule written for ksenukai reads it unchanged, and a manufacturer part number in about
+      a quarter of the titles — which is the rung it would have to live on.
+
 - [ ] **Two shops disagree about three barcodes.** BigBox says `Iekšējā atmiņa, GB: 512GB`
       for a phone whose own title reads `4/128GB`, and lists 256 GB and 64 GB where
       rdveikals lists 128 GB and 256 GB for the same barcodes. We read the param over the

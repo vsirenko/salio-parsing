@@ -187,3 +187,70 @@ def test_a_snapshot_without_its_record_is_an_error():
 
     with pytest.raises(ValueError, match="no index record"):
         Ksenukai().parse(Snapshot(external_id="x", parts=[]))
+
+
+# --- colour out of the one place this shop always puts it ---
+
+
+def with_colours():
+    from types import MappingProxyType
+
+    from app.features.offers.normalization.rules import Vocabulary
+
+    return Vocabulary(
+        colours=MappingProxyType(
+            {
+                "melns": "black",
+                "melna": "black",
+                "balts": "white",
+                "oranža": "orange",
+                "zila": "blue",
+                "black": "black",
+                "white": "white",
+                "orange": "orange",
+                "blue": "blue",
+                "black-orange": "black-orange",
+            }
+        )
+    )
+
+
+def coloured(title: str):
+    from app.features.offers.normalization import read
+
+    return read(
+        {"id": "1", "title_lv": title, "price": "1", "currency": "EUR"},
+        source_slug="ksenukai-phones",
+        category="phones",
+        vocabulary=with_colours(),
+    )["identity"].get("color")
+
+
+def test_the_colour_is_read_from_the_fixed_end_of_the_title():
+    """This shop publishes no colour field, and colour is one of the two axes a phone is
+    told apart by. Its titles end the same way on 487 of 525."""
+    assert coloured("Mobilais telefons Samsung Galaxy Xcover6 Pro, 128 GB, melns krās.") == "black"
+    assert coloured("Telefons ar pogām MyPhone Halo 3, 32 MB, balts krās.") == "white"
+
+
+def test_a_case_in_two_colours_says_the_word_twice():
+    """`melna krās./oranža krās.` is its own product with its own article number, so it is
+    its own value rather than the first half of one."""
+    assert coloured("Telefons MyPhone Hammer, 32 MB, melna krās./oranža krās.") == "black-orange"
+
+
+def test_a_marketing_name_is_left_unresolved():
+    """`glacier`, `obsidian`, `cobalt violet` are what this shop invents. Resolving them by
+    guessing splits one product into several, confidently — the refusal `phones-color` was
+    written around."""
+    assert coloured("Mobilais telefons Apple iPhone 17, 256 GB, glacier krās.") is None
+
+
+def test_half_a_pair_is_not_an_answer():
+    """A pairing the registry has never agreed to is not a colour, and the half that did
+    resolve is the wrong answer rather than a partial one."""
+    assert coloured("Telefons X, 32 MB, melna krās./nezināma krās.") is None
+
+
+def test_a_title_that_names_no_colour_yields_none():
+    assert coloured("Mobilais telefons bez krāsas") is None

@@ -1,15 +1,17 @@
 """Placing a listing in the catalogue, or saying exactly why it could not be placed."""
 
+import logging
 from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import NamedTuple
 
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
-from app.core.exceptions import AppError, NotFoundError, ValidationError
+from app.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from app.db.models import (
     Attribute,
     AttributeValue,
@@ -63,6 +65,8 @@ from app.schemas.pagination import Pagination
 
 # How much each rung is worth. A barcode is proof; a model string that agreed is a guess
 # that landed, and the gap between them is what `method` exists to preserve.
+log = logging.getLogger(__name__)
+
 CONFIDENCE = {
     Method.GTIN: Decimal("1.000"),
     Method.BRAND_MPN: Decimal("0.950"),
@@ -457,9 +461,17 @@ class MatchingService:
         """
         if not reading.identity:
             return
-        await self._carry_identity(
-            CatalogService(self.session), variant_id, reading, only_if_absent=True
-        )
+        try:
+            await self._carry_identity(
+                CatalogService(self.session), variant_id, reading, only_if_absent=True
+            )
+        except ConflictError:
+            # Filling in the last axis is exactly when a duplicate surfaces: two entries
+            # that arrive at the same identity are the same thing. That is worth knowing and
+            # it is not this listing's problem — the match stands, the two entries stay as
+            # they are, and merging them is a decision somebody makes with `variant_merges`.
+            # Refusing the match instead would lose a listing over a fact about two others.
+            log.info("run: variant %d already has a twin at this identity", variant_id)
 
     async def _learn_gtin(self, variant_id: int, reading: NormalizedOffer) -> None:
         """Keep the barcode of a listing that was placed without it.
@@ -709,9 +721,22 @@ class MatchingService:
                 continue
 
             try:
-                await self._variant_from(offer, reading)
+                # A savepoint per listing, for the same reason the batch ingestion has one:
+                # the services here answer a conflict by rolling the request back, and a
+                # rollback in the middle of a bounded loop does not undo one listing — it
+                # empties the transaction and leaves every ORM row the loop still holds
+                # expired. The pass then fails on the *next* listing, somewhere unrelated,
+                # with a lazy load that cannot run. Undoing only the listing that failed is
+                # what lets the other nine hundred stand.
+                async with self.session.begin_nested():
+                    await self._variant_from(offer, reading)
             except AppError as error:
                 reasons[error.code] += 1
+                continue
+            except IntegrityError:
+                # A clash the service did not name — two listings racing for one slug, a
+                # barcode already spoken for. One listing's problem, not the pass's.
+                reasons["conflict"] += 1
                 continue
 
             promoted += 1
