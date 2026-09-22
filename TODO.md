@@ -127,16 +127,28 @@ and the questions that have to be answered with real data first, are written dow
       taking the offer's market for the language order (`markets.languages`, first is
       default) and falling back to aliases that belong to no language at all, which is what
       a maker's marketing names are.
-- [ ] **The brand registry and the catalogue are both empty.** All 520 real offers queue,
-      and there is nothing to match them against: zero brands, zero variants. Filling the
-      brand registry is the cheapest large win there is.
+- [x] The brand registry, seeded from what the two shops actually wrote: 62 spellings into
+      52 brands and 54 aliases. `brand_unknown` went from 55 listings to none.
+- [ ] **`Hammer` and `MyPhone` may be one brand.** 30 listings call Hammer a brand of its
+      own and one shop writes `MyPhone Hammer Rock` in a title, so Hammer looks like a line
+      myPhone makes. Left as two brands deliberately — it is written on the box, and
+      `brand_aliases` allows one spelling to belong to two brands for exactly this. Decide
+      it on more than thirty listings.
+- [ ] **`No-Name` is not entered, and 4 listings say it.** A shop's way of saying unbranded.
+      Entered as a brand it becomes the bin everything unrecognised falls into; left out,
+      those four resolve to nothing, which is true. If more shops use it, it wants a real
+      answer rather than an absence.
+- [ ] **Nothing creates a variant from an offer**, so the catalogue is still empty and every
+      one of the 1504 listings queues as `signals_unmatched` — correctly. 207 barcodes are
+      shared between the two shops and 414 listings carry them, which is what the first real
+      matches would be.
 - [x] A signal that was used outranks one that was not: a barcode that was tried and
       missed is `signals_unmatched`, whatever the brand turned out to be
-- [ ] **Nothing creates a variant from an offer.** The catalogue has to start somewhere and
-      there is no way to start it: `POST /api/admin/variants` takes one by hand, and
-      `PUT /offers/{id}/match` links to a variant that already exists. Every listing in
-      `signals_unmatched` is a candidate, and until one of them can be promoted the first
-      shop collected is a shop nothing can ever match against.
+- [ ] **Promoting a listing into a variant has to be a choice, not a sweep.** Every one of
+      the 1504 is a candidate and most should not be: a variant made from a junk listing
+      cannot afterwards be told from a real one. The narrow version — a listing with a
+      barcode, from a source whose `trust` is high — starts the catalogue with what is
+      identifiable and leaves the rest in the queue where somebody can look at it.
 - [x] A second channel, `bigbox-phones`: 984 phones, 98.7% deterministically identifiable,
       and 207 barcodes it shares with ksenukai — the first thing in this system there has
       ever been anything to match against
