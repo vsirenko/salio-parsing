@@ -470,6 +470,23 @@ and the questions that have to be answered with real data first, are written dow
       that way. The bar is now that all of them agree. The 74 that remain are held by real
       disagreement — their shops write the model differently — which is the case the guard
       was written for.
+- [x] **`normalized_offers.brand_id` and `category_id` were declared and never written** —
+      null on all 76384 readings. Three things followed: every pass resolved every brand
+      again from the string; the preview could only show what a shop had stated, so m79's
+      German feed read `—` beside a model that plainly said Google; and nobody could ask the
+      database which listings have a field that disagrees with their title, the question
+      that found bm.market's eight Pixels under `Getnord` and was counted by hand each time.
+      The category is the channel's own answer and the offers service writes it; the brand
+      is the matcher's, because only the matcher knows how one is settled — an alias, a
+      title, or a bought judgement — and a reading is a pure function of a payload and the
+      rules, which a registry lookup is not.
+- [x] **The maker is read from anywhere in the title, when the title names exactly one.**
+      A window at either end missed as much as it caught: these shops put it where the
+      supplier put it. Measured on the 7069 listings whose shop did state a maker, the title
+      names exactly one on 6763 and agrees with the field on 6755 — and of the eight that
+      disagree the title is mostly the one that is right. Where two are named, 135 listings,
+      it refuses: `Spigen … iPhone 14 Pro Max` is a case, and picking either would be a
+      guess. `brand_unresolved` in the queue 21 -> 11.
 - [ ] **Re-deciding is one HTTP request per listing and it is the slowest thing here.**
       Every change to a reading rule costs a reparse (a minute) and then a re-decide of
       every match whose colour or model moved, one `POST /offers/{id}/match` at a time —

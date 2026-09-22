@@ -1082,11 +1082,15 @@ def test_a_maker_named_at_the_end_of_a_title_is_read(client):
     assert outcome["variant_id"] == variant["id"]
 
 
-def test_a_maker_s_name_deep_inside_a_title_is_not_read(client):
-    """`Case for iPhone` is the shape that would go wrong, so only the last few words are
-    looked at and only one at a time."""
+def test_two_makers_in_one_title_name_neither(client):
+    """`Spigen … iPhone 14 Pro Max` is a case, not a phone, and picking either would be a
+    guess. 135 listings in the corpus name two makers."""
     token = admin_token(client)
     _, source, category, brand = a_shop_we_can_build_from(client, token)
+    other = post(
+        client, token, "/api/admin/brands", {"slug": "getnord", "canonical_name": "Getnord"}
+    )
+    post(client, token, f"/api/admin/brands/{other['id']}/aliases", {"alias": "Getnord"})
     post(
         client,
         token,
@@ -1098,8 +1102,7 @@ def test_a_maker_s_name_deep_inside_a_title_is_not_read(client):
         token,
         source["id"],
         {
-            "name": f"Zeta 1 128GB compatible with {brand['canonical_name']} and others"
-            " a long way from the end of this title",
+            "name": f"Getnord Zeta 1 128GB compatible with {brand['canonical_name']}",
             "model": "Zeta 1",
         },
         external_id="E-2",

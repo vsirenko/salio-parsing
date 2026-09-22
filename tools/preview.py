@@ -94,7 +94,10 @@ AXES = """
 QUEUED = """
     select q.offer_id, q.reason, q.attempts, o.url, o.price, o.currency_code,
            sh.name as shop, src.trust, src.category_id,
-           n.title, n.brand_raw, n.gtin, n.mpn, n.model, n.identity
+           n.title, n.brand_raw, n.gtin, n.mpn, n.model, n.identity,
+           -- What the matcher settled on, which is not always what the shop said and is
+           -- often the only answer there is: m79's German feed states no maker at all.
+           nb.canonical_name as brand_read
     from match_queue q
     join offers o on o.id = q.offer_id
     join sellers s on s.id = o.seller_id
@@ -119,6 +122,7 @@ QUEUED = """
         order by no2.id desc
         limit 1
     ) n on true
+    left join brands nb on nb.id = n.brand_id
     order by sh.name, n.title
 """
 
@@ -321,6 +325,9 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--line); color: var(--muted); margin-right: 4px;
 }
 .none { color: var(--warn); }
+/* A maker the shop did not state and the matcher worked out: a conclusion, not a fact the
+   shop published, and marked so nobody reads the two as the same kind of thing. */
+.read { color: var(--dim); font-style: italic; }
 .yes { color: var(--ok); }
 .why { color: var(--muted); max-width: 70ch; margin: 2px 0 12px; }
 section { margin-bottom: 30px; }
@@ -415,6 +422,14 @@ function card(p) {
     ${variants}</div>`;
 }
 
+// What the shop said, or what the matcher worked out when it said nothing. The second is
+// marked, because a maker read off a title is a conclusion and a field is a statement.
+function brand(r) {
+  if (r.brand_raw) return esc(r.brand_raw);
+  if (r.brand_read) return `<span class="read">${esc(r.brand_read)}</span>`;
+  return '<span class="none">—</span>';
+}
+
 function draw() {
   const q = document.getElementById("q").value.trim().toLowerCase();
   const by = document.getElementById("sort").value;
@@ -452,7 +467,7 @@ function group(key, rows) {
       <tbody>${rows.map(r => `<tr>
         <td>${esc(r.shop)}</td>
         <td>${esc(r.title || "—")}</td>
-        <td>${r.brand_raw ? esc(r.brand_raw) : '<span class="none">—</span>'}</td>
+        <td>${brand(r)}</td>
         <td class="num">${r.gtin ? esc(r.gtin) : '<span class="none">—</span>'}</td>
         <td>${r.mpn ? esc(r.mpn) : '<span class="none">—</span>'}</td>
         <td>${r.model ? esc(r.model) : '<span class="none">—</span>'}</td>
@@ -462,10 +477,19 @@ function group(key, rows) {
   </section>`;
 }
 
+// What the shop said, or what the matcher worked out when it said nothing. The second is
+// marked, because a maker read off a title is a conclusion and a field is a statement.
+function brand(r) {
+  if (r.brand_raw) return esc(r.brand_raw);
+  if (r.brand_read) return `<span class="read">${esc(r.brand_read)}</span>`;
+  return '<span class="none">—</span>';
+}
+
 function draw() {
   const q = document.getElementById("q").value.trim().toLowerCase();
   const rows = DATA.queued.filter(r => !q ||
-    ((r.title || "") + " " + (r.brand_raw || "") + " " + r.shop).toLowerCase().includes(q));
+    ((r.title || "") + " " + (r.brand_raw || "") + " " + (r.brand_read || "") + " " + r.shop)
+      .toLowerCase().includes(q));
   const buckets = new Map();
   for (const r of rows) (buckets.get(r.missing) ?? buckets.set(r.missing, []).get(r.missing))
     .push(r);

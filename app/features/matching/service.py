@@ -637,6 +637,25 @@ class MatchingService:
         await self.session.flush()
         audit.record_changes(learned_gtin=reading.gtin, onto_variant=variant_id)
 
+    @staticmethod
+    def _settled(reading: NormalizedOffer, lookup: BrandLookup) -> BrandLookup:
+        """Keep the maker on the reading, whichever way it was worked out.
+
+        `normalized_offers.brand_id` was declared and left null on all 76384 readings, and
+        three things followed. Every pass resolved every brand again from the string. The
+        preview could only show what a shop had stated, so m79's German feed read `—` beside
+        a model that plainly said Google. And nobody could ask the database which listings
+        have a field that disagrees with their title — the question that found bm.market's
+        eight Pixels under `Getnord` and had to be counted by hand each time.
+
+        The matcher writes it because only the matcher knows how a brand is settled: an
+        alias, a title, or a bought judgement. The reading cannot, and should not — it is a
+        pure function of a payload and the rules, and a registry lookup is neither.
+        """
+        if lookup.brand is not None:
+            reading.brand_id = lookup.brand.id
+        return lookup
+
     async def _brand_from_title(self, reading: NormalizedOffer) -> Brand | None:
         """The maker the title begins with, when the field named one nobody knows.
 
@@ -661,20 +680,30 @@ class MatchingService:
             found = await self._named_by(source)
             if found is not None:
                 return found
-        # And from the other end. A whole supplier feed at m79 writes the maker last, in
-        # front of the shop's own suffix: `MOBILE PHONE GALAXY FOLD7/512GB SM-F966B SAMSUNG
-        # Mobilais Telefons`. Only the last few words, and one at a time, because a word
-        # anywhere in a title that happens to be a maker's name is not a claim that the
-        # maker made this — `Case for iPhone` is the shape that would go wrong.
-        return await self._named_at_the_end((reading.title or "").split())
+        # And then anywhere in the title, but only if exactly one maker is named there.
+        # These shops put it wherever the supplier put it — `MOBILE PHONE GALAXY FOLD7 …
+        # SAMSUNG Mobilais Telefons` at the end, `Telefonas IPHONE 17 PRO MAX/256GB DEEP
+        # Mėlynas MFYP4 APPLE MFYP4SX/A` in the middle — and a window at either end misses
+        # as much as it catches.
+        #
+        # Exactly one is what makes it safe, and it is measured: on the 7069 listings whose
+        # shop did state a maker, the title names exactly one on 6763 of them and agrees
+        # with the field on 6755 — and of the eight that disagree the title is mostly the
+        # one that is right, `HMD 2660 FLIP` filed under Nokia and `Umidigi Bison X10` under
+        # CAT. Where two makers are named, 135 listings, this refuses: `Spigen … iPhone 14
+        # Pro Max` is a case, not a phone, and picking either would be a guess.
+        return await self._the_one_maker_named_in((reading.title or "").split())
 
-    async def _named_at_the_end(self, words: list[str]) -> Brand | None:
-        """The maker a title ends with, behind whatever the shop appends to everything."""
-        for word in reversed(words[-4:]):
-            found = await self._named_by([word])
-            if found is not None:
-                return found
-        return None
+    async def _the_one_maker_named_in(self, words: list[str]) -> Brand | None:
+        """The maker a title names, when it names exactly one."""
+        found: dict[int, Brand] = {}
+        for word in words:
+            named = await self._named_by([word.strip("(),.:;/")])
+            if named is not None:
+                found[named.id] = named
+                if len(found) > 1:
+                    return None
+        return next(iter(found.values()), None)
 
     async def _named_by(self, words: list[str]) -> Brand | None:
         """The maker the first word or two of these words name, if exactly one does."""
@@ -721,7 +750,7 @@ class MatchingService:
             # this 425 fully-read phones could not become a catalogue entry.
             named = await self._brand_from_title(reading)
             if named is not None:
-                return BrandLookup(named, "resolved_title", [named.id])
+                return self._settled(reading, BrandLookup(named, "resolved_title", [named.id]))
             return BrandLookup(None, "none_given", [])
         try:
             normalized = normalize_brand(reading.brand_raw)
@@ -738,14 +767,14 @@ class MatchingService:
         )
         brands = list(rows.scalars().unique())
         if len(brands) == 1:
-            return BrandLookup(brands[0], "resolved", [brands[0].id])
+            return self._settled(reading, BrandLookup(brands[0], "resolved", [brands[0].id]))
         if not brands:
             # The field names a maker nobody has heard of, and the title may name one we
             # have. Only then: a field that resolves is never second-guessed, and a field
             # that resolves to two is a question the judge answers, not this.
             named = await self._brand_from_title(reading)
             if named is not None:
-                return BrandLookup(named, "resolved_title", [named.id])
+                return self._settled(reading, BrandLookup(named, "resolved_title", [named.id]))
             return BrandLookup(None, "unknown", [])
 
         candidates = [brand.id for brand in brands]
@@ -756,7 +785,9 @@ class MatchingService:
             return BrandLookup(None, "ambiguous", candidates)
         if verdict.accepted:
             chosen = next(brand for brand in brands if brand.id == verdict.brand_id)
-            return BrandLookup(chosen, "resolved_judge", candidates, verdict)
+            return self._settled(
+                reading, BrandLookup(chosen, "resolved_judge", candidates, verdict)
+            )
         # Answered "neither" is a decision; answered without enough certainty is not, and
         # leaving that one ambiguous is what keeps a weak opinion from placing a listing.
         return BrandLookup(None, "judged_none" if verdict.no_match else "ambiguous", candidates)

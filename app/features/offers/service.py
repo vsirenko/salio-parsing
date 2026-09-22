@@ -431,6 +431,12 @@ class OfferService:
             for key, value in fields.items():
                 setattr(reading, key, value)
 
+        # Not part of `fields`, and deliberately: a reading is a pure function of a payload
+        # and the rules, and this is the channel's own answer about what it collects. The
+        # column had been declared and left null on all 76384 readings, so nothing could ask
+        # the database what a listing was read as.
+        reading.category_id = source.category_id
+
         await self.session.flush()
         await self.session.refresh(reading)
         return reading
