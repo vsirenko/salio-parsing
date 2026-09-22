@@ -4,6 +4,13 @@ A shop with no module here is read generically, which is not a failure — it is
 sample gets loaded and measured before any rules are written for it.
 """
 
-from app.features.offers.normalization.sources import bigbox, dateks, ksenukai, onea, rdveikals
+from app.features.offers.normalization.sources import (
+    bigbox,
+    bm,
+    dateks,
+    ksenukai,
+    onea,
+    rdveikals,
+)
 
-__all__ = ("bigbox", "dateks", "ksenukai", "onea", "rdveikals")
+__all__ = ("bigbox", "bm", "dateks", "ksenukai", "onea", "rdveikals")

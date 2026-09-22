@@ -189,10 +189,32 @@ lifecycle changes.
 | `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
+| `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
 
 `rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
 module says why its discovery walks the listing rather than the sitemap, and why the brand
 comes out of an analytics block instead of the microdata beside it.
+
+**`bm-phones`** is the first that reads GraphQL, and the cheapest channel here by a wide
+margin: Magento 2 with `POST /graphql` open — no key, no signature — answering 200 products
+with every attribute per request, so the whole category is 5 requests and 74 seconds and no
+product page is ever opened. Three things its module records, each of which reports success
+while being wrong:
+
+- **The category is `Telefoni`, not `Mobilie telefoni`.** The second is the bigger of the
+  two, 3448 against 937, and it is a section: its products include Apple Watches.
+- **`stock_status` is a constant.** It reads `IN_STOCK` on 936 of 937 — Magento saying the
+  shop will sell the thing. `availability_type` beside it says 934 are `Pēc pasūtījuma`.
+  This is a showroom that orders in, and the first field would report a warehouse it has not
+  got.
+- **The brand is only in the selected options.** `manufacturer` is a Magento select, so
+  `AttributeValue.value` is null on it and the label is in `AttributeSelectedOptions`. The
+  obvious query loses the brand on all 937 and looks like it worked.
+
+Half its catalogue carries the attribute block and half does not — 476 of 937 — which is
+where its barcode (50.8%) and part number (45.8%) go. For Apple, the thinnest brand here at
+42 barcodes on 196 products, the part number is not missing from the page but written into
+the name, and reading it there takes Apple from 41 to 161.
 
 **`dateks-phones`** is the cheapest cheap pass here: the listing prints the name, both
 prices, the manufacturer code and a stock word on 100% of 745 cards, so 32 requests bring

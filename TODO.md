@@ -245,6 +245,17 @@ and the questions that have to be answered with real data first, are written dow
       the disagreements that were silent are visible. `variant_merges` exists and nothing
       produces a row in it: two entries that reach the same identity are the same thing, and
       saying so is the point of the table.
+- [x] A sixth channel, `bm-phones` (bm.market), and the first that reads GraphQL: 937
+      phones in 5 requests and 74 seconds, no product page opened. Brand 99.9%, model
+      100%, availability 100%, colour 90.1%, barcode 50.8%, part number 45.8% → 58.6%.
+      Three traps, each of which reports success: the bigger of its two telephone
+      categories is a section holding Apple Watches; `stock_status` is a constant
+      `IN_STOCK` while `availability_type` says 934 of 937 are to order; and
+      `manufacturer` is a Magento select, so the obvious query returns null for every
+      brand and appears to work. For Apple — 42 barcodes on 196 products, the thinnest
+      brand here — the part number is not missing but written into the name, and reading
+      it there takes Apple from 41 to 161. Six shops: 5031 listings, 97.0% matched,
+      variants 1768 → 2142, carried by more than one shop 1006 → 1118, 64 in all six.
 - [x] A fifth channel, `dateks-phones`: 745 phones, model 100%, barcode 86.3%, colour
       97.3%, availability 100%. The shop had been written off as closed — it is not, and
       neither its Cloudflare nor our HTTP client was ever the problem: the category moved
