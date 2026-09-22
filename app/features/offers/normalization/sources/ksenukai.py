@@ -9,7 +9,7 @@ looks like a part number and is not.
 import re
 from typing import Any
 
-from app.features.offers.normalization import barcodes
+from app.features.offers.normalization import barcodes, colours
 from app.features.offers.normalization.rules import (
     FINISH,
     SOURCE,
@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "ksenukai-phones"
-VERSION = "ksenukai-3"
+VERSION = "ksenukai-4"
 
 # The shop's own article number. Every one of the 541 phones in the older corpus began
 # `Y0000`, without exception.
@@ -29,7 +29,9 @@ INTERNAL_PREFIX = "Y0000"
 # `…, 256 GB, melna krās.` — the shop closes a title with the colour and the word for
 # it, and a two-tone case repeats the word: `melna krās./oranža krās.`. Anchored on the
 # word rather than on the last comma for exactly that reason.
-COLOUR = re.compile(r"([^,/]+?)\s+kr[āa]s\.?(?=\s*[/,]|\s*$)", re.IGNORECASE)
+# The group writes the word for colour three ways — `melna krās.`, `sudraba kr.`,
+# `melnā krāsā` — and a title that uses the short one is not a title without a colour.
+COLOUR = re.compile(r"([^,/]+?)\s+(?:kr\.|kr[āa]s[āa]?\.?)(?=\s*[/,]|\s*$)", re.IGNORECASE)
 
 
 def _barcode(
@@ -70,18 +72,8 @@ def color_from_title(
     if not parts:
         return {}
 
-    named = [vocabulary.colours.get(part) for part in parts]
-    if any(value is None for value in named):
-        # Half a two-tone name is not a colour, and the half that resolved is the wrong
-        # answer rather than a partial one.
-        return {}
-
-    canonical = "-".join(named)
-    if canonical not in set(vocabulary.colours.values()):
-        # `black-orange` exists as a value; an unseen pairing does not, and inventing one
-        # here would put a value in a reading that the registry has never agreed to.
-        return {}
-    return {"identity": {**fields.get("identity", {}), "color": canonical}}
+    canonical = colours.pair(parts, vocabulary)
+    return {"identity": {**fields.get("identity", {}), "color": canonical}} if canonical else {}
 
 
 def _not_a_part_number(

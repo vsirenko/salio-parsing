@@ -254,3 +254,40 @@ def test_half_a_pair_is_not_an_answer():
 
 def test_a_title_that_names_no_colour_yields_none():
     assert coloured("Mobilais telefons bez krāsas") is None
+
+
+def test_the_word_for_colour_is_written_three_ways():
+    """`melna krās.`, `sudraba kr.`, `melnā krāsā` — a title that uses the short one is not
+    a title without a colour, and reading only one form left 38 listings colourless."""
+    assert coloured("Mobilais telefons X, 128 GB, melns kr.") == "black"
+    assert coloured("Mobilais telefons X, 128 GB, melns krāsā") == "black"
+    assert coloured("Mobilais telefons X, 128 GB, melns krās.") == "black"
+
+
+def test_a_marketing_word_in_front_of_a_colour_is_dropped():
+    """Samsung's `Awesome` line, in Latvian. The colour is the head of the phrase and comes
+    last, so the front can be dropped without this module knowing what `lieliski` means."""
+    from types import MappingProxyType
+
+    from app.features.offers.normalization import colours
+    from app.features.offers.normalization.rules import Vocabulary
+
+    words = Vocabulary(
+        colours=MappingProxyType({"pelēka": "grey", "tumši zila": "dark-blue", "zila": "blue"})
+    )
+    assert colours.resolve("lieliski pelēka", words) == "grey"
+    assert colours.resolve("lieliski tumši zila", words) == "dark-blue"
+
+
+def test_an_invented_word_at_the_end_is_not_dropped():
+    """`silver shadow` and `night sky` put the invention last. Guessing from the first word
+    instead would read `arctic seal` as a colour."""
+    from types import MappingProxyType
+
+    from app.features.offers.normalization import colours
+    from app.features.offers.normalization.rules import Vocabulary
+
+    words = Vocabulary(colours=MappingProxyType({"silver": "silver", "black": "black"}))
+    assert colours.resolve("silver shadow", words) is None
+    assert colours.resolve("arctic seal", words) is None
+    assert colours.resolve("midnight black", words) == "black"

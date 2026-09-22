@@ -256,16 +256,21 @@ and the questions that have to be answered with real data first, are written dow
       capacity, drop a brand that follows the colour: 679 of 985. Plus 14 Latvian
       declensions. Colour across four shops 79.7%, variants carried by more than one shop
       633 → 732, by all four 119 → 132.
-- [ ] **Roughly 70 colour spellings are the maker's own marketing** — `obsidian`, `glacier`,
-      `silver shadow`, `cobalt violet` — covering some 700 listings. Nothing derives them:
-      obsidian means black because Google decided so. They are rows in
-      `attribute_value_aliases` and the cheapest way to get them is to write them, once, by
-      hand — seventy entries a person can read and check, against a model's probability and
-      a threshold the judge's own README calls a starting point rather than a measurement.
-      The judge earns this question when the list stops being finite and small: thirteen
-      shops, ten categories and three languages, with every flagship launch inventing more.
-      Same question, same table, different scale — and `judge/questions.py` already has the
-      shape for it.
+- [x] Two faults in reading a colour phrase, worth more than two hundred registry rows
+      between them. The group writes the word for colour three ways — `krās.`, `kr.`,
+      `krāsā` — and only one was read. And a phrase is now looked up by dropping words off
+      the front, which resolves Samsung's `lieliski` (`Awesome`) line without this code
+      holding a list of marketing prefixes: the colour is the head of the phrase and the
+      head comes last. Not the other way round on purpose — `silver shadow` and `arctic
+      seal` put the invention last, and guessing from the first word would read a seal as a
+      colour. `normalization/colours.py` owns the decision for every shop, as
+      `barcodes.py` does for its own.
+- [ ] **About 150 colour spellings left, and they really are the maker's marketing** —
+      `obsidian`, `glacier`, `silver shadow`, `cobalt violet`. Nothing derives them, so
+      they are rows a person writes once. Cheaper than a judge at this size and readable
+      afterwards, which a probability is not; the judge earns the question when the list
+      stops being finite — thirteen shops, ten categories, three languages, and a new
+      invention with every flagship.
 - [ ] **Colour merges are a visibility number, not a quality one.** They went 327 → 157 → 50
       → 67 → 92 as colour reached more listings: each time more of them carry one, more
       previously silent disagreements become countable. Counting how many *could* disagree

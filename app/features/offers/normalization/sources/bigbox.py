@@ -9,11 +9,11 @@ nothing at all.
 import re
 from typing import Any
 
-from app.features.offers.normalization import barcodes
+from app.features.offers.normalization import barcodes, colours
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-3"
+VERSION = "bigbox-4"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -120,13 +120,8 @@ def _color(
     if brand and words and words[-1].casefold() == brand.casefold():
         words = words[:-1]
 
-    for take in (2, 1):
-        if len(words) < take:
-            continue
-        canonical = vocabulary.colours.get(" ".join(words[-take:]).casefold())
-        if canonical:
-            return {"identity": {**fields.get("identity", {}), "color": canonical}}
-    return {}
+    canonical = colours.resolve(" ".join(words[-3:]), vocabulary)
+    return {"identity": {**fields.get("identity", {}), "color": canonical}} if canonical else {}
 
 
 def _line(

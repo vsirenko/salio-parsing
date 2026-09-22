@@ -99,11 +99,11 @@ def test_a_rule_can_be_declared_and_not_written():
 def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
-    assert version_for(KSENUKAI) == "generic-1+ksenukai-3"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-4+ksenukai-3"
+    assert version_for(KSENUKAI) == "generic-1+ksenukai-4"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-4+ksenukai-4"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-4+ksenukai-3"
+        == "generic-1+phones-4+ksenukai-4"
     )
 
 
@@ -317,8 +317,8 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
     "apple-phones-1": "12a9fce3575e",
-    "bigbox-3": "a5354ca3a0df",
-    "ksenukai-3": "2fde141c1374",
+    "bigbox-4": "c8d0450d4ad8",
+    "ksenukai-4": "392813c1bc6e",
     "onea-1": "3f30745390d5",
     "phones-4": "e6b091ef5728",
     "rdveikals-4": "f5078e0afc82",
