@@ -483,6 +483,7 @@ FINGERPRINTS = {
     "ksenukai-5": "89aa740d025f",
     "m79-4": "9aa38c660bc8",
     "oneplus-phones-1": "8d9ee7915042",
+    "mdata-1": "4c3e79e938e3",
     "onea-1": "3f30745390d5",
     "euronics-1": "e61bf95a7a78",
     "phones-8": "5f102ff7e96d",

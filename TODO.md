@@ -487,6 +487,23 @@ and the questions that have to be answered with real data first, are written dow
       disagree the title is mostly the one that is right. Where two are named, 135 listings,
       it refuses: `Spigen … iPhone 14 Pro Max` is a case, and picking either would be a
       guess. `brand_unresolved` in the queue 21 -> 11.
+- [ ] **A second-hand phone is dropped at the channel, and that is a patch rather than a
+      policy — decided, for now, to keep dropping.** `offers.condition` reads `new` on all
+      8998 listings and `condition_grade` is empty on every one: both columns are declared,
+      the ingest schema takes them, `generic` reads a condition out of a payload, and dateks
+      even hands over schema.org's `itemCondition`. The pipe is laid end to end and nothing
+      flows through it, because the default overwrites whatever arrives.
+      So four channels of eleven — cec, dateks, tet, m79 — drop second-hand stock where it
+      hurt, the other seven do not filter at all, and five refurbished listings are in the
+      database anyway. mdata.lv is the shop that makes this a decision rather than a detail:
+      237 of its 332 phones are `Demo` or `Renew`, so dropping them drops 71% of a shop
+      whose whole business is refurbished. Taken at 95 new phones for now.
+      When it is taken up properly, two things have to be settled: which catalogue entry a
+      refurbished phone attaches to — on the same one it becomes that phone's cheapest price
+      and we are back to the bug the filters were written for — and where the words live.
+      `Demo`, `Renew`, `Grade A`, `Pre-owned`, `Mazlietots`, `Atjaunots` are six spellings
+      from five shops in three languages, and they belong in the registry with the colours,
+      not in six channel modules.
 - [ ] **Re-deciding is one HTTP request per listing and it is the slowest thing here.**
       Every change to a reading rule costs a reparse (a minute) and then a re-decide of
       every match whose colour or model moved, one `POST /offers/{id}/match` at a time —
