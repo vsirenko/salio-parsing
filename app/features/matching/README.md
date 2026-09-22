@@ -132,6 +132,16 @@ between being sent to write brand aliases and being sent to fill the catalogue. 
 next: a bucket with candidates can be finished by choosing, and choosing is the only thing
 a judge does. A bucket without them needs someone to go and look first.
 
+**A rebuild moves an entry into the family its name says.** A catalogue entry made from
+one listing is named after that listing's reading, and when the reading improves — a rule
+fixed, a word entered in a registry — the entry keeps the old name. `POST /matching/rebuild`
+renames it where no listing on it reads the name it has — two shops disagreeing about a
+`5G` suffix keep the name they share, but a name neither of them reads is not shared, and
+any reading beats a spec sheet — and then files it under the product the new name makes,
+because the family is exactly what the model string says: that is the rule that made it. A rename used to stop at the entry, and 366 entries sat named `Galaxy S26` under a
+family still headed `Galaxy S26 S942 5G Dual Sim`. A family left empty is hidden, never
+deleted — the trail points at it.
+
 ## Decisions worth knowing before changing it
 
 - **An offer has an active match or a queue row, never both.** A second place answering

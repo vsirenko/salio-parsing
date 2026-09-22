@@ -40,6 +40,7 @@ from app.features.catalog.schemas import (
     IdentifierCreate,
     IdentifierOrigin,
     ProductCreate,
+    ProductUpdate,
     SourceKind,
     ValueOrigin,
     VariantAttributeSet,
@@ -1092,7 +1093,7 @@ class MatchingService:
         the entry has just become one that already exists, and the two are merged.
         """
         stale = await self._stale_names(limit=limit)
-        renamed = merged = 0
+        renamed = merged = rehomed = 0
         reasons: Counter[str] = Counter()
         catalog = CatalogService(self.session)
 
@@ -1100,6 +1101,7 @@ class MatchingService:
             try:
                 async with self.session.begin_nested():
                     await catalog.update_variant(variant_id, VariantUpdate(model=model[:200]))
+                    rehomed += await self._rehome(catalog, variant_id)
                 renamed += 1
             except ConflictError as error:
                 twin = (error.details or {}).get("variant_id")
@@ -1124,24 +1126,109 @@ class MatchingService:
             except IntegrityError:
                 reasons["conflict"] += 1
 
-        audit.record_changes(found=len(stale), renamed=renamed, merged=merged, **dict(reasons))
+        # An entry renamed before this pass learned to move it: the name is right and the
+        # family is still the one the old name made. 366 of them, and every one of them a
+        # storefront card headed by a spec sheet with a clean entry underneath.
+        for variant_id in await self._misfiled(limit=max(0, limit - len(stale))):
+            try:
+                async with self.session.begin_nested():
+                    rehomed += await self._rehome(catalog, variant_id)
+            except AppError as error:
+                reasons[error.code] += 1
+            except IntegrityError:
+                reasons["conflict"] += 1
+
+        # A family with nothing in it is a name and no prices. Merges emptied 288 of them
+        # before this pass hid what it emptied, and the storefront's filter is `is_visible`.
+        hidden = 0
+        for product_id in await self._empty_families(limit=limit):
+            await catalog.update_product(product_id, ProductUpdate(is_visible=False))
+            hidden += 1
+
+        audit.record_changes(
+            found=len(stale),
+            renamed=renamed,
+            merged=merged,
+            rehomed=rehomed,
+            hidden=hidden,
+            **dict(reasons),
+        )
         return RenameReport(
             found=len(stale),
             renamed=renamed,
             merged=merged,
+            rehomed=rehomed,
+            hidden=hidden,
             refused=sum(reasons.values()),
             reasons=dict(reasons),
         )
 
-    async def _stale_names(self, *, limit: int) -> list[tuple[int, str]]:
-        """Entries named after a reading their listings have outgrown, where they all agree.
+    async def _empty_families(self, *, limit: int) -> list[int]:
+        """Visible families with no entry in them."""
+        rows = await self.session.scalars(
+            select(Product.id)
+            .where(
+                Product.is_visible.is_(True),
+                ~select(Variant.id).where(Variant.product_id == Product.id).exists(),
+            )
+            .order_by(Product.id)
+            .limit(limit)
+        )
+        return list(rows.all())
 
-        One listing used to be the bar, on the grounds that two shops agreeing on an entry
-        is evidence its name is good enough and one of them disagreeing about a `5G` suffix
-        is not a reason to rename what they share. The guard was right about disagreement
-        and too blunt about the rest: 132 entries read `Motorola Motorola G06 Power` — the
-        maker twice — and every listing on every one of them had already stopped reading it
-        that way. That is unanimity, not a disagreement, and it is what the bar is now.
+    async def _rehome(self, catalog: CatalogService, variant_id: int) -> int:
+        """Move an entry into the family its name says it belongs to. 1 if it moved.
+
+        A rename used to stop at the entry: `Galaxy S26 S942 5G Dual Sim` became
+        `Galaxy S26` and stayed filed under the product the old name had made, so the
+        storefront card kept the spec sheet as its heading with a clean entry underneath.
+        The family is exactly what the model string says — the same rule that made it —
+        and a family left with nothing in it is hidden, not deleted: the trail points at it.
+        """
+        variant = await self.session.get(Variant, variant_id)
+        if variant is None:
+            return 0
+        family = await self._family(
+            catalog, variant.brand_id, variant.category_id, variant.model[:200]
+        )
+        if variant.product_id == family:
+            return 0
+        left = variant.product_id
+        await catalog.update_variant(variant_id, VariantUpdate(product_id=family))
+        if left is not None:
+            remaining = await self.session.scalar(
+                select(func.count()).select_from(Variant).where(Variant.product_id == left)
+            )
+            if not remaining:
+                await catalog.update_product(left, ProductUpdate(is_visible=False))
+        return 1
+
+    async def _misfiled(self, *, limit: int) -> list[int]:
+        """Entries whose family is not the one their own name says."""
+        if limit <= 0:
+            return []
+        rows = await self.session.scalars(
+            select(Variant.id)
+            .join(Product, Product.id == Variant.product_id)
+            .where(func.lower(Variant.model) != func.lower(Product.model))
+            .order_by(Variant.id)
+            .limit(limit)
+        )
+        return list(rows.all())
+
+    async def _stale_names(self, *, limit: int) -> list[tuple[int, str]]:
+        """Entries named after a reading no listing on them reads any more.
+
+        One listing used to be the bar, then unanimity: 132 entries read `Motorola Motorola
+        G06 Power` while every listing on them had stopped reading it that way. Unanimity
+        was still too blunt from the other side. Two shops on one entry reading `A57` and
+        `Galaxy A57 5G` disagree about a suffix, and the entry stayed named `Galaxy A57 A576
+        5G Dual Sim` — a name neither of them reads, kept because they could not agree on
+        which better one to give it. Any reading beats a spec sheet.
+
+        So the bar is: nobody reads the name it has. Where two shops disagree and one of
+        them still reads the current name, that is the name they share and it stays. Where
+        none does, the entry takes the most-read reading, ties to the shorter.
         """
         newest = (
             select(
@@ -1162,23 +1249,25 @@ class MatchingService:
             .where(NormalizedOffer.model.is_not(None))
             .subquery()
         )
-        # One row per entry, and only where every listing on it reads the same model. A
-        # single row back means they agree; two or more means they do not, and an entry two
-        # shops describe differently keeps the name it has.
-        agreed = (
-            select(newest.c.variant_id, func.min(newest.c.model).label("model"))
-            .where(newest.c.rank == 1)
-            .group_by(newest.c.variant_id)
-            .having(func.count(func.distinct(newest.c.model)) == 1)
-            .subquery()
-        )
         rows = await self.session.execute(
-            select(agreed.c.variant_id, agreed.c.model)
-            .join(Variant, Variant.id == agreed.c.variant_id)
-            .where(Variant.model != agreed.c.model)
-            .limit(limit)
+            select(newest.c.variant_id, Variant.model, newest.c.model, func.count())
+            .join(Variant, Variant.id == newest.c.variant_id)
+            .where(newest.c.rank == 1)
+            .group_by(newest.c.variant_id, Variant.model, newest.c.model)
         )
-        return [(variant_id, model) for variant_id, model in rows.all()]
+        readings: dict[int, tuple[str, Counter[str]]] = {}
+        for variant_id, current, model, count in rows.all():
+            readings.setdefault(variant_id, (current, Counter()))[1][model] += count
+
+        stale: list[tuple[int, str]] = []
+        for variant_id, (current, seen) in sorted(readings.items()):
+            if current in seen:
+                continue
+            by_use = sorted(seen.items(), key=lambda item: (-item[1], len(item[0]), item[0]))
+            stale.append((variant_id, by_use[0][0]))
+            if len(stale) >= limit:
+                break
+        return stale
 
     async def _barcode_duplicates(self, *, limit: int) -> list[tuple[str, int, int]]:
         """Barcodes whose listings sit on two catalogue entries, as (barcode, one, other)."""

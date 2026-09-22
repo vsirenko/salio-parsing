@@ -138,6 +138,11 @@ class RenameReport(BaseModel):
     found: int
     renamed: int
     merged: int
+    # Moved into the family its name says: a renamed entry, or one renamed before the
+    # pass learned to move it, still filed under the product the old name had made.
+    rehomed: int = 0
+    # Families left with nothing in them, hidden rather than deleted.
+    hidden: int = 0
     refused: int
     reasons: dict[str, int] = Field(default_factory=dict)
 

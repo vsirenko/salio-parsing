@@ -75,6 +75,9 @@ PRODUCTS = """
     from products p
     join brands b on b.id = p.brand_id
     join categories c on c.id = p.category_id
+    -- A family the rebuild pass emptied is hidden rather than deleted: the trail points
+    -- at it. The storefront does not show it, and neither does this.
+    where p.is_visible
 """
 
 VARIANTS = """
@@ -244,6 +247,9 @@ async def collect() -> dict:
     catalogue = []
     for product in products:
         kids = sorted(by_product.get(product["id"], []), key=lambda v: v["title"])
+        if not kids:
+            # A family with nothing in it is a name and no prices: nothing to compare.
+            continue
         prices = [o["price"] for v in kids for o in v["offers"] if o["price"] is not None]
         shops = {o["shop"] for v in kids for o in v["offers"]}
         product |= {

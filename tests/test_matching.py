@@ -1963,6 +1963,104 @@ def test_an_entry_named_after_a_reading_that_changed_is_rebuilt(client):
     assert entry["model"] == "iPhone 15"
 
 
+def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
+    """A rename used to stop at the entry: `Galaxy S26 S942 5G Dual Sim` became
+    `Galaxy S26` and stayed filed under the product the old name had made, so the
+    storefront card kept the spec sheet as its heading. 366 entries sat like that."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15 12",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="S-1",
+    )
+    variant_id = promote(client, token, offer)["variant_id"]
+    before = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    old_family = before["product_id"]
+
+    ingest(
+        client,
+        token,
+        source["id"],
+        {
+            "external_id": "S-1",
+            "market_code": "LV",
+            "payload": {
+                "name": "Apple iPhone 15 256 GB black",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+        },
+    )
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert report["renamed"] == 1
+    assert report["rehomed"] == 1
+
+    after = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    assert after["product_id"] != old_family
+    family = client.get(f"/api/admin/products/{after['product_id']}", headers=auth(token)).json()
+    assert family["model"] == "iPhone 15"
+    # The family the old name made is empty now, and hidden rather than deleted.
+    left = client.get(f"/api/admin/products/{old_family}", headers=auth(token)).json()
+    assert left["is_visible"] is False
+
+    # Nothing left to do: the second pass finds the name right and the family right.
+    again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert (again["found"], again["rehomed"], again["hidden"]) == (0, 0, 0)
+
+
+def test_a_name_nobody_reads_gives_way_even_where_the_readers_disagree(client):
+    """`A57` and `Galaxy A57 5G` disagree about a suffix, and the entry stayed named
+    `Galaxy A57 A576 5G Dual Sim` — a name neither of them reads. Any reading beats a
+    spec sheet: the most-read one wins, ties to the shorter."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    def listing(external_id, model):
+        return {
+            "external_id": external_id,
+            "market_code": "LV",
+            "payload": {
+                "name": "Apple iPhone 15 256 GB black",
+                "brand": "Apple",
+                "model": model,
+                "ean": "4006381333931",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+        }
+
+    first = offer_from(
+        client, token, source["id"], listing("U-1", "x")["payload"], external_id="U-1"
+    )
+    variant_id = promote(client, token, first)["variant_id"]
+    ingest(client, token, source["id"], listing("U-1", "iPhone 15 A2846 5G Dual Sim"))
+    second = offer_from(
+        client, token, source["id"], listing("U-2", "x")["payload"], external_id="U-2"
+    )
+    run_on(client, token, second)
+    # The two readings move on and disagree; the entry's name is neither of them.
+    ingest(client, token, source["id"], listing("U-1", "iPhone 15"))
+    ingest(client, token, source["id"], listing("U-2", "iPhone 15 5G"))
+
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert report["found"] == 1
+    entry = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    assert entry["model"] == "iPhone 15"
+
+
 def test_an_entry_two_shops_share_is_left_alone(client):
     """Two shops agreeing on an entry is evidence its name is good enough, and one of them
     disagreeing about a `5G` suffix is not a reason to rename what they share."""
