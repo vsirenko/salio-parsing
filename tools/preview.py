@@ -124,6 +124,14 @@ QUEUED = """
 
 ALIASES = "select alias_normalized, brand_id from brand_aliases"
 
+# How far the thing reaches: every listing collected and every channel collected from. The
+# share these two make is the one number that says whether an evening's work moved anything,
+# and reading it off a page beats running a query to find out.
+REACH = """
+select (select count(*) from offers) as listings,
+       (select count(*) from sources) as shops
+"""
+
 
 def _plain(value: Any) -> Any:
     """JSON does not take a Decimal, and a page built from one fails at the last step."""
@@ -189,6 +197,7 @@ async def collect() -> dict:
         axes = _rows(await session.execute(text(AXES)))
         queued = _rows(await session.execute(text(QUEUED)))
         aliases = _rows(await session.execute(text(ALIASES)))
+        reach = _rows(await session.execute(text(REACH)))[0]
 
     brands: dict[str, set[int]] = defaultdict(set)
     for row in aliases:
@@ -250,7 +259,12 @@ async def collect() -> dict:
             "variants": len(variants),
             "matched": len(offers),
             "queued": len(queued),
-            "shops": len({o["shop"] for o in offers}),
+            # Every shop that has been collected from, not every shop that got a listing
+            # placed. A channel that contributes nothing is the interesting case, and
+            # counting only the ones that worked would hide it.
+            "shops": reach["shops"],
+            "listings": reach["listings"],
+            "share": (100 * len(offers) / reach["listings"]) if reach["listings"] else 0.0,
         },
     }
 
@@ -472,8 +486,9 @@ async def main() -> None:
     page(
         OUT / "index.html",
         "Storefront",
-        f"{totals['products']} products · {totals['variants']} variants ·"
-        f" {totals['matched']} listings placed · {totals['shops']} shops ·"
+        f"<b>{totals['share']:.1f}% placed</b> — {totals['matched']} of"
+        f" {totals['listings']} listings from {totals['shops']} shops ·"
+        f" {totals['products']} products · {totals['variants']} variants ·"
         f" {data['generated_at']} · <a href='unmatched.html'>what did not match</a>",
         {"products": data["products"]},
         STOREFRONT_JS,
@@ -481,13 +496,18 @@ async def main() -> None:
     page(
         OUT / "unmatched.html",
         "Not matched",
-        f"{totals['queued']} listings · {counts} · {data['generated_at']} ·"
+        f"<b>{totals['queued']} of {totals['listings']} listings</b> —"
+        f" {100 - totals['share']:.1f}% of what {totals['shops']} shops published ·"
+        f" {counts} · {data['generated_at']} ·"
         f" <a href='index.html'>back to the storefront</a>",
         {"queued": data["queued"], "why": WHY},
         UNMATCHED_JS,
     )
     print(f"{OUT / 'index.html'}\n{OUT / 'unmatched.html'}")
-    print(f"placed {totals['matched']}, queued {totals['queued']} ({counts})")
+    print(
+        f"placed {totals['matched']} of {totals['listings']} ({totals['share']:.2f}%)"
+        f" from {totals['shops']} shops, queued {totals['queued']} ({counts})"
+    )
     if data["orphans"]:
         print(f"variants with no product: {len(data['orphans'])}")
 
