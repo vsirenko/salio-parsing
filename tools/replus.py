@@ -87,6 +87,12 @@ def is_plus(normalized: str) -> bool:
     return "plus" in normalized
 
 
+def plus_side(model: str, brand: str) -> tuple[str, bool]:
+    """The line a model belongs to, and which side of the plus it is on."""
+    normalized = form(model, brand)
+    return family(normalized), is_plus(normalized)
+
+
 async def rekey(session, catalog: CatalogService) -> Counter:
     report: Counter = Counter()
 
@@ -155,7 +161,13 @@ async def rekey(session, catalog: CatalogService) -> Counter:
     return report
 
 
-async def untangle(session, matching: MatchingService) -> Counter:
+async def untangle(session, matching: MatchingService, side=plus_side) -> Counter:
+    """Move the listings whose entry is another phone of the same line.
+
+    `side` says what a line and a phone are: it maps a model to the line it belongs to and
+    to what tells phones of that line apart — here the plus, in `tools.resibling` any
+    variant word. Two models disagree when their line is the same and that is not.
+    """
     report: Counter = Counter()
     rows = (await session.execute(text(LIVE))).mappings().all()
 
@@ -169,28 +181,21 @@ async def untangle(session, matching: MatchingService) -> Counter:
         if row["mpn"]:
             carrying_mpn[normalize_model(row["mpn"])].append(row)
 
-    def disagrees(row, entry_form: str) -> bool:
+    def disagrees(row, entry: tuple) -> bool:
         if not row["model"]:
             return False
-        read = form(row["model"], row["brand"])
-        return (
-            read != entry_form
-            and family(read) == family(entry_form)
-            and is_plus(read) != is_plus(entry_form)
-        )
+        line, phone = side(row["model"], row["brand"])
+        return line == entry[0] and phone != entry[1]
 
-    def votes_against(carriers: list, entry_form: str) -> bool:
+    def votes_against(carriers: list, entry: tuple) -> bool:
         """Whether the listings carrying an identifier mostly name the other phone."""
-        tally = Counter(
-            is_plus(form(row["model"], row["brand"])) == is_plus(entry_form)
-            for row in carriers
-            if row["model"] and family(form(row["model"], row["brand"])) == family(entry_form)
-        )
+        sides = [side(row["model"], row["brand"]) for row in carriers if row["model"]]
+        tally = Counter(phone == entry[1] for line, phone in sides if line == entry[0])
         return tally[False] > tally[True]
 
     to_redecide: list[tuple[int, int]] = []
     for variant_id, listings in on_entry.items():
-        entry_form = form(listings[0]["entry_model"], listings[0]["brand"])
+        entry_form = side(listings[0]["entry_model"], listings[0]["brand"])
         wrong = [row for row in listings if disagrees(row, entry_form)]
         if not wrong:
             continue
@@ -241,6 +246,9 @@ async def untangle(session, matching: MatchingService) -> Counter:
             outcome = await matching._decide(offer, reading)
         if outcome.matched and outcome.variant_id == was:
             report["stayed: its identifier votes for the entry"] += 1
+            print(
+                f"  stay   offer {offer_id} on v{was} ({reading.model!r}) by {outcome.method.value}"
+            )
             continue
         if outcome.matched:
             report["moved to another entry"] += 1

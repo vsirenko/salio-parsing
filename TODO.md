@@ -535,6 +535,14 @@ and the questions that have to be answered with real data first, are written dow
       22.09.2026: 23 readings changed, none from right to wrong. Left visible rather than
       wrong: bm's `REDMAGIC 11 Air Gaming Phone 5G` (6) and a TTfone title — ZTE/Nubia and
       TTfone need pages.
+- [ ] **33 listings the judge is still sure sit on the wrong entry, none of them a sibling.**
+      Re-asked on 22.09.2026 after `tools.replus` and `tools.resibling`: 75 of the 106 it was
+      sure of before now read as placed right. What is left is held by a barcode, one at a
+      time: S25 FE barcodes on `Galaxy S26 FE` (3), `Armor 26 Ultra` on `Armor 16 Ultra`, a
+      `ZTE V80 Pro` on `Blade`, a Xiaomi 17 on a Samsung `Galaxy S25`, Panasonic entries named
+      with a colour code (`KX-TU160EXB` holding the grey one), Maxcom `SE` entries holding the
+      plain phones, `Enterprise Edition` entries holding listings that do not say so. Each is
+      a merge, a split or an unlink someone decides.
 - [ ] **Ask the judge whether a rule's match names the same model.** Probed over all 8982 live
       matches on 22.09.2026 (title, brand and entry name only, never our parsed model): 315
       flagged at P(same)<0.5, 108 of them the plus misfiles. Of the other 207, P(same)<0.1 held
