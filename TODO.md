@@ -245,6 +245,27 @@ and the questions that have to be answered with real data first, are written dow
       the disagreements that were silent are visible. `variant_merges` exists and nothing
       produces a row in it: two entries that reach the same identity are the same thing, and
       saying so is the point of the table.
+- [x] An eighth channel, `cec-phones` (shop.cec.lv), the smallest here and the most
+      targeted: 92 iPhones from an Apple Premium Reseller in two requests. Its twelve
+      catalogue entries are all configurable and the variants are the offers. It publishes
+      no barcode at all — its schema has no field for one — and that turns out not to
+      matter: its `sku` is Apple's own code and 89 of the 92 were already here, carried by
+      up to four other shops each. The brand is supplied by a rule, because the shop states
+      none in any of a product's 41 fields; the inference is checked rather than assumed,
+      since all 89 known codes are published under Apple elsewhere.
+- [ ] **cec's `Sudraba krāsas` resolves to nothing, and 19 of its 92 are `ambiguous` for
+      want of a colour.** `sudraba` is in the registry and `Sudraba krāsas` — "of silver
+      colour" — is not, so the phrase fails and the matcher finds several variants differing
+      only by colour. Five labels are missing: `Sudraba krāsas` (15 products) and
+      `Lavandas krāsas` (2) are plain Latvian and safe to enter; `Ledāju krāsas` (8),
+      `Night Sky` (4) and `Astromelns` (1) are Apple's marketing and want a photo first.
+      Registry work, not rule work — the words belong in `attribute_value_aliases`.
+- [ ] **bm.market's Apple codes are the first five characters of everybody else's.** It
+      writes `MD1Q4` where the others write `MD1Q4HX/A`, so 46 of its Apple listings cannot
+      match on a part number they in fact share. Apple's first five characters identify the
+      configuration and the suffix the region, so within one market they are the same phone
+      — but that is a matching decision about how much of a part number has to agree, not a
+      reading one, and it wants deciding rather than assuming.
 - [x] A seventh channel, `euronics-phones`, and the first that reads JSON-LD: 319 phones,
       discovery in **one request** — the `?f=` token is protobuf and its sixth field is the
       page, so a token built past the end returns the whole cumulative listing. Barcode

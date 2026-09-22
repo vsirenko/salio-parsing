@@ -8,6 +8,7 @@ here; nothing about the scheduler or the run lifecycle changes.
 from app.features.runs.channels import (
     bigbox,
     bm,
+    cec,
     dateks,
     euronics,
     ksenukai,
@@ -15,4 +16,4 @@ from app.features.runs.channels import (
     rdveikals,
 )
 
-__all__ = ("bigbox", "bm", "dateks", "euronics", "ksenukai", "onea", "rdveikals")
+__all__ = ("bigbox", "bm", "cec", "dateks", "euronics", "ksenukai", "onea", "rdveikals")

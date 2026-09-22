@@ -319,6 +319,7 @@ FINGERPRINTS = {
     "apple-phones-1": "12a9fce3575e",
     "bigbox-4": "c8d0450d4ad8",
     "bm-2": "df8fb9de5bff",
+    "cec-1": "e0252dfe4696",
     "dateks-2": "28ca1e200e23",
     "ksenukai-5": "89aa740d025f",
     "onea-1": "3f30745390d5",

@@ -191,10 +191,28 @@ lifecycle changes.
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |
+| `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
 
 `rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
 module says why its discovery walks the listing rather than the sitemap, and why the brand
 comes out of an analytics block instead of the microdata beside it.
+
+**`cec-phones`** is the smallest channel here and the most targeted: 92 iPhones from an
+Apple Premium Reseller, in two requests. Apple is where this system is thinnest — bm.market
+has 42 barcodes on its 196 Apple products — and this shop publishes **no barcode at all**,
+which turns out not to matter: its `sku` is Apple's own code, and 89 of these 92 are already
+here, carried by up to four other shops each.
+
+- **The products are not the offers; their variants are.** All twelve items in the category
+  are `ConfigurableProduct` and expand into the 92 phones a shopper can buy. Reading the
+  twelve would file a whole family as one product.
+- **The brand is supplied, because the shop states none.** Its schema has 41 fields on a
+  product and not one is a maker. The category answers it, and the answer is checked rather
+  than assumed: all 89 codes already here are published under Apple.
+- **The refurbished section is deliberately left out.** Its four products are used phones,
+  and nothing in this system distinguishes condition yet — `offers.condition` exists, every
+  one of the 5442 listings is `new`, and matching and the storefront ignore it. A used
+  iPhone 16 Pro would attach to the variant for a new one and show as its cheapest price.
 
 **`euronics-phones`** is the best-stated source here and the one with the shortest
 ruleset — one rule. Its product page states the brand, the part number, `gtin13` **and the
