@@ -15,6 +15,7 @@ from decimal import Decimal
 SLUG_HEAD = 80
 
 _NOT_SLUG = re.compile(r"[^a-z0-9]+")
+_NOT_MODEL = re.compile(r"[^0-9a-zЀ-ӿ]+")
 
 
 def normalize_model(value: str) -> str:
@@ -24,9 +25,16 @@ def normalize_model(value: str) -> str:
     `WW 90 T554 DAX` are one model written three ways. Everything that is not a letter or a
     digit goes, which also means the form is language-neutral — the point of matching on a
     model rather than on a title.
+
+    Except `+`, which is not a separator: `Galaxy S26+` is not `Galaxy S26`. Dropping it gave
+    the two one form and so one identity key, and listings of the plus phone were already
+    being filed under the plain one when it was found. It is spelled out rather than kept,
+    because makers and shops write `Galaxy S25+` and `Galaxy S25 Plus` for the same phone,
+    and the catalogue had both as separate entries. A maker's name is the same word in
+    every language, so this is structure, not vocabulary.
     """
-    text = unicodedata.normalize("NFKC", value).casefold()
-    return re.sub(r"[^0-9a-zЀ-ӿ]+", "", text)
+    text = unicodedata.normalize("NFKC", value).casefold().replace("+", "plus")
+    return _NOT_MODEL.sub("", text)
 
 
 def slugify(text: str, *, entity_id: int) -> str:

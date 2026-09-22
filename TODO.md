@@ -516,14 +516,16 @@ and the questions that have to be answered with real data first, are written dow
       the eight clean sources on 22.09.2026. A fresh database has no names and the reader
       keeps every shop's own subtraction, which is the state before this was built. The
       seed is re-runnable; the hand-entered rows are not.
-- [ ] **`normalize_model` drops the `+`, so `Galaxy S26` and `Galaxy S26+` share a
-      `model_normalized`.** Twelve pairs in `variants` today, every one of them Samsung:
-      `S25`/`S25+`, `S26`/`S26+`, and the `Fold 8`/`Fold8` spellings that *should* meet. The
-      identity key is computed from that column, so two shops describing the plain and the
-      plus phone completely arrive at the same key and would be merged as one. It has not
-      fired only because their capacities and colours have not lined up yet. The registry's
-      own `normalize_model_name` keeps `+` for exactly this reason; the catalogue's should
-      too, and every identity key recomputed after it does.
+- [ ] **`normalize_model` dropped the `+`, so `Galaxy S26` and `Galaxy S26+` shared a
+      `model_normalized`.** It had already fired, not merely been waiting to: on 22.09.2026
+      111 live matches on 40 entries disagreed with their entry about the plus and about
+      nothing else, 70 of them held by a barcode the entry had learned from an earlier model
+      match. The form now spells `+` out as `plus` (`S25+` = `S25 Plus`, still not `S25`).
+      `tools/replus.py` recomputes every stored form and key and moves the misfiled listings
+      by barcode vote; its dry run ends with 1 merge, 49 rekeyed entries, 76 listings moved,
+      30 promoted into entries of their own and 3 queued. Tick this off once it has run for
+      real. Left after it: the display spelling (`Galaxy S25+` beside `Galaxy S25 Plus` as
+      entry names) is registry work, and so are junk names like `S26+ 5G 256GB`.
 - [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
       Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
       not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals

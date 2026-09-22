@@ -61,6 +61,17 @@ def test_model_normalization_is_language_neutral():
     assert len({normalize_model(f) for f in forms}) == 1
 
 
+def test_a_plus_is_part_of_the_model():
+    # The plain phone and the plus phone are two phones, and one form would give them one
+    # identity key.
+    assert normalize_model("Galaxy S26+") != normalize_model("Galaxy S26")
+    # Written as a sign or as a word, it is the same phone.
+    plus = ["Galaxy S25+", "Galaxy S25 Plus", "GALAXY S25 PLUS", "Galaxy S25 +"]
+    assert len({normalize_model(f) for f in plus}) == 1
+    # Spacing is still noise.
+    assert normalize_model("Galaxy Fold 8") == normalize_model("Galaxy Fold8")
+
+
 def test_a_slug_carries_its_id():
     assert slugify("iPhone 15 Pro 256GB Natural Titanium", entity_id=14237).endswith("-14237")
     # Diacritics survive as their ASCII shape rather than disappearing.

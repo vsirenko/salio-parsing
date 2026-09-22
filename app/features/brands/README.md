@@ -69,8 +69,8 @@ canonical that was a key would tie a reading to a product row that may not exist
 **`normalize_model_name` keeps `+` and nothing else.** Words, casefolded, one space apart,
 every other mark a separator. `+` stays because `Galaxy S26+` is not `Galaxy S26`, and it
 is the one mark that says so. This is deliberately not `catalog.identity.normalize_model`,
-which strips every separator to compare two designations and so drops it — a known cost,
-listed in `TODO.md`.
+which strips every separator to compare two designations; that one keeps the plus as well,
+spelled out, so `S25+` and `S25 Plus` compare equal there while staying two spellings here.
 
 **A name is at most six words**, and `ModelAliasCreate` refuses longer. The bound is what
 makes finding a name cheap — every window of up to six words is looked up, however large

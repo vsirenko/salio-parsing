@@ -110,8 +110,7 @@ def normalize_model_name(value: str) -> str:
 
     Not `catalog.identity.normalize_model`, deliberately. That strips every separator to
     compare two designations, which is right for `WW90T554DAX` against `WW 90 T554 DAX` and
-    wrong here twice over: a title has to be cut into words to find a name in it, and it
-    drops the `+` that makes `Galaxy S26+` a different phone.
+    wrong here: a title has to be cut into words to find a name in it.
 
     Raises when nothing is left, because a blank alias would be found in every title.
     """

@@ -64,6 +64,13 @@ colour and storage would collide.
 - **`model_normalized` strips everything that is not a letter or a digit**, which makes it
   language-neutral. That is the point: a Latvian, Lithuanian and Estonian title share almost
   nothing except the brand and the model.
+- **Except `+`, which becomes `plus`.** Dropped, it gave `Galaxy S26+` and `Galaxy S26` one
+  form and so one identity key, and by the time that was noticed 111 listings on 40 entries
+  were filed under the other phone — first by the model rung, then by the barcodes those
+  entries learned from it. Spelled out rather than kept, because `Galaxy S25+` and `Galaxy
+  S25 Plus` are one phone written two ways. Changing this function changes every stored
+  form: `tools/replus.py` is how the last change was carried through, and the next one needs
+  the same.
 - **A value's type is checked in the service**, because `attributes.value_type` and the
   value columns are in different tables and no constraint spans them. A number stored as
   text would be invisible to every range filter and would silently drop out of the key.
