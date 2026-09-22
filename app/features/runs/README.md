@@ -97,6 +97,27 @@ tick    reap finished workers
 stop    wait for what is running, then reap so each one keeps its own verdict
 ```
 
+**Products are read side by side; the rate is the fetcher's, not the loop's.** The worker
+used to await each product before starting the next, which pinned every run to one slot and
+left the rest idle: a shop of 1400 cards took half an hour to read at a rate that reads it
+in ten minutes. The pool is sized to `FETCH_CONCURRENCY`, because a product usually costs
+one request and more tasks than slots would only queue against the gate. A channel that
+pages its listing does the same for the pages, which matters most on the cheap pass, where
+the listing walk is the entire cost.
+
+**Politeness is two numbers, not one.** `FETCH_CONCURRENCY` is how many requests may be
+open at once; `FETCH_RATE_PER_SECOND` is how many may be started per second, whatever is
+open. They were one number by accident: the delay used to be slept *inside* the semaphore,
+so it held a slot and the real rate was `concurrency / (delay + latency)` — raising one and
+lengthening the other cancelled out, and neither said what it meant. Measured against a live
+shop, four slots and half a second gave 2.2 products a second; the same politeness expressed
+as six open and eight a second gives more than twice that without asking any faster than the
+legacy parser did for years.
+
+A rate of `0` removes the ceiling and leaves concurrency as the only limit. Keep the
+ceiling: it is what protects a shop that suddenly starts answering in fifty milliseconds,
+which concurrency alone does not.
+
 **One process per run**, so a parser that leaks or wedges takes down its own process and
 nothing else. `RUN_TIMEOUT_MINUTES` kills one that stopped answering; without it a hung
 channel would hold its own live-run slot forever.
@@ -142,6 +163,14 @@ that. What a run collected is recorded on the run, which is where somebody would
 **A 401 mid-pass is retried once** through a fresh sign-in. A slow channel can outlive an
 access token, and losing a completed crawl to an expiry would be absurd.
 
+**The snapshot directory belongs to the image, not to the daemon.** Docker seeds a fresh
+named volume from the directory in the image, so a mount point that exists and is owned by
+the application user comes up writable; left to the daemon it is created root-owned and the
+collector fails on every single product with a permission error. That is checked once now,
+before the first request — `SnapshotStore.ensure_writable` — because discovered one product
+at a time it reads as a shop that served 1400 broken cards, which is the wrong thing to go
+and look at.
+
 **A snapshot carries more than bytes.** The URL and, on a marketplace, which trader the
 listing belonged to — facts the crawl had and the page does not state. Without them a
 reparse of a marketplace channel would fail on every item for want of something it already
@@ -155,8 +184,13 @@ lifecycle changes.
 
 | slug | shop | access | decode | products | deterministic |
 |---|---|---|---|---|---|
-| `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 520 | 99.6% |
-| `bigbox-phones` | bigbox.lv | wholesale | private_api | 984 | 98.7% |
+| `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 521 | 100% |
+| `bigbox-phones` | bigbox.lv | wholesale | private_api | 985 | 93.1% |
+| `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
+
+`rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
+module says why its discovery walks the listing rather than the sitemap, and why the brand
+comes out of an analytics block instead of the microdata beside it.
 
 They share 207 barcodes, which is the first thing in this system there has ever been
 anything to match against — and close to what the old corpus showed, where 39.5% of

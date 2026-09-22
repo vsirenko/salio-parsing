@@ -12,7 +12,10 @@ from typing import Any
 from app.features.offers.normalization.rules import CATEGORY, Rule, Ruleset, Vocabulary, register
 
 SLUG = "phones"
-VERSION = "phones-1"
+# Bumped when a rule body changes, not only when a rule is added: the version is
+# what a reparse compares to decide whether a stored reading is stale, so a fix
+# that leaves it alone is a fix that never reaches the rows it was written for.
+VERSION = "phones-4"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -35,9 +38,21 @@ STORAGE_NAMES = ("atmiņas ietilpība", "iekšējā atmiņa", "storage", "intern
 # the same way, and reading it as capacity is the mistake this guards against: a phone
 # listed `12GB/512GB` is twelve of working memory and five hundred and twelve of storage.
 RAM_NAMES = ("ram", "operatīvā")
+# Same stopgap, same reason: nothing resolves an attribute *name* through the registry
+# yet. The values behind it do resolve now, which is the half that mattered.
+COLOR_NAMES = ("krāsa", "color", "colour")
 # Everything converts to megabytes exactly, and nothing has to be a fraction.
 SCALE = {"MB": 1, "GB": 1024, "TB": 1024 * 1024}
+# The largest capacity a phone has ever shipped with. Not a limit on what may be
+# stored — a bound on what a reading may claim, which is what tells a unit that was
+# borrowed from the other half of a pair from one that was really written.
+LARGEST_PHONE_MB = 2 * 1024 * 1024
 _SIZE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s?(TB|GB|MB)\b", re.IGNORECASE)
+# `128/4 GB`, `512/12 GB` — a pair sharing one unit at the end. Both halves are sizes and
+# only the second is spelled as one, so a search for units alone finds the wrong half.
+_SHARED_UNIT = re.compile(
+    r"\b(\d+(?:[.,]\d+)?)\s*/\s*(\d+(?:[.,]\d+)?)\s?(TB|GB|MB)\b", re.IGNORECASE
+)
 
 
 def _storage(
@@ -59,17 +74,63 @@ def _storage(
     return {"identity": {**fields.get("identity", {}), "storage_mb": megabytes}}
 
 
+def _color(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """Colour as the canonical value, from whatever the shop called the field.
+
+    Only from a field. Cutting a colour out of a title is what kept this rule unwritten for
+    as long as it was: across one shop's 1153 titled products the word takes 358 forms, most
+    of them a maker's invention — `Obsidian`, `Glacier`, `Cosmic Orange` — and canonicalising
+    those by guessing splits one product into several, confidently. A shop that states the
+    colour in a field has already done that work, in 37 forms rather than 358.
+
+    Resolved through the vocabulary the caller handed in, never a table this module carries:
+    the spellings are Latvian today and Lithuanian at the next shop, and both belong in
+    `attribute_value_aliases` with their language.
+    """
+    if not vocabulary.colours:
+        return {}
+    for name, value in (fields.get("attributes") or {}).items():
+        if not any(word in name.lower() for word in COLOR_NAMES):
+            continue
+        canonical = vocabulary.colours.get(str(value).strip().casefold())
+        if canonical:
+            return {"identity": {**fields.get("identity", {}), "color": canonical}}
+    return {}
+
+
 def _megabytes(text: str) -> int | None:
     """The largest size in the text, because a title that carries two carries both kinds.
 
-    `Tālrunis Oukitel WP56 5G 12GB/512GB Black` is working memory and then storage, in that
-    order, and taking the first one reads a phone as having half a gigabyte of space. On a
-    phone the built-in capacity is always the larger of the two.
+    On a phone the built-in capacity is always the larger of the two, and that is the whole
+    rule — it holds whichever order a shop writes them in, which matters because they do not
+    agree. One writes `12GB/512GB`, working memory first; another writes `128/4 GB`, capacity
+    first and with a single unit at the end. Taking the first number read the second shop's
+    phones as having four gigabytes of space; searching only for numbers that carry a unit
+    read them the same way, because in `128/4 GB` only the `4` has one.
+
+    Lending the unit to the unspelled half is right far more often than not, and absurd the
+    rest of the time: `12/1 TB` is twelve *gigabytes* of memory beside a terabyte of storage,
+    and read as written it claims twelve terabytes. So a reading larger than any phone has
+    ever shipped with is discarded — which settles it without this rule having to know which
+    half of a pair is which.
+
+    Found by disagreement rather than by inspection, twice over: two shops selling the same
+    barcode reported 128 GB and 4 GB, and a barcode is proof that it is one phone. Fixing
+    that produced the second kind, and the same comparison caught it.
     """
-    found = _SIZE.findall(text)
-    if not found:
-        return None
-    return max(int(float(amount.replace(",", ".")) * SCALE[unit.upper()]) for amount, unit in found)
+    sizes = [_size(amount, unit) for amount, unit in _SIZE.findall(text)]
+    # A pair sharing one unit contributes both of its halves, not just the spelled one.
+    for first, second, unit in _SHARED_UNIT.findall(text):
+        sizes += [_size(first, unit), _size(second, unit)]
+
+    believable = [size for size in sizes if size <= LARGEST_PHONE_MB]
+    return max(believable) if believable else None
+
+
+def _size(amount: str, unit: str) -> int:
+    return int(float(amount.replace(",", ".")) * SCALE[unit.upper()])
 
 
 RULESET = register(
@@ -92,8 +153,11 @@ RULESET = register(
                     " a shop writes the unit into the attribute name (`Iekšējā atmiņa, GB`)"
                     " so names match as fragments, and working memory is named the same way"
                     " by both shops, so anything mentioning RAM is refused outright. In a"
-                    " title the largest size wins — `12GB/512GB` is RAM and then storage,"
-                    " and taking the first read a phone as having half a gigabyte."
+                    " title the largest size wins, whichever order a shop writes the pair"
+                    " in: one writes `12GB/512GB`, RAM first, and another `128/4 GB`,"
+                    " capacity first with a single unit at the end. Taking the first read"
+                    " a phone as having half a gigabyte; reading only the half that"
+                    " carries a unit read another as having four."
                 ),
                 body=_storage,
             ),
@@ -101,17 +165,25 @@ RULESET = register(
                 id="phones-color",
                 layer=CATEGORY,
                 why=(
-                    "Colour is the other axis that splits a phone into variants, and it"
-                    " cannot be read here yet. Across 520 products the word before `krās`"
-                    " takes 61 distinct forms, and they are three different problems wearing"
-                    " one shape: Latvian declension (`melns` and `melna` are one colour),"
-                    " plain language (`black` is the same colour again), and the maker's own"
-                    " marketing (`obsidian`, `glacier`, `shadow`). Only the first is a"
-                    " category's business. The second needs a language table, and the third"
-                    " is brand knowledge — Google is the one who decided obsidian means"
-                    " black. Declared unwritten rather than half-written: a colour that is"
-                    " canonicalised wrongly splits one product into several with confidence."
+                    "The other axis that splits a phone into variants, and the one that"
+                    " stayed unwritten longest. Cut out of a title the word takes 358 forms"
+                    " across one shop's 1153 titled products, and they are three problems"
+                    " wearing one shape: Latvian declension, plain language, and the maker's"
+                    " own marketing — `Obsidian`, `Glacier`, `Cosmic Orange`. Only the first"
+                    " is a category's business, and canonicalising the third by guessing"
+                    " splits one product into several with confidence."
+                    "\n\n"
+                    "What unblocked it was a shop that states colour in a field rather than"
+                    " leaving it in a title: 99.9% of its 1396 phones, in 37 forms rather"
+                    " than 358, already reduced to real colours by whoever runs the shop."
+                    " So this reads a field and never a title, and resolves it through the"
+                    " registry the caller loaded — 37 canonical values with their Latvian"
+                    " and plain-English spellings. The marketing names are deliberately not"
+                    " in it: the pairs that could be learned from that one shop include"
+                    " `evening blue` meaning grey and `desert titanium` meaning gold, which"
+                    " is the confident wrong answer this rule existed to avoid."
                 ),
+                body=_color,
             ),
         ),
     ),

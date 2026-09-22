@@ -99,10 +99,15 @@ QUEUED = """
     join offers o on o.id = q.offer_id
     join sellers s on s.id = o.seller_id
     join shops sh on sh.id = s.shop_id
+    -- The newest reading from a pass that carried the catalogue, which is the same rule
+    -- the matcher uses. A cheap pass observes a price and nothing else, and taking its
+    -- reading as the current one made 792 listings that do carry a barcode report as
+    -- carrying none.
     left join lateral (
         select r.id, r.offer_id, r.source_id
         from raw_offers r
-        where r.offer_id = o.id
+        left join runs ru on ru.id = r.run_id
+        where r.offer_id = o.id and (ru.kind is null or ru.kind <> 'quick')
         order by r.fetched_at desc, r.id desc
         limit 1
     ) raw on true
@@ -325,6 +330,18 @@ SHELL = """<!doctype html>
 const DATA = JSON.parse(document.getElementById("data").textContent);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// Three states, not two. Most of one shop's catalogue is `preorder` — the thing can be
+// bought today and arrives in a fortnight — and drawing it the same grey as `out_of_stock`
+// read as a shop with nothing on its shelves.
+const STOCK = {
+  in_stock: ["yes", "in stock"],
+  preorder: ["warn", "to order"],
+  out_of_stock: ["none", "out of stock"],
+};
+const stock = s => {
+  const [cls, label] = STOCK[s] || ["axes", s || "unknown"];
+  return `<span class="${esc(cls)}">${esc(label)}</span>`;
+};
 const money = (n, c) => n == null ? "—" : n.toFixed(2) + " " + (c === "EUR" ? "\\u20ac" : c || "");
 __SCRIPT__
 </script>
@@ -370,8 +387,7 @@ function card(p) {
         <tr>
           <td>${esc(o.shop)}</td>
           <td class="num">${money(o.price, o.currency_code)}</td>
-          <td>${o.availability === "in_stock" ? '<span class="yes">in stock</span>'
-              : `<span class="axes">${esc(o.availability)}</span>`}</td>
+          <td>${stock(o.availability)}</td>
           <td><span class="tag">${esc(o.method)}</span></td>
           <td>${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">open</a>` : ""}</td>
         </tr>`).join("")}</tbody></table>

@@ -33,8 +33,9 @@ rule writes that key into the reading as `_line`, and every key starting with an
 is working state that `read` drops before anything is stored.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 GENERIC, CATEGORY, SOURCE, BRAND, PRODUCT, FINISH = 10, 20, 30, 40, 50, 90
@@ -56,6 +57,11 @@ class Vocabulary:
     # What shops call this category, normalized: `telefons`, `viedtālrunis`, `mobilais`.
     # A shop puts one at the front of a title and it carries no model.
     category_names: frozenset[str] = frozenset()
+    # Every spelling of a colour that resolves, lowercased, to the canonical value it means:
+    # `melna` and `black` both to `black`. One map for every language the registry holds,
+    # because a rule reading a Latvian field and a rule reading an English name are both
+    # asking the same question and neither should carry the answer.
+    colours: Mapping[str, str] = MappingProxyType({})
 
 
 # What a rule is handed: the raw payload, the reading so far, and the words it was given.

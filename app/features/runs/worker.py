@@ -24,7 +24,7 @@ from app.features.runs.channel import Channel, Listing
 from app.features.runs.client import Collector, CollectorError
 from app.features.runs.fetching import Fetcher
 from app.features.runs.schemas import Job, Kind, RunResult
-from app.features.runs.snapshots import SnapshotStore
+from app.features.runs.snapshots import SnapshotStore, SnapshotStoreError
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +51,14 @@ async def collect(
         )
 
     store = store or SnapshotStore()
+    if job.kind is not Kind.REPARSE:
+        # Before a single request: a store that cannot be written to would otherwise be
+        # discovered once per product, and a run of 1400 permission errors reads as a shop
+        # that served nothing rather than as a volume the daemon created root-owned.
+        try:
+            store.ensure_writable(job.source_slug)
+        except SnapshotStoreError as error:
+            return RunResult(items_seen=0, items_ingested=0, error=str(error))
 
     if job.kind is Kind.REPARSE:
         # No network at all. That is the whole point: a parser is judged against the bytes
@@ -140,37 +148,88 @@ async def _read_all(
     One product failing is one product failing. A run that threw away eight hundred
     listings because the nine hundredth had a broken price would be reporting the shop as
     closed, which is exactly what the contract exists to prevent.
-    """
-    payloads: list[dict] = []
-    failed = 0
 
+    **Products are read side by side, and the shop still sees one polite crawler.** The
+    throttle is not here: `Fetcher` bounds how many requests are open at once and how many
+    are started per second, so the rate is the same whether one product is in flight or a
+    hundred. What was here instead was a loop that awaited each product before starting the
+    next, which pinned the whole run to one slot and left the others idle — a shop of 1400
+    cards took half an hour to read at a rate that reads it in ten minutes. The pool is
+    sized to the fetcher's own concurrency, because a product usually costs one request and
+    more tasks than slots would only queue against the gate.
+    """
+    if job.kind is Kind.QUICK:
+        # A cheap pass opens nothing: the listing already carried the facts, so there is no
+        # waiting to overlap and a pool would be machinery for its own sake.
+        return _read_cards(job, channel, listings)
+
+    # Positional, so the order a run reports is the order the shop listed in however the
+    # requests happen to finish. A run that shuffles its own output cannot be diffed
+    # against the one before it.
+    observations: list[dict | None] = [None] * len(listings)
+    failures = 0
+    room = asyncio.Semaphore(max(1, settings.fetch_concurrency))
+
+    async def read_one(position: int, listing: Listing) -> None:
+        nonlocal failures
+        async with room:
+            try:
+                observations[position] = await _observe(job, channel, fetcher, store, listing)
+            except Exception as error:  # noqa: BLE001 - a parser may raise anything at all
+                failures += 1
+                log.warning("run %d: %s: %s", job.run_id, listing.external_id, error)
+
+    await asyncio.gather(
+        *(read_one(position, listing) for position, listing in enumerate(listings))
+    )
+    return [seen for seen in observations if seen is not None], failures
+
+
+async def _observe(
+    job: Job,
+    channel: Channel,
+    fetcher: Fetcher,
+    store: SnapshotStore,
+    listing: Listing,
+) -> dict:
+    """One product: its requests, its snapshot, its fields."""
+    snapshot = await channel.fetch(fetcher, listing)
+    # Filled here rather than in every channel: the worker has the listing and a parser
+    # should not have to remember to carry it.
+    snapshot = replace(
+        snapshot,
+        url=snapshot.url or listing.url,
+        seller_external_id=snapshot.seller_external_id or listing.seller_external_id,
+    )
+    try:
+        fields = channel.parse(snapshot)
+    except Exception:
+        # Kept apart so the parser can be fixed against the exact bytes that broke it,
+        # which is a five-minute job rather than another crawl.
+        store.save(job.source_slug, snapshot, failed=True)
+        raise
+
+    store.save(job.source_slug, snapshot)
+    store.forget_failure(job.source_slug, listing.external_id)
+    return {
+        "external_id": listing.external_id,
+        "payload": fields,
+        "url": listing.url,
+        "seller_external_id": listing.seller_external_id,
+    }
+
+
+def _read_cards(job: Job, channel: Channel, listings: list[Listing]) -> tuple[list[dict], int]:
+    """What the listing already told us, for a pass that opens no cards."""
+    payloads: list[dict] = []
+    failures = 0
     for listing in listings:
         try:
-            if job.kind is Kind.QUICK:
-                fields = channel.read_listing(listing)
-            else:
-                snapshot = await channel.fetch(fetcher, listing)
-                # Filled here rather than in every channel: the worker has the listing and
-                # a parser should not have to remember to carry it.
-                snapshot = replace(
-                    snapshot,
-                    url=snapshot.url or listing.url,
-                    seller_external_id=snapshot.seller_external_id or listing.seller_external_id,
-                )
-                try:
-                    fields = channel.parse(snapshot)
-                except Exception:
-                    # Kept apart so the parser can be fixed against the exact bytes that
-                    # broke it, which is a five-minute job rather than another crawl.
-                    store.save(job.source_slug, snapshot, failed=True)
-                    raise
-                store.save(job.source_slug, snapshot)
-                store.forget_failure(job.source_slug, listing.external_id)
+            fields = channel.read_listing(listing)
         except Exception as error:  # noqa: BLE001 - a parser may raise anything at all
-            failed += 1
+            failures += 1
             log.warning("run %d: %s: %s", job.run_id, listing.external_id, error)
             continue
-
         payloads.append(
             {
                 "external_id": listing.external_id,
@@ -179,8 +238,7 @@ async def _read_all(
                 "seller_external_id": listing.seller_external_id,
             }
         )
-
-    return payloads, failed
+    return payloads, failures
 
 
 async def _hand_over(

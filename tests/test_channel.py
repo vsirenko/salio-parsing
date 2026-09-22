@@ -77,7 +77,7 @@ def shop(tmp_path):
             made,
             served,
             lambda: Fetcher(
-                delay=0, client=httpx2.AsyncClient(transport=httpx2.MockTransport(serve))
+                rate=0, client=httpx2.AsyncClient(transport=httpx2.MockTransport(serve))
             ),
             SnapshotStore(tmp_path),
         )
@@ -239,7 +239,7 @@ def test_a_shop_that_stays_down_costs_those_products(client, event_loop, shop, c
             job,
             collector,
             fetcher=Fetcher(
-                delay=0,
+                rate=0,
                 retries=1,
                 client=httpx2.AsyncClient(transport=httpx2.MockTransport(refuse)),
             ),
@@ -267,7 +267,7 @@ def test_discovery_failing_fails_the_run(client, event_loop, shop, collector):
             job,
             collector,
             fetcher=Fetcher(
-                delay=0,
+                rate=0,
                 retries=0,
                 client=httpx2.AsyncClient(transport=httpx2.MockTransport(refuse)),
             ),
@@ -428,3 +428,45 @@ def test_an_identifier_cannot_escape_its_directory(tmp_path):
 def test_registering_the_same_channel_twice_is_refused(shop):
     with pytest.raises(ValueError, match="already registered"):
         register(Shop("rd-site"))
+
+
+# --- how fast a shop is asked ---
+
+
+def test_the_rate_is_a_ceiling_on_starts_not_a_tax_on_slots(event_loop):
+    """The two limits are separate on purpose. Sleeping inside the concurrency gate made
+    the real rate `concurrency / (delay + latency)`, so raising one and lengthening the
+    other cancelled out and neither number said what it meant."""
+    import asyncio
+    import time
+
+    from app.features.runs.fetching import Rate
+
+    limiter = Rate(20)  # twenty a second, so ten starts span about half a second
+
+    async def ten() -> float:
+        began = time.perf_counter()
+        await asyncio.gather(*(limiter.wait() for _ in range(10)))
+        return time.perf_counter() - began
+
+    took = event_loop.run_until_complete(ten())
+    # Spaced rather than bursty: ten starts cannot all happen at once.
+    assert took > 0.3, "the ceiling did not hold"
+    # And jittered rather than exact, so a run is not a metronome.
+    assert took < 0.9, "the ceiling is spacing more than it was asked to"
+
+
+def test_no_rate_means_concurrency_is_the_only_limit(event_loop):
+    import asyncio
+    import time
+
+    from app.features.runs.fetching import Rate
+
+    limiter = Rate(0)
+
+    async def many() -> float:
+        began = time.perf_counter()
+        await asyncio.gather(*(limiter.wait() for _ in range(100)))
+        return time.perf_counter() - began
+
+    assert event_loop.run_until_complete(many()) < 0.05

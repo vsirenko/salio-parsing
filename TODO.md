@@ -187,6 +187,54 @@ and the questions that have to be answered with real data first, are written dow
       barcode was tried, missed and dropped — the same work redone every pass. 492 barcodes
       learned, shared barcodes on a variant 119 → 207, the barcode rung 728 → 846 matches,
       variants present in both shops 134 → 173, products 100 → 129.
+- [x] A third channel, `rdveikals-phones`, and the first that reads markup and the first
+      with a cheap pass. 1394 phones, barcode on 10/10 of a live sample, colour as a field
+      rather than a guess. Discovery is the listing, not the sitemap: walked the same
+      afternoon the listing held 1400 and the sitemap 1382, neither contained the other, and
+      every sitemap-only product sampled answered 404.
+- [x] The collector read products one at a time. `Fetcher` had a semaphore for four and the
+      worker awaited each product before starting the next, so three slots were always idle:
+      1394 cards took 32 minutes at a rate that reads them in 10. Listing pages were serial
+      too — 160 s, now 62 s.
+- [x] The snapshot volume came up root-owned and the container runs as uid 1000, so every
+      product failed to store and a run read as a shop that served nothing. Fixed in the
+      `Dockerfile`, and `SnapshotStore.ensure_writable` now says so once, before the first
+      request, instead of 1394 times.
+- [x] The request rate is two settings that say what they are: `FETCH_CONCURRENCY` bounds
+      how many requests are open, `FETCH_RATE_PER_SECOND` how many start per second. The
+      delay used to sleep inside the semaphore, so the real rate was
+      `concurrency / (delay + latency)` and the two knobs cancelled each other. Measured on
+      a live shop: 2.23 products a second before, 6.31 after — a full pass of 1400 went from
+      10.4 minutes to 3.7, faster than the legacy parser's documented 4.5.
+- [x] Rules for `rdveikals-phones`. The model comes out of the name its analytics block
+      records (`Kingkong Power 5 6/ 128GB Black`), cut at the first capacity: `model 0 →
+      82.6%`. `Viedtālruņa modelis` is a line, not a model — `Google Pixel` on 27 phones —
+      so it goes to `_line` like bigbox's. Stock on the cheap pass is read from the delivery
+      estimate, measured against the pages: hours or minutes was `InStock` on 431 of 431.
+- [x] A cheap pass no longer erases a catalogue reading. Whatever asks what a listing *is*
+      reads the newest reading from a pass that carried the catalogue.
+- [x] A guard against a rule body changing under an unchanged version, which had silently
+      swallowed three fixes in one afternoon.
+- [ ] **Two shops disagree about three barcodes.** BigBox says `Iekšējā atmiņa, GB: 512GB`
+      for a phone whose own title reads `4/128GB`, and lists 256 GB and 64 GB where
+      rdveikals lists 128 GB and 256 GB for the same barcodes. We read the param over the
+      title, which is right, and the shop is simply wrong. Three of 867 variants. Nothing to
+      fix in the reader — but a disagreement on an identity axis under one barcode is worth
+      surfacing rather than silently averaging.
+- [ ] **243 rdveikals listings read no model**, every one a feature phone or a desk phone
+      whose name carries no capacity to cut at (`GL695 Black`). The colour is there as a
+      field on 99.9% and would settle them — which is the colour registry, below.
+- [ ] **`rdveikals-color` is declared and unwritten, and it is now the cheapest it will
+      ever be.** This shop states colour as a field on 99.9% of its phones in 37 forms,
+      against the 61 a title yields. It is the missing identity axis, and the values are
+      Latvian — so the work is `attribute_value_aliases` rows with a language, not a rule.
+- [ ] **50 brand strings from rdveikals resolve to nothing.** Up from 4: a new shop brings
+      new spellings, which is the brand registry's ordinary work.
+
+- [ ] **`cron_full` and `cron_quick` are still null on all three channels**, so the
+      scheduler has never started a run by itself and no channel has run twice. Without a
+      second pass there is no price history, and `max_drop_pct` has nothing to compare
+      against.
 - [ ] **Nothing fills a product's own fields.** It gets a brand, a category and a model, and
       its title is composed from those. A description, an image and a manufacturer URL are
       what a card actually shows, and none of them are set.

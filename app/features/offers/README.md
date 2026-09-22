@@ -193,6 +193,22 @@ is also what a candidate queue would be filled from.
   like it did nothing. The stored `ruleset_version` is now compared before the short circuit
   is trusted, and a row is written only when it differs; a pass that changed nothing still
   writes nothing.
+- **A reading from a cheap pass is a price, not an identity.** `delivers_quick` is a
+  declaration that a pass carries the price and the stock flag and nothing else, so its
+  reading has no barcode, no part number and no model. Taken as the current reading it
+  erases what the expensive pass collected: a shop went from 1393 of 1396 products carrying
+  a barcode to none, and every one of them stopped matching, because a two-minute price
+  refresh had run after the four-minute catalogue pass. Whatever asks "what is this listing"
+  — the matcher, and the tool that draws the queue — reads the newest reading **from a pass
+  that carried the catalogue**. The price is not lost by passing over it: it is on the offer
+  row, and updating that row is what the cheap pass is for.
+- **A rule body that changes without its version changing is a fix that reaches nothing.**
+  The version is what a re-read compares to decide whether a stored reading is stale, so
+  editing a rule and leaving `phones-2` alone means the reparse keeps every row and the rule
+  looks broken. This cost three rounds of confusion in one afternoon, so
+  `tests/test_normalization_layers.py` fingerprints each ruleset's code — bodies, helpers,
+  regexes and bounds, but not prose — and fails naming the ruleset whose version has to go
+  up. Bump the version and the fingerprint in the same commit.
 - **Payload keys in the ruleset must be written in lower case**, and an assertion at import
   enforces it. They are matched against a lowered payload, so a key with a capital never
   matches anything — which is what silently happened to `currencyId`.

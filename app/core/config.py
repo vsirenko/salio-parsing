@@ -66,8 +66,23 @@ class Settings(BaseSettings):
     # --- Fetching ---
     # A crawler that hammers a shop gets blocked, and a blocked channel produces nothing
     # until somebody notices — which is slower than crawling slowly.
-    fetch_concurrency: int = Field(default=4, ge=1, le=32)
-    fetch_delay_seconds: float = Field(default=0.5, ge=0.0, le=60.0)
+    #
+    # Two limits, because they answer two questions and multiplying them together is how a
+    # polite crawler becomes a slow one without anyone deciding to. The first is how many
+    # requests may be open at once; the second is how many may be started per second,
+    # whatever is open.
+    #
+    # Eight and eight, measured rather than guessed. The legacy parser ran six to eight
+    # threads with no spacing at all against these same shops for years; at the roughly
+    # 0.9 s a product page takes, eight open connections would reach nearly nine requests a
+    # second, so here the ceiling is what actually binds — which is the point of having
+    # one. Measured on a live shop: 5.1 products a second at six slots, and the ceiling
+    # holds the eighth slot to 8. A full pass of 1400 products is about three minutes.
+    fetch_concurrency: int = Field(default=8, ge=1, le=32)
+    # 0 disables the ceiling and leaves concurrency as the only limit. Do not: it is what
+    # protects a shop that starts answering in fifty milliseconds, which concurrency alone
+    # does not.
+    fetch_rate_per_second: float = Field(default=8.0, ge=0.0, le=200.0)
     fetch_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     fetch_retries: int = Field(default=3, ge=0, le=10)
     fetch_user_agent: str = "salio-parsing/0.1 (+https://example.com/bot)"

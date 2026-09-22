@@ -1,0 +1,165 @@
+"""Reading what rdveikals.lv's pages hand over.
+
+Written against 1396 real phones collected on 22.09.2026. What generic finds here is
+already most of it — the barcode is under `ean`, the price and the stock word are where it
+looks — so this module exists for the two things it cannot know: where the model is, and
+that the field the shop calls a model is not one.
+"""
+
+import re
+from typing import Any
+
+from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
+
+SLUG = "rdveikals-phones"
+VERSION = "rdveikals-4"
+
+# `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
+SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
+# `16/ 512GB` writes the working memory and the capacity as one and only the second half
+# carries a unit, so cutting at the unit leaves `16/` behind, on the model.
+_RAM_PREFIX = re.compile(r"\s*\d+\s*/\s*$")
+_TRAILING = re.compile(r"[\s,/]+$")
+# `(paraugs)`, `(ENG)`, `(no charger)`, `(without charger)` — what the shop adds after
+# the colour, and what would otherwise hide it.
+_MARGINALIA = re.compile(r"\s*\([^)]*\)\s*$")
+
+# The shop's own name for the family. Labelled by the site as `Viedtālruņa modelis`.
+LINE_KEY = "Kopējie parametri / Viedtālruņa modelis"
+
+# How soon the shop says it could hand the thing over: `15min`, `4hour`, `10day`.
+_HOURS_OR_LESS = re.compile(r"^\d+(?:min|hour)$", re.IGNORECASE)
+_DAYS = re.compile(r"^\d+day$", re.IGNORECASE)
+
+
+def _model(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The model, cut out of the name the shop's own analytics records.
+
+    `name` is `MODEL RAM/CAPACITY COLOUR` with the brand and the word for the category
+    already off the front — which is why this rule is three lines where the same job on a
+    shop that only publishes a title takes a vocabulary of Latvian words to do.
+    """
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return {}
+
+    found = SIZE.search(name)
+    if found:
+        model = _TRAILING.sub("", _RAM_PREFIX.sub("", name[: found.start()])).strip()
+        return {"model": model[:200]} if model else {}
+
+    # No capacity to cut at: a feature phone or a desk phone, where the colour runs into
+    # the name — `GL695 Black`. Cutting the colour off instead needs to know the word is a
+    # colour, which is what the registry is for; 223 of the 241 such names on this shop end
+    # in one. Without the vocabulary this stays a visible gap rather than a guess, because
+    # dropping a last word that is not a colour renames the phone.
+    model = _without_colour(name, vocabulary)
+    return {"model": model[:200]} if model else {}
+
+
+def _without_colour(name: str, vocabulary: Vocabulary) -> str:
+    """The name with a trailing colour taken off, or nothing if it does not end in one.
+
+    Two words before one, because `Sand Dune` and `Deep Blue` are colours the registry
+    knows as a pair. What follows the colour is the shop's own marginalia — `(paraugs)`,
+    `(ENG)`, `(no charger)` — and is dropped first so that it does not hide the colour
+    behind it.
+    """
+    if not vocabulary.colours:
+        return ""
+    cleaned = _MARGINALIA.sub("", name).strip(" ,/")
+    words = cleaned.split()
+    for take in (2, 1):
+        if len(words) > take and " ".join(words[-take:]).casefold() in vocabulary.colours:
+            return _TRAILING.sub("", " ".join(words[:-take])).strip()
+    return ""
+
+
+def _availability(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """Stock from the delivery estimate, for the pass that never opens a product page.
+
+    Only when nothing better is there. A product page states the answer outright and
+    generic reads it; this fires on the cheap pass, whose card carries no stock word at all
+    and whose listings were therefore all coming back `unknown` — a channel declaring it
+    delivers availability and delivering none.
+    """
+    if fields.get("availability") not in (None, "unknown"):
+        return {}
+    code = str(payload.get("delivery_code") or "").strip()
+    if _HOURS_OR_LESS.match(code):
+        return {"availability": "in_stock"}
+    if _DAYS.match(code):
+        return {"availability": "preorder"}
+    return {}
+
+
+def _line(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    line = (payload.get("specs") or {}).get(LINE_KEY)
+    return {"_line": str(line).strip()} if line else {}
+
+
+RULESET = register(
+    SOURCE,
+    SLUG,
+    Ruleset(
+        version=VERSION,
+        rules=(
+            Rule(
+                id="rdveikals-model-from-name",
+                layer=SOURCE,
+                why=(
+                    "This shop states no model in any field, so none of its 1396 listings"
+                    " could start a catalogue entry — 793 of them sat in the queue carrying"
+                    " a barcode nobody else had. What it does publish is the name its own"
+                    " analytics block records, `Kingkong Power 5 6/ 128GB Black`, which is"
+                    " the model, the configuration and the colour in that order with the"
+                    " brand already removed. Cutting at the first capacity leaves the model"
+                    " and takes the colour with it. Measured on all 1396: 1153 (82.6%) carry"
+                    " a capacity to cut at. The other 243 have none, and every one is a"
+                    " feature phone or a desk phone where the colour runs into the name"
+                    " (`GL695 Black`); they are left alone rather than filed as one product"
+                    " per colour, and they still match by barcode."
+                ),
+                body=_model,
+            ),
+            Rule(
+                id="rdveikals-line",
+                layer=SOURCE,
+                why=(
+                    "`Viedtālruņa modelis` is on 60.7% of these and is not the model, for"
+                    " the same reason bigbox's `Tālruņa modelis` is not: it holds"
+                    " `Google Pixel` for 27 different phones and `Galaxy S25 Ultra` for 18."
+                    " It is a product **line**, which is what the layer below the brand"
+                    " selects on, so that is where it goes. Matching on it would make one"
+                    " ambiguous pile out of a whole family."
+                ),
+                body=_line,
+            ),
+            Rule(
+                id="rdveikals-availability-from-delivery",
+                layer=SOURCE,
+                why=(
+                    "The cheap pass reads the listing card, which states how soon the shop"
+                    " could hand the thing over and never states whether it has it. All"
+                    " 1394 of its listings came back `unknown`, so the channel's"
+                    " `delivers_quick` promised availability and delivered none. The"
+                    " mapping is measured rather than guessed: on the product pages, where"
+                    " the code and the shop's own word sit side by side, a code in minutes"
+                    " or hours was `InStock` on 431 of 431, with no exception. A code in"
+                    " days was `PreOrder` on 923 and `OutOfStock` on 40 — `10day` appears"
+                    " as both — so the card genuinely cannot tell those two apart, and"
+                    " reading days as `preorder` is wrong for 2.9% of this shop until the"
+                    " full pass corrects them. That is the cheap pass being cheap, and it"
+                    " is better stated than hidden behind `unknown`."
+                ),
+                body=_availability,
+            ),
+        ),
+    ),
+)

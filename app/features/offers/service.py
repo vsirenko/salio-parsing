@@ -2,6 +2,7 @@
 
 from collections import Counter
 from datetime import UTC, datetime
+from types import MappingProxyType
 
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +12,9 @@ from app.core import audit
 from app.core.config import settings
 from app.core.exceptions import AppError, NotFoundError, ValidationError
 from app.db.models import (
+    Attribute,
+    AttributeValue,
+    AttributeValueAlias,
     Category,
     CategoryAlias,
     Market,
@@ -47,6 +51,11 @@ from app.schemas.pagination import Pagination
 # What a run's coverage is counted over. Availability is not here: it has a value for
 # every reading, `unknown` included, so counting it would report 1.00 forever.
 COUNTED = ("title", "brand_raw", "gtin", "mpn", "model", "price")
+
+
+# The registry is looked up by key, and this is the only one a reading needs by name so
+# far. A second would be a reason to carry a set rather than to add another constant.
+COLOR_KEY = "color"
 
 
 def _found(reading: NormalizedOffer | None) -> list[str]:
@@ -451,7 +460,20 @@ class OfferService:
                     CategoryAlias.category_id == source.category_id
                 )
             )
-            self._vocabularies[source.category_id] = Vocabulary(category_names=frozenset(names))
+            # Every spelling of every colour, in every language the registry holds, mapped
+            # to the value it means. Not scoped to the category: a colour is a colour, and
+            # the registry is global for the same reason — mapping `Krāsa` once per category
+            # is how a mapping queue stops draining.
+            colours = await self.session.execute(
+                select(AttributeValueAlias.alias_normalized, AttributeValue.canonical)
+                .join(AttributeValue, AttributeValue.id == AttributeValueAlias.attribute_value_id)
+                .join(Attribute, Attribute.id == AttributeValue.attribute_id)
+                .where(Attribute.key == COLOR_KEY)
+            )
+            self._vocabularies[source.category_id] = Vocabulary(
+                category_names=frozenset(names),
+                colours=MappingProxyType({alias: value for alias, value in colours.all()}),
+            )
         return self._vocabularies[source.category_id]
 
     async def _category_slug(self, source: Source) -> str | None:

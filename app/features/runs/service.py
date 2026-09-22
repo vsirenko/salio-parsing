@@ -67,10 +67,15 @@ class RunService:
         run = await self._run(run_id)
         source = await self._source(run.source_id)
         kind = Kind(run.kind)
+        # Attached, not enabled. `is_enabled` says where a shop is *shown*, and collecting
+        # before opening a market is the point of having the two apart — a storefront that
+        # opens onto an empty catalogue opens onto nothing. Ingestion does not check the
+        # flag either; this used to, so a shop attached and not yet shown collected 1394
+        # products and then had nowhere to put them.
         markets = (
             await self.session.scalars(
                 select(ShopMarket.market_code)
-                .where(ShopMarket.shop_id == source.shop_id, ShopMarket.is_enabled.is_(True))
+                .where(ShopMarket.shop_id == source.shop_id)
                 .order_by(ShopMarket.market_code)
             )
         ).all()

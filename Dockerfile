@@ -15,8 +15,14 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 
-# Run as a non-root user.
-RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+# Run as a non-root user. The snapshot directory is created here and handed over with it:
+# Docker seeds a fresh named volume from the image's own directory, so a mount point that
+# exists and is owned by appuser comes up writable. Left to the daemon it is created root
+# owned, and the collector then fails on every product with a permission error while the
+# run looks like a shop that served nothing.
+RUN useradd --create-home --uid 1000 appuser \
+    && mkdir -p /snapshots \
+    && chown -R appuser:appuser /app /snapshots
 USER appuser
 
 EXPOSE 8000

@@ -11,7 +11,14 @@ import pathlib
 import pytest
 
 from app.features.offers.normalization import barcodes, read, rules_for, version_for
-from app.features.offers.normalization.rules import BRAND, CATEGORY, FINISH, PRODUCT, SOURCE
+from app.features.offers.normalization.rules import (
+    BRAND,
+    CATEGORY,
+    FINISH,
+    PRODUCT,
+    SOURCE,
+    Vocabulary,
+)
 
 KSENUKAI = "ksenukai-phones"
 PHONES = "phones"
@@ -64,24 +71,30 @@ def test_every_rule_says_why_it_exists():
 def test_a_rule_can_be_declared_and_not_written():
     """A gap that is visible beats one that is not.
 
-    Colour splits a phone into variants and takes 61 forms across 520 products — Latvian
-    declension, plain English, and the maker's own marketing — which is three problems and
-    two of them are not a category's business. Half-canonicalising it would split one
-    product into several, confidently.
+    Colour was the first of these and is no longer one: a shop that states it in a field
+    rather than a title made it writable, and the rule now has a body. What is left is the
+    same shape one layer down — Apple's market code could be collapsed, and doing it on the
+    evidence in hand would be wrong on a larger corpus.
     """
-    colour = next(r for r in rules_for(KSENUKAI, category=PHONES) if r.id == "phones-color")
-    assert colour.pending
-    assert "61 distinct forms" in colour.why
+    from app.features.offers.normalization import rules_for
+
+    rules = {r.id: r for r in rules_for(None, category=PHONES, brand="apple")}
+    collapse = rules["apple-collapse-market-code"]
+    assert collapse.pending
+    assert collapse.body is None
+    assert collapse.apply({}, {}, Vocabulary()) == {}, "a pending rule changes nothing"
+    # And the why says what would go wrong, not what the code would do.
+    assert "storage" in collapse.why
 
 
 def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
     assert version_for(KSENUKAI) == "generic-1+ksenukai-1"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-1+ksenukai-1"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-4+ksenukai-1"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-1+ksenukai-1"
+        == "generic-1+phones-4+ksenukai-1"
     )
 
 
@@ -229,7 +242,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-1+apple-phones-1"
+    assert fields["ruleset_version"] == "generic-1+phones-4+apple-phones-1"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -280,3 +293,91 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
     )
     assert collapse.pending
     assert "three configuration prefixes out of sixty-six" in collapse.why
+
+
+# --- a version that is not bumped is a fix that never arrives ---
+
+
+# The fingerprint of each ruleset's rule bodies, as they are. A stored reading is recomputed
+# only when its `ruleset_version` differs, so editing a rule and leaving the version alone
+# is a fix that reaches nothing: the reparse sees the same string, keeps the old row, and
+# the rule looks like it did not work. That happened three times in one afternoon.
+#
+# Changing a body changes the fingerprint and fails the test. Bump the version *and* put the
+# new fingerprint here, in the same commit — two values that must move together, so
+# forgetting one is loud instead of silent.
+FINGERPRINTS = {
+    "phones-4": "e6b091ef5728",
+    "bigbox-2": "5498c9d00fab",
+    "ksenukai-1": "e46bf1d3782f",
+    "rdveikals-4": "f5078e0afc82",
+    "apple-phones-1": "12a9fce3575e",
+    # Nothing but declared rules so far, so there is no code to fingerprint yet.
+    "samsung-phones-0": "pending",
+}
+
+
+def _fingerprints() -> dict[str, str]:
+    """A digest of the code each ruleset is made of — bodies *and* what they call.
+
+    Hashing only the rule bodies was the first attempt and it missed the very change that
+    prompted this: the capacity fix lived in `_megabytes`, a helper the body calls, so the
+    fingerprint never moved. So every function the module defines is hashed, and the
+    module-level constants they read — the regexes and the bounds, which decide as much as
+    the code does.
+
+    Prose is deliberately not hashed. A `why` is written inside the ruleset literal and
+    editing one changes nothing about what a reading comes out as, so it should not force
+    three thousand rows to be recomputed.
+    """
+    import hashlib
+    import inspect
+    import re
+
+    from app.features.offers.normalization.rules import BRANDS, CATEGORIES, PRODUCTS, SOURCES
+
+    seen: dict[str, str] = {}
+    for registry in (CATEGORIES, SOURCES, BRANDS, PRODUCTS):
+        for ruleset in registry.values():
+            bodies = [rule.body for rule in ruleset.rules if rule.body is not None]
+            if not bodies:  # pragma: no cover - a ruleset of nothing but pending rules
+                seen[ruleset.version] = "pending"
+                continue
+
+            module = inspect.getmodule(bodies[0])
+            digest = hashlib.sha256()
+            for name, value in sorted(vars(module).items()):
+                if inspect.isfunction(value) and inspect.getmodule(value) is module:
+                    digest.update(name.encode())
+                    digest.update(inspect.getsource(value).encode())
+                elif isinstance(value, (int, float, str, tuple, frozenset)) and not name.startswith(
+                    "__"
+                ):
+                    digest.update(f"{name}={value!r}".encode())
+                elif isinstance(value, re.Pattern):
+                    digest.update(f"{name}={value.pattern!r}".encode())
+            # The ids say which rules exist; the rest says what they do.
+            digest.update(",".join(sorted(rule.id for rule in ruleset.rules)).encode())
+            seen[ruleset.version] = digest.hexdigest()[:12]
+    return seen
+
+
+def test_a_changed_rule_body_carries_a_changed_version():
+    seen = _fingerprints()
+    stale = {
+        version: (FINGERPRINTS[version], digest)
+        for version, digest in seen.items()
+        if version in FINGERPRINTS and FINGERPRINTS[version] != digest
+    }
+    assert not stale, (
+        "a rule body changed under a version that did not: a reparse would keep every"
+        " stored reading and the change would reach nothing. Bump the version and update"
+        " FINGERPRINTS together.\n"
+        + "\n".join(f"  {v}: recorded {was}, now {now}" for v, (was, now) in stale.items())
+    )
+
+
+def test_every_ruleset_is_fingerprinted():
+    """A new ruleset with no entry here is one the guard above silently ignores."""
+    missing = sorted(set(_fingerprints()) - set(FINGERPRINTS))
+    assert not missing, f"rulesets with no recorded fingerprint: {missing}"

@@ -36,7 +36,7 @@ def index(pages: list[dict], seen: list[dict] | None = None) -> Fetcher:
             seen.append(json.loads(request.content))
         return httpx2.Response(200, json=pages[min(len(seen or []) - 1, len(pages) - 1)])
 
-    return Fetcher(delay=0, client=httpx2.AsyncClient(transport=httpx2.MockTransport(serve)))
+    return Fetcher(rate=0, client=httpx2.AsyncClient(transport=httpx2.MockTransport(serve)))
 
 
 def one(external_id: str = "1102611") -> dict:

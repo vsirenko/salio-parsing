@@ -5,13 +5,14 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import NamedTuple
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.exceptions import AppError, NotFoundError, ValidationError
 from app.db.models import (
     Attribute,
+    AttributeValue,
     AvailabilityEvent,
     Brand,
     BrandAlias,
@@ -22,6 +23,7 @@ from app.db.models import (
     PriceEvent,
     Product,
     RawOffer,
+    Run,
     Source,
     Variant,
     VariantAttribute,
@@ -55,6 +57,7 @@ from app.features.matching.schemas import (
     Reason,
     RunReport,
 )
+from app.features.runs.schemas import Kind
 from app.schemas.pagination import Pagination
 
 # How much each rung is worth. A barcode is proof; a model string that agreed is a guess
@@ -332,11 +335,17 @@ class MatchingService:
         """
         if not variant_ids:
             return IdentityCheck([], [], False)
-        wanted = {
-            key: Decimal(str(value))
-            for key, value in (reading.identity or {}).items()
-            if isinstance(value, int | float | Decimal)
-        }
+        # Numbers and canonical enum values alike. Colour was left out while nothing could
+        # resolve `Melna` to anything, and leaving it out is how two colours of one phone
+        # stayed one catalogue entry.
+        wanted: dict[str, Decimal | str] = {}
+        for key, value in (reading.identity or {}).items():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int | float | Decimal):
+                wanted[key] = Decimal(str(value))
+            elif isinstance(value, str) and value:
+                wanted[key] = value
         if not wanted:
             # The listing carries no axis at all — its category has no rules yet, or it
             # said nothing this reading could use. There is nothing to check with, and
@@ -346,16 +355,22 @@ class MatchingService:
             return IdentityCheck(sorted(variant_ids), [], False)
 
         rows = await self.session.execute(
-            select(VariantAttribute.variant_id, Attribute.key, VariantAttribute.value_num)
-            .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
-            .where(
-                VariantAttribute.variant_id.in_(variant_ids),
-                VariantAttribute.value_num.is_not(None),
+            select(
+                VariantAttribute.variant_id,
+                Attribute.key,
+                VariantAttribute.value_num,
+                AttributeValue.canonical,
             )
+            .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+            .outerjoin(AttributeValue, AttributeValue.id == VariantAttribute.value_id)
+            .where(VariantAttribute.variant_id.in_(variant_ids))
         )
-        held: dict[int, dict[str, Decimal]] = {}
-        for variant_id, key, value in rows.all():
-            held.setdefault(variant_id, {})[key] = value
+        held: dict[int, dict[str, Decimal | str]] = {}
+        for variant_id, key, number, canonical in rows.all():
+            if number is not None:
+                held.setdefault(variant_id, {})[key] = number
+            elif canonical is not None:
+                held.setdefault(variant_id, {})[key] = canonical
 
         agreed: list[int] = []
         unverifiable: list[int] = []
@@ -745,19 +760,40 @@ class MatchingService:
                 # An axis a rule produced and nobody entered in the registry. Not an error:
                 # the registry is filled by a person and the rules run ahead of them.
                 continue
-            if attribute.value_type != "number" or not isinstance(value, int | float | Decimal):
-                # Only numbers for now. An enum axis needs its value resolved to a row in
-                # the registry, and nothing resolves one yet.
+            if attribute.value_type == "number" and isinstance(value, int | float | Decimal):
+                await catalog.set_variant_attribute(
+                    variant_id,
+                    VariantAttributeSet(
+                        attribute_id=attribute.id,
+                        value_num=Decimal(str(value)),
+                        source_kind=SourceKind.PARAM,
+                        origin=ValueOrigin.CONSENSUS,
+                    ),
+                )
                 continue
-            await catalog.set_variant_attribute(
-                variant_id,
-                VariantAttributeSet(
-                    attribute_id=attribute.id,
-                    value_num=Decimal(str(value)),
-                    source_kind=SourceKind.PARAM,
-                    origin=ValueOrigin.CONSENSUS,
-                ),
-            )
+
+            if attribute.value_type == "enum" and isinstance(value, str):
+                # The rule already resolved the shop's word to a canonical one — that is
+                # what `attribute_value_aliases` is for — so this only has to find the row
+                # it named. A value nobody entered is skipped for the same reason a whole
+                # attribute is: the rules run ahead of whoever fills the registry.
+                row = await self.session.scalar(
+                    select(AttributeValue).where(
+                        AttributeValue.attribute_id == attribute.id,
+                        AttributeValue.canonical == value,
+                    )
+                )
+                if row is None:
+                    continue
+                await catalog.set_variant_attribute(
+                    variant_id,
+                    VariantAttributeSet(
+                        attribute_id=attribute.id,
+                        value_id=row.id,
+                        source_kind=SourceKind.PARAM,
+                        origin=ValueOrigin.CONSENSUS,
+                    ),
+                )
 
     async def _source_of(self, offer: Offer) -> Source | None:
         return await self.session.scalar(
@@ -910,10 +946,29 @@ class MatchingService:
         return offer
 
     async def _reading(self, offer_id: int) -> NormalizedOffer | None:
+        """The newest reading from a pass that carried the catalogue — not simply the newest.
+
+        A cheap pass observes a price and a stock flag and nothing else; that is what
+        `delivers_quick` declares and why it is cheap. Its reading therefore has no barcode,
+        no part number and no model, and taken as the current one it erases the identity the
+        expensive pass collected. Measured the hard way: a shop went from 1393 of 1396
+        products carrying a barcode to none, and every one of them stopped matching, because
+        a two-minute price refresh had run after the four-minute catalogue pass.
+
+        Nothing is lost by passing over it. A price is not read from here — it is on the
+        offer row, and updating that row is exactly what the cheap pass is for.
+
+        A reading with no run at all is a sample somebody loaded by hand, which is a full
+        observation and counts.
+        """
         return await self.session.scalar(
             select(NormalizedOffer)
             .join(RawOffer, RawOffer.id == NormalizedOffer.raw_offer_id)
-            .where(RawOffer.offer_id == offer_id)
+            .outerjoin(Run, Run.id == RawOffer.run_id)
+            .where(
+                RawOffer.offer_id == offer_id,
+                or_(Run.id.is_(None), Run.kind != Kind.QUICK.value),
+            )
             .order_by(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc())
             .limit(1)
         )

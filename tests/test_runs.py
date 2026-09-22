@@ -296,3 +296,37 @@ def test_a_quick_cron_needs_a_quick_pass(client):
 def test_runs_require_an_admin_token(client):
     assert client.get("/api/admin/runs").status_code == 401
     assert client.get("/api/admin/runs/due").status_code == 401
+
+
+def test_a_shop_collects_before_its_market_is_opened(client):
+    """`is_enabled` says where a shop is shown, not whether it may be collected. A
+    storefront that opens onto an empty catalogue opens onto nothing, so the data has to be
+    gathered first — and this once cost a full pass of 1394 products that had nowhere to go.
+    """
+    from tests.test_worker import worker_token
+
+    token = admin_token(client)
+    shop, _ = setup_source(client, token)
+    attached = client.put(
+        f"/api/admin/shops/{shop['id']}/markets/LV",
+        headers=auth(token),
+        json={"is_enabled": False},
+    )
+    assert attached.status_code == 200, attached.text
+    assert attached.json()["is_enabled"] is False, "attached, not shown"
+
+    source = post(
+        client,
+        token,
+        f"/api/admin/shops/{shop['id']}/sources",
+        {
+            "slug": "not-open-yet",
+            "access": "retail",
+            "decode": "markup",
+            "delivers_full": FULL,
+            "is_enabled": True,
+        },
+    )
+    run = start(client, token, source["id"], "full")
+    job = client.get(f"/api/worker/runs/{run['id']}", headers=auth(worker_token(client))).json()
+    assert job["market_codes"] == ["LV"], "attached is enough to collect"

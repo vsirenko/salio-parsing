@@ -35,6 +35,13 @@ ALLOWED_CROSS_FEATURE = {
     # question and remembers the answer. Which questions are worth asking is the
     # matcher's business, so the dependency points this way and not back.
     ("matching", "judge"): "the matcher decides what is worth judging; the judge only answers",
+    # Vocabulary, not behaviour: `Kind` is how a run says what its pass was for, and the
+    # matcher has to pass over a cheap pass's reading when deciding what a listing *is*.
+    # A cheap pass carries a price and nothing else, so its reading has no barcode and no
+    # model, and taken as the current one it erases the identity the full pass collected —
+    # which happened, to 1393 of 1396 products at once. The alternative was matching on the
+    # string "quick", which breaks in silence the day the vocabulary moves.
+    ("matching", "runs"): "a reading from a cheap pass is a price, not an identity",
 }
 
 

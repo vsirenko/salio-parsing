@@ -213,3 +213,142 @@ def test_customer_and_admin_tokens_are_unaffected(client):
     customer = tokens(client, {"email": "customer@example.com", "password": "customer-password"})
     assert client.get("/api/auth/me", headers=auth(customer["access_token"])).status_code == 200
     assert client.get("/api/admin/users", headers=auth(customer["access_token"])).status_code == 401
+
+
+# --- reading a shop's products side by side ---
+
+
+def a_slow_shop(count: int, *, in_flight: list[int]):
+    """A channel whose products take time to fetch, and which records how many were at once."""
+    import asyncio
+
+    from app.features.runs.channel import Listing, Part, Snapshot
+
+    class Slow:
+        slug = "slow-shop"
+
+        def __init__(self) -> None:
+            self.now = 0
+
+        async def discover(self, fetcher, job):
+            return [Listing(external_id=str(n), url=f"http://shop/{n}") for n in range(count)]
+
+        async def fetch(self, fetcher, listing):
+            self.now += 1
+            in_flight.append(self.now)
+            try:
+                await asyncio.sleep(0.02)
+            finally:
+                self.now -= 1
+            return Snapshot(
+                external_id=listing.external_id,
+                parts=[Part(role="detail", url=listing.url, status=200, body="{}")],
+            )
+
+        def parse(self, snapshot):
+            return {"id": snapshot.external_id, "price": "1.00", "currency": "EUR"}
+
+        def read_listing(self, listing):
+            return {"id": listing.external_id}
+
+    return Slow()
+
+
+def test_products_are_read_side_by_side(client, event_loop, tmp_path):
+    """The throttle is the fetcher's, not the loop's. Awaiting each product before starting
+    the next pinned a whole run to one slot: 1400 cards took half an hour at a rate that
+    could read them in eight."""
+    from app.core.config import settings
+    from app.features.runs.schemas import Job, Kind
+    from app.features.runs.snapshots import SnapshotStore
+    from app.features.runs.worker import _read_all
+
+    in_flight: list[int] = []
+    channel = a_slow_shop(24, in_flight=in_flight)
+    job = Job(
+        run_id=1,
+        source_id=1,
+        source_slug="slow-shop",
+        kind=Kind.FULL,
+        access="retail",
+        decode="markup",
+        base_url=None,
+        market_codes=["LV"],
+        delivers=["catalogue", "price"],
+    )
+    listings = event_loop.run_until_complete(channel.discover(None, job))
+    payloads, failed = event_loop.run_until_complete(
+        _read_all(job, channel, None, SnapshotStore(tmp_path), listings)
+    )
+
+    assert (len(payloads), failed) == (24, 0)
+    assert max(in_flight) > 1, "products were read one at a time"
+    assert max(in_flight) <= settings.fetch_concurrency, "the pool is the fetcher's own size"
+    # However the requests finish, the run reports in the order the shop listed.
+    assert [p["external_id"] for p in payloads] == [str(n) for n in range(24)]
+
+
+def test_one_product_failing_is_one_product_failing(client, event_loop, tmp_path):
+    """A run that threw away the pass because the ninth card was broken would report the
+    shop as closed."""
+    from app.features.runs.schemas import Job, Kind
+    from app.features.runs.snapshots import SnapshotStore
+    from app.features.runs.worker import _read_all
+
+    channel = a_slow_shop(10, in_flight=[])
+    broken = channel.parse
+
+    def parse(snapshot):
+        if snapshot.external_id in {"3", "7"}:
+            raise ValueError("this card is nonsense")
+        return broken(snapshot)
+
+    channel.parse = parse
+    job = Job(
+        run_id=1,
+        source_id=1,
+        source_slug="slow-shop",
+        kind=Kind.FULL,
+        access="retail",
+        decode="markup",
+        base_url=None,
+        market_codes=["LV"],
+        delivers=["catalogue", "price"],
+    )
+    listings = event_loop.run_until_complete(channel.discover(None, job))
+    payloads, failed = event_loop.run_until_complete(
+        _read_all(job, channel, None, SnapshotStore(tmp_path), listings)
+    )
+
+    assert (len(payloads), failed) == (8, 2)
+    assert {"3", "7"}.isdisjoint(p["external_id"] for p in payloads)
+    # The bytes that broke it are kept apart, which is what makes the fix five minutes.
+    assert set(SnapshotStore(tmp_path).stored("slow-shop", failed=True)) == {"3", "7"}
+
+
+def test_a_store_that_cannot_be_written_to_fails_the_run_once(client, event_loop, tmp_path):
+    """Not a fact about a product — a fact about the machine. Found one product at a time it
+    reads as a shop that served 1400 broken cards, which is the wrong thing to go and look
+    at."""
+    from app.features.runs.schemas import Job, Kind
+    from app.features.runs.snapshots import SnapshotStore
+    from app.features.runs.worker import collect
+
+    shut = tmp_path / "shut"
+    shut.mkdir(mode=0o500)
+    job = Job(
+        run_id=1,
+        source_id=1,
+        # A channel that is registered, so the run gets past that check and stops on this
+        # one. It never reaches the network: the store is refused before the first request.
+        source_slug="rdveikals-phones",
+        kind=Kind.FULL,
+        access="retail",
+        decode="markup",
+        base_url=None,
+        market_codes=["LV"],
+        delivers=["catalogue"],
+    )
+    result = event_loop.run_until_complete(collect(job, collector=None, store=SnapshotStore(shut)))
+    assert result.items_seen == 0
+    assert "cannot write snapshots" in result.error

@@ -43,7 +43,7 @@ def index(pages: list[dict], sent: list[dict] | None = None) -> Fetcher:
         index_of = max(0, len([b for b in (sent or []) if not b["modifiers"]["facets"]]) - 1)
         return httpx2.Response(200, json=pages[min(index_of, len(pages) - 1)])
 
-    return Fetcher(delay=0, client=httpx2.AsyncClient(transport=httpx2.MockTransport(serve)))
+    return Fetcher(rate=0, client=httpx2.AsyncClient(transport=httpx2.MockTransport(serve)))
 
 
 def discover(event_loop, pages=None, sent=None):
@@ -152,7 +152,7 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     full = read(fields, source_slug="bigbox-phones", category="phones")
     assert full["gtin"] == "6941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-1+phones-1+bigbox-2"
+    assert full["ruleset_version"] == "generic-1+phones-4+bigbox-2"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):
@@ -228,3 +228,16 @@ def test_the_names_agree_with_what_the_other_shop_states(event_loop):
     ):
         fields = {**parsed(event_loop), "title": title, "brand": title.split()[1]}
         assert read_it(fields)["model"] == expected, title
+
+
+def test_a_pair_sharing_one_unit_is_two_sizes(event_loop):
+    """`128/4 GB` is capacity then memory with a single unit at the end, and only the `4`
+    is spelled as a size. Reading the spelled half filed a 128 GB phone as having four —
+    found because another shop sold the same barcode and said 128."""
+    from app.features.offers.normalization.categories.phones import _megabytes
+
+    assert _megabytes("Oukitel G1S tālrunis, 128/4 GB, melns") == 128 * 1024
+    assert _megabytes("Samsung Galaxy S25+ 5G tālrunis, 512/12 GB, zils") == 512 * 1024
+    # The other order still reads the same way: the larger of the pair is the capacity.
+    assert _megabytes("Oukitel WP56 5G 12GB/512GB Black") == 512 * 1024
+    assert _megabytes("Nokia 3210 LTE Gold") is None

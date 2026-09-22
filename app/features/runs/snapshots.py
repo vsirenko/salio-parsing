@@ -31,9 +31,31 @@ log = logging.getLogger(__name__)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 
 
+class SnapshotStoreError(RuntimeError):
+    """The store itself is unusable — not one snapshot, all of them."""
+
+
 class SnapshotStore:
     def __init__(self, root: str | Path | None = None) -> None:
         self.root = Path(root or settings.snapshot_dir)
+
+    def ensure_writable(self, source_slug: str) -> None:
+        """Fail now, once, rather than per product.
+
+        A snapshot store that cannot be written to is not a fact about a product, it is a
+        fact about the machine — a volume the daemon created root-owned, a disk that filled.
+        Discovered one product at a time it reads as a shop that served 1400 broken cards,
+        which is the wrong thing to go and look at. Checked here it is one line naming the
+        directory and the reason.
+        """
+        directory = self._directory(source_slug, failed=False)
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            probe = directory / ".writable"
+            probe.write_bytes(b"")
+            probe.unlink()
+        except OSError as error:
+            raise SnapshotStoreError(f"cannot write snapshots to {directory}: {error}") from error
 
     def save(self, source_slug: str, snapshot: Snapshot, *, failed: bool = False) -> Path:
         path = self._path(source_slug, snapshot.external_id, failed=failed)

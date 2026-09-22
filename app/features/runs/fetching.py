@@ -21,6 +21,40 @@ log = logging.getLogger(__name__)
 RETRY_ON = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
+class Rate:
+    """How many requests may be *started* per second, whatever is in flight.
+
+    Separate from the concurrency limit because they answer different questions, and
+    conflating them is how a polite crawler becomes a slow one by accident. The delay used
+    to be slept inside the semaphore, which meant it held a slot: the real rate was
+    `concurrency / (delay + latency)`, so raising the concurrency and lengthening the pause
+    cancelled out and neither number said what it meant. Measured on a live shop, four slots
+    and half a second gave 2.2 products a second where the same politeness spread over six
+    slots gives more than twice that.
+
+    Spaced rather than bursty, and jittered: a fixed interval across a dozen workers is a
+    pattern that looks exactly like what it is.
+    """
+
+    def __init__(self, per_second: float) -> None:
+        self.interval = 0.0 if per_second <= 0 else 1.0 / per_second
+        self._lock = asyncio.Lock()
+        self._next = 0.0
+
+    async def wait(self) -> None:
+        if not self.interval:
+            return
+        # The lock is held only to book a departure time, never while sleeping — holding it
+        # across the sleep would serialise every request onto one queue again.
+        async with self._lock:
+            now = asyncio.get_running_loop().time()
+            start = max(now, self._next)
+            self._next = start + self.interval * random.uniform(0.85, 1.15)  # noqa: S311
+        pause = start - now
+        if pause > 0:
+            await asyncio.sleep(pause)
+
+
 class FetchError(Exception):
     """The shop did not serve this, after trying. One product's problem, not the run's."""
 
@@ -38,13 +72,17 @@ class Fetcher:
         *,
         user_agent: str | None = None,
         concurrency: int | None = None,
-        delay: float | None = None,
+        rate: float | None = None,
         retries: int | None = None,
         client: httpx2.AsyncClient | None = None,
     ) -> None:
-        self.delay = settings.fetch_delay_seconds if delay is None else delay
         self.retries = settings.fetch_retries if retries is None else retries
+        # Two limits, and each says what it is. The gate is how many requests may be open
+        # at once; the rate is how many may be started per second. A shop that answers in
+        # fifty milliseconds would otherwise be asked a hundred times a second by six slots
+        # that are all technically within their concurrency.
         self._gate = asyncio.Semaphore(concurrency or settings.fetch_concurrency)
+        self._rate = Rate(settings.fetch_rate_per_second if rate is None else rate)
         self._client = client or httpx2.AsyncClient(
             timeout=settings.fetch_timeout_seconds,
             follow_redirects=True,
@@ -79,11 +117,11 @@ class Fetcher:
         """
         last: Exception | None = None
         for attempt in range(self.retries + 1):
+            # Outside the gate on purpose. Waiting for a departure slot while holding one of
+            # the concurrency slots is what made the delay cost throughput rather than only
+            # spacing requests out.
+            await self._rate.wait()
             async with self._gate:
-                if self.delay:
-                    # Jittered, because a fixed delay across a dozen workers is a pattern
-                    # that looks exactly like what it is.
-                    await asyncio.sleep(self.delay * random.uniform(0.5, 1.5))  # noqa: S311
                 try:
                     self.requests += 1
                     response = await self._client.request(method, url, **kwargs)
