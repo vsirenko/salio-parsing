@@ -405,38 +405,26 @@ and the questions that have to be answered with real data first, are written dow
       `colours.from_title` takes multi-word keys for this, which is what Motorola's forty
       PANTONE names will need too: `Cosmic Orange` and `Cosmic Black` share a word and are
       two colours, so the word is not the unit.
-- [ ] **480 live matches have a colour the entry contradicts, every one of them by
-      barcode.** Most are granularity and harmless — blue against dark-blue 18, red against
-      burgundy 16, grey against graphite 16 — where the barcode is right and two shops
-      describe one shade differently. A handful are not: grey against black 17, silver
-      against black 12, blue against white 11. One was traced all the way: a bigbox
-      `White Titanium` listing with no barcode became an entry, an rdveikals
-      `Natural Titanium` listing matched it on the model while both still read `titanium`,
-      the match looked complete because the wrong axis agreed, and `_learn_gtin` gave the
-      entry that listing's barcode. Now the listing finds itself by that barcode on every
-      pass and the GTIN rung never checks a colour. A wrong axis hardened into proof.
-      Worth separating the family-level conflicts from the shade-level ones and dropping
-      the learned barcodes behind the first kind. It is the single
-      worst word in the corpus for disagreeing with what shops state in a field: 44 of the
-      320 disagreements are `Titanium Silverblue` and friends, where the shop's own field
-      says silver, white or green. Until it is settled, a rule that reads a colour out of a
-      title cannot trust it.
-- [x] **A colour word the registry already knows, read out of a title, is a lookup and not a
-      guess** — `phones-color-from-title`, beside the rule that refuses to canonicalise a
-      word nobody entered. Whole words, exactly one distinct colour or nothing: `Blueberry`
-      contains `blue` and `Graygreen` contains `gray`. Where a shop also states a field the
-      title agrees on 4988 readings and disagrees on 320, and the disagreements are
-      granularity rather than contradiction — burgundy against red, navy against blue — and
-      none of it fires anyway, because the rule only runs where the field gave nothing.
-      Worth +1548 colours on m79 and +107 across the other ten. Corpus 94.2% -> 96.3%,
-      queue 521 -> 337, `no_barcode` 384 -> 205, `ambiguous` 145 -> 42.
-      Two tests broke in shops that had nothing to do with it, and both were right to:
-      `test_dateks` and `test_rdveikals` were overriding `name` while generic reads `title`,
-      so they had been testing a payload the reading never saw.
-      One known cost: a maker's palette runs in the brand layer, after this, and fills only
-      a colour that is missing — so `Titanium Jadegreen` reads as `titanium` rather than
-      green. 19 listings, all Samsung's `Titanium` line, and the fix is the entry below
-      rather than this rule.
+- [x] **A barcode we inferred now yields to a contradiction; one a shop published does
+      not.** 480 live matches had a colour the entry contradicted, all of them on the GTIN
+      rung, and the split is the whole point: 431 sit on a barcode a shop published, where
+      two shops call one phone `graphite` and `grey` and disagree about a shade rather than
+      about which phone it is. The other 49 sit on a barcode `_learn_gtin` inferred, and 40
+      of those are a different colour family — black against orange, white against green.
+      One was traced end to end: a bigbox `White Titanium` listing with no barcode became an
+      entry, an rdveikals `Natural Titanium` listing matched it on the model while both
+      still read `titanium`, the match looked complete because the wrong axis agreed, and
+      the entry was given that listing's barcode. From then on the listing found itself by
+      that barcode on every pass and the rung never looked at a colour.
+      No guard on `_learn_gtin` could have caught it — a wrong reading looks exactly like a
+      right one — so the fix is downstream: a learned barcode is our own conclusion and a
+      conclusion the axes contradict falls through to the rungs below, which weigh them.
+      Wrong matches retired: 49 -> 21, and the listings are back in the queue where they are
+      visible.
+- [ ] **Twenty-one of them come back on every pass.** Retired, queued, promoted into an
+      entry of their own, and then matched onto the old one again. It settles at 21 rather
+      than growing, so it is a cycle and not a leak, but it wants its own look: most likely
+      the new entry and the old one end up sharing the barcode and the rung sees two.
 - [ ] **`phones-color-from-title` and `ksenukai-color-from-title` are two implementations of
       one idea.** The source-level one came first and reads a fixed position in that shop's
       titles; the category one reads any registry word anywhere. Keeping both is how the

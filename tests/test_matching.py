@@ -996,6 +996,98 @@ def a_colour_axis(client, token, category_id):
     return attribute
 
 
+def test_a_barcode_we_inferred_yields_to_a_contradiction(client):
+    """A bigbox `White Titanium` listing with no barcode became an entry; an rdveikals
+    `Natural Titanium` listing matched it on the model while both still read `titanium`,
+    the match looked complete because the wrong axis agreed, and `_learn_gtin` gave the
+    entry that listing's barcode. From then on the listing found itself by that barcode on
+    every pass and this rung never looked at a colour."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_colour_axis(client, token, category["id"])
+
+    # An entry made from a listing that states a colour and no barcode.
+    white = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple Pixel 20 white",
+            "brand": "Apple",
+            "model": "Pixel 20",
+            "attributes": {"color": "black"},
+        },
+        external_id="W-1",
+    )
+    promote(client, token, white)
+    variant_id = client.get(f"/api/admin/offers/{white}/matches", headers=auth(token)).json()[0][
+        "variant_id"
+    ]
+
+    # The barcode arrives on that entry from somewhere else — which is what learning does.
+    post(
+        client,
+        token,
+        f"/api/admin/variants/{variant_id}/gtins",
+        {"value": "4006381333931", "origin": "rule"},
+    )
+
+    # A listing carrying that barcode and a colour the entry contradicts falls through.
+    blue = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple Pixel 20 blue",
+            "brand": "Apple",
+            "model": "Pixel 20",
+            "ean": "4006381333931",
+            "attributes": {"color": "blue"},
+        },
+        external_id="B-1",
+    )
+    outcome = run_on(client, token, blue)
+    assert outcome["method"] != "gtin"
+
+
+def test_a_barcode_a_shop_published_is_still_proof(client):
+    """Two shops calling one phone `graphite` and `grey` disagree about a shade, not about
+    which phone it is. 431 live matches are exactly that, and none of them is a mistake."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_colour_axis(client, token, category["id"])
+
+    stated = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple Pixel 21 black",
+            "brand": "Apple",
+            "model": "Pixel 21",
+            "ean": "4006381333948",
+            "attributes": {"color": "black"},
+        },
+        external_id="S-1",
+    )
+    promote(client, token, stated)
+
+    other = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple Pixel 21 blue",
+            "brand": "Apple",
+            "model": "Pixel 21",
+            "ean": "4006381333948",
+            "attributes": {"color": "blue"},
+        },
+        external_id="S-2",
+    )
+    assert run_on(client, token, other)["method"] == "gtin"
+
+
 def test_a_match_fills_in_an_axis_the_entry_never_had(client):
     """A catalogue entry made from a shop that states no colour had none, for good — and the
     comparison only weighs axes both sides carry, so colour could separate nothing. One

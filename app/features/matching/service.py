@@ -179,8 +179,11 @@ class MatchingService:
     async def _decide(self, offer: Offer, reading: NormalizedOffer) -> MatchOutcome:
         # 1. A barcode is the strongest thing there is, and needs no brand to be resolved
         #    first — which is why it runs before anything else.
+        identity = await self._identity(offer, reading)
         if reading.gtin:
-            found = await self._by_gtin(reading.gtin)
+            found = await self._retire_learned(
+                await self._by_gtin(reading.gtin), reading.gtin, identity
+            )
             if len(found) == 1:
                 outcome = await self._link(
                     offer, found[0], Method.GTIN, {"signal": "gtin", "value": reading.gtin}
@@ -191,7 +194,6 @@ class MatchingService:
             if len(found) > 1:
                 return await self._queue(offer, Reason.AMBIGUOUS, self._variants(found, "gtin"))
 
-        identity = await self._identity(offer, reading)
         lookup = await self._resolve_brand(offer, reading)
         brand = lookup.brand
         # A brand a model chose is not a brand an alias stated, and a match built on one
@@ -350,6 +352,44 @@ class MatchingService:
         return [{"variant_id": variant_id, "why": signal} for variant_id in variant_ids]
 
     # --- the lookups, each an index hit rather than a scan ---
+
+    async def _retire_learned(
+        self, found: list[int], gtin: str, identity: dict[str, Any]
+    ) -> list[int]:
+        """Drop a candidate whose barcode we inferred and whose axes now contradict it.
+
+        A barcode a shop published is evidence from the world and stays proof: two shops
+        calling one phone `graphite` and `grey` disagree about a shade, not about which
+        phone it is, and 431 live matches are exactly that.
+
+        A barcode `_learn_gtin` put on an entry is our own conclusion, and this is how one
+        hardened into proof. A bigbox `White Titanium` listing with no barcode became an
+        entry; an rdveikals `Natural Titanium` listing matched it on the model while both
+        still read `titanium`; the match looked complete because the wrong axis agreed, and
+        the entry was given that listing's barcode. From then on the listing found itself by
+        that barcode on every pass, and this rung never looked at a colour. Forty-nine
+        matches were held that way and forty of them were a different colour family —
+        black against orange, white against green — not a shade.
+
+        So a learned barcode yields to a contradiction and the listing falls through to the
+        rungs below, which do weigh the axes. A stated one does not.
+        """
+        if not found or not identity:
+            return found
+        keep: list[int] = []
+        for variant_id in found:
+            check = await self._identity_agrees([variant_id], identity)
+            if variant_id not in check.agreed and check.checked:
+                origin = await self.session.scalar(
+                    select(VariantGtin.origin).where(
+                        VariantGtin.variant_id == variant_id, VariantGtin.gtin == gtin
+                    )
+                )
+                if origin == IdentifierOrigin.RULE.value:
+                    log.info("match: variant %d keeps a learned barcode it contradicts", variant_id)
+                    continue
+            keep.append(variant_id)
+        return keep
 
     async def _by_gtin(self, gtin: str) -> list[int]:
         rows = await self.session.scalars(
