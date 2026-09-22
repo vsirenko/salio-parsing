@@ -153,9 +153,14 @@ One module per source slug in `channels/`, registering itself on import. Adding 
 adding a module and a line in `channels/__init__.py`; nothing about the scheduler or the run
 lifecycle changes.
 
-| slug | shop | access | decode |
-|---|---|---|---|
-| `ksenukai-phones` | ksenukai.lv | wholesale | private_api |
+| slug | shop | access | decode | products | deterministic |
+|---|---|---|---|---|---|
+| `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 520 | 99.6% |
+| `bigbox-phones` | bigbox.lv | wholesale | private_api | 984 | 98.7% |
+
+They share 207 barcodes, which is the first thing in this system there has ever been
+anything to match against — and close to what the old corpus showed, where 39.5% of
+barcodes appeared in more than one shop.
 
 **`ksenukai-phones`** reads the shop's own search index. The site is behind Cloudflare —
 catalogue pages answer with a challenge and its API is disallowed — so there are no product
@@ -175,6 +180,20 @@ Two things it taught us, both found by measuring rather than by reading code:
 - **A repeated name is not a duplicate.** About a third of these products list
   `Aizmugurējā kamera` more than once; keeping the last would quietly drop half of what the
   shop said about their cameras. The values are joined instead.
+
+**`bigbox-phones`** is the same third-party index behind a different key, which was not
+the plan — it was picked to prove a different decode path and turned out to be the same
+one. Its site is a Next.js application with an empty listing in the HTML and product pages
+behind a rate limit that answers 429 after roughly one request a second, with no
+`Retry-After` to read. Opening them is also unnecessary: the index carries what the
+specification table carries, and the one thing only a page holds is a description, which
+takes no part in matching.
+
+Its attributes are numbered rather than named — `attribute_string_466` is internal storage
+and nothing in the record says so. The index labels the filterable ones in its facets,
+which are fetched once per pass and **written into every snapshot**: a snapshot that needed
+a second document to be readable would not be a snapshot. The rest keep the key the shop
+gave them, because an invented name would be our vocabulary wearing theirs.
 
 **The barcode is handed over untouched.** `alternative_codes` mixes barcodes with the shop's
 internal numbering, and picking between them is a reading decision — check digits and

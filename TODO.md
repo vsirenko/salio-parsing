@@ -119,10 +119,14 @@ and the questions that have to be answered with real data first, are written dow
       `PUT /offers/{id}/match` links to a variant that already exists. Every listing in
       `signals_unmatched` is a candidate, and until one of them can be promoted the first
       shop collected is a shop nothing can ever match against.
-- [ ] **Two more channels.** `bigbox-phones` (Next.js embedded state) and `rdveikals-phones`
-      (markup, the only one needing lxml) — chosen so that each proves a different decode
-      path holds the same contract. `1a.lv` is nearly free after ksenukai: same engine,
-      different index, and it settles whether its product page carries a barcode at all.
+- [x] A second channel, `bigbox-phones`: 984 phones, 98.7% deterministically identifiable,
+      and 207 barcodes it shares with ksenukai — the first thing in this system there has
+      ever been anything to match against
+- [ ] **One more channel: `rdveikals-phones`.** The only one of the three that needs markup
+      and therefore lxml; both shops read so far turned out to be the same third-party
+      search index behind different keys. `1a.lv` is nearly free after ksenukai — same
+      engine, different index — and it settles whether its product page carries a barcode
+      at all.
 - [x] Batch ingestion, gzipped, partial on failure, one audit entry per batch, carrying
       the run that collected it
 - [x] A collector audience: `aud=worker`, its own account, five routes and no more, so a

@@ -14,8 +14,14 @@ from app.features.offers.normalization.rules import CATEGORY, Rule, Ruleset, reg
 SLUG = "phones"
 VERSION = "phones-1"
 
-# Attribute names, in the languages the Baltic shops write them, that hold the capacity.
-STORAGE_KEYS = ("atmiņas ietilpība", "storage", "memory", "capacity", "iekšējā atmiņa")
+# Fragments of the names the Baltic shops give the built-in capacity. Matched as a
+# substring rather than whole, because a shop writes the unit into the name itself:
+# ksenukai says `Atmiņas ietilpība` and bigbox says `Iekšējā atmiņa, GB`.
+STORAGE_NAMES = ("atmiņas ietilpība", "iekšējā atmiņa", "storage", "internal memory", "capacity")
+# And the one thing that reliably tells the other kind of memory apart. Both shops name it
+# the same way, and reading it as capacity is the mistake this guards against: a phone
+# listed `12GB/512GB` is twelve of working memory and five hundred and twelve of storage.
+RAM_NAMES = ("ram", "operatīvā")
 # Everything converts to megabytes exactly, and nothing has to be a fraction.
 SCALE = {"MB": 1, "GB": 1024, "TB": 1024 * 1024}
 _SIZE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s?(TB|GB|MB)\b", re.IGNORECASE)
@@ -23,9 +29,11 @@ _SIZE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s?(TB|GB|MB)\b", re.IGNORECASE)
 
 def _storage(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
     """Capacity as an exact number of megabytes, from the attributes or from the title."""
-    attributes = fields.get("attributes") or {}
-    for name, value in attributes.items():
-        if str(name).strip().lower() in STORAGE_KEYS:
+    for name, value in (fields.get("attributes") or {}).items():
+        lowered = str(name).strip().lower()
+        if any(ram in lowered for ram in RAM_NAMES):
+            continue
+        if any(storage in lowered for storage in STORAGE_NAMES):
             megabytes = _megabytes(str(value))
             if megabytes is not None:
                 return {"identity": {**fields.get("identity", {}), "storage_mb": megabytes}}
@@ -37,11 +45,16 @@ def _storage(payload: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
 
 
 def _megabytes(text: str) -> int | None:
-    found = _SIZE.search(text)
+    """The largest size in the text, because a title that carries two carries both kinds.
+
+    `Tālrunis Oukitel WP56 5G 12GB/512GB Black` is working memory and then storage, in that
+    order, and taking the first one reads a phone as having half a gigabyte of space. On a
+    phone the built-in capacity is always the larger of the two.
+    """
+    found = _SIZE.findall(text)
     if not found:
         return None
-    amount = float(found.group(1).replace(",", "."))
-    return int(amount * SCALE[found.group(2).upper()])
+    return max(int(float(amount.replace(",", ".")) * SCALE[unit.upper()]) for amount, unit in found)
 
 
 RULESET = register(
@@ -60,7 +73,12 @@ RULESET = register(
                     " Megabytes rather than gigabytes because everything converts to them"
                     " exactly: a feature phone with 32 MB would otherwise be 0.03125 GB, and"
                     " an identity axis that is a fraction is an identity axis that will"
-                    " eventually be compared wrongly."
+                    " eventually be compared wrongly. Two traps, both met on real data:"
+                    " a shop writes the unit into the attribute name (`Iekšējā atmiņa, GB`)"
+                    " so names match as fragments, and working memory is named the same way"
+                    " by both shops, so anything mentioning RAM is refused outright. In a"
+                    " title the largest size wins — `12GB/512GB` is RAM and then storage,"
+                    " and taking the first read a phone as having half a gigabyte."
                 ),
                 body=_storage,
             ),

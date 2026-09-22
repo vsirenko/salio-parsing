@@ -95,6 +95,30 @@ def test_the_capacity_is_read_as_an_exact_number():
     assert big["identity"]["storage_mb"] == 128 * 1024
 
 
+def test_working_memory_is_not_capacity():
+    """The silent wrong answer this rule exists to avoid.
+
+    Both shops name working memory the same way and built-in capacity differently, and one
+    of them writes the unit into the name — so an exact-name match found neither, fell
+    through to the title, and read `12GB/512GB` as twelve gigabytes of storage.
+    """
+    payload = {
+        "name": "Tālrunis Oukitel WP56 5G 12GB/512GB Black",
+        "attributes": {"Operatīvā atmiņa, (RAM)": "12 GB", "Iekšējā atmiņa, GB": "512GB"},
+    }
+    assert read(payload, category=PHONES)["identity"]["storage_mb"] == 512 * 1024
+
+    # And with no attribute at all, the larger of the two in the title.
+    assert read({"name": payload["name"]}, category=PHONES)["identity"]["storage_mb"] == (
+        512 * 1024
+    )
+
+
+def test_a_name_that_only_mentions_working_memory_is_refused():
+    payload = {"name": "A phone", "attributes": {"Operatīvā atmiņa (RAM)": "8 GB"}}
+    assert read(payload, category=PHONES)["identity"] == {}
+
+
 def test_the_category_alone_reads_capacity_from_any_shop():
     """It is a property of the kind of product, not of where the listing came from."""
     fields = read({"name": "Some phone, 256 GB, black"}, category=PHONES)
