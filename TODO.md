@@ -421,10 +421,20 @@ and the questions that have to be answered with real data first, are written dow
       conclusion the axes contradict falls through to the rungs below, which weigh them.
       Wrong matches retired: 49 -> 21, and the listings are back in the queue where they are
       visible.
-- [ ] **Twenty-one of them come back on every pass.** Retired, queued, promoted into an
-      entry of their own, and then matched onto the old one again. It settles at 21 rather
-      than growing, so it is a cycle and not a leak, but it wants its own look: most likely
-      the new entry and the old one end up sharing the barcode and the rung sees two.
+- [x] **The maker is read from the end of a title as well as the front.** A whole supplier
+      feed at m79 writes it last, in front of the shop's own suffix: `MOBILE PHONE GALAXY
+      FOLD7/512GB SM-F966B SAMSUNG Mobilais Telefons`. Read from the front the first two
+      words are the kind and the maker is nowhere. Only the last four words and one at a
+      time, because a maker's name anywhere in a title is not a claim that the maker made
+      the thing — `Case for iPhone` is the shape that would go wrong. With four product
+      lines entered as aliases of their one maker — `iphone`, `galaxy`, `pixel`, `redmi` —
+      promotion refused for want of a brand went 26 -> 8 and the corpus 97.5% -> 97.8%.
+      `ambiguous` grew 39 -> 55 in the same pass, which is the listings moving from "no
+      maker" to "which of these entries", and is the better question to be stuck on.
+- [x] **Twenty-one of them come back on every pass.** They did not: the count was taken
+      mid-loop, before promotion and merging had run. One round in the right order —
+      retire, match, promote, merge, retire again — leaves a single listing, and that one
+      falls to `low_confidence` rather than to a wrong entry.
 - [ ] **`phones-color-from-title` and `ksenukai-color-from-title` are two implementations of
       one idea.** The source-level one came first and reads a fixed position in that shop's
       titles; the category one reads any registry word anywhere. Keeping both is how the

@@ -644,6 +644,19 @@ class MatchingService:
             found = await self._named_by(source)
             if found is not None:
                 return found
+        # And from the other end. A whole supplier feed at m79 writes the maker last, in
+        # front of the shop's own suffix: `MOBILE PHONE GALAXY FOLD7/512GB SM-F966B SAMSUNG
+        # Mobilais Telefons`. Only the last few words, and one at a time, because a word
+        # anywhere in a title that happens to be a maker's name is not a claim that the
+        # maker made this — `Case for iPhone` is the shape that would go wrong.
+        return await self._named_at_the_end((reading.title or "").split())
+
+    async def _named_at_the_end(self, words: list[str]) -> Brand | None:
+        """The maker a title ends with, behind whatever the shop appends to everything."""
+        for word in reversed(words[-4:]):
+            found = await self._named_by([word])
+            if found is not None:
+                return found
         return None
 
     async def _named_by(self, words: list[str]) -> Brand | None:

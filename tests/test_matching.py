@@ -996,6 +996,58 @@ def a_colour_axis(client, token, category_id):
     return attribute
 
 
+def test_a_maker_named_at_the_end_of_a_title_is_read(client):
+    """A whole supplier feed at m79 writes the maker last, in front of the shop's own
+    suffix: `MOBILE PHONE GALAXY FOLD7/512GB SM-F966B SAMSUNG Mobilais Telefons`. Read from
+    the front, the first two words are the kind and the maker is nowhere."""
+    token = admin_token(client)
+    _, source, category, brand = a_shop_we_can_build_from(client, token)
+    variant = post(
+        client,
+        token,
+        "/api/admin/variants",
+        {"brand_id": brand["id"], "category_id": category["id"], "model": "Pixel 30"},
+    )
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "MOBILE PHONE PIXEL 30 BLACK " + brand["canonical_name"] + " Mobilais Telefons",
+            "model": "Pixel 30",
+        },
+        external_id="E-1",
+    )
+    outcome = run_on(client, token, offer)
+    assert outcome["matched"] is True
+    assert outcome["variant_id"] == variant["id"]
+
+
+def test_a_maker_s_name_deep_inside_a_title_is_not_read(client):
+    """`Case for iPhone` is the shape that would go wrong, so only the last few words are
+    looked at and only one at a time."""
+    token = admin_token(client)
+    _, source, category, brand = a_shop_we_can_build_from(client, token)
+    post(
+        client,
+        token,
+        "/api/admin/variants",
+        {"brand_id": brand["id"], "category_id": category["id"], "model": "Zeta 1"},
+    )
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": f"Zeta 1 128GB compatible with {brand['canonical_name']} and others"
+            " a long way from the end of this title",
+            "model": "Zeta 1",
+        },
+        external_id="E-2",
+    )
+    assert run_on(client, token, offer)["matched"] is False
+
+
 def test_a_barcode_we_inferred_yields_to_a_contradiction(client):
     """A bigbox `White Titanium` listing with no barcode became an entry; an rdveikals
     `Natural Titanium` listing matched it on the model while both still read `titanium`,
