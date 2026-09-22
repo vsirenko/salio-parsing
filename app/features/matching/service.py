@@ -44,6 +44,7 @@ from app.features.catalog.schemas import (
     ValueOrigin,
     VariantAttributeSet,
     VariantCreate,
+    VariantUpdate,
 )
 from app.features.catalog.service import CatalogService
 from app.features.judge.schemas import BrandRequest, BrandVerdict, JudgeReport
@@ -59,6 +60,7 @@ from app.features.matching.schemas import (
     PromotionReport,
     QueueSummary,
     Reason,
+    RenameReport,
     RunReport,
 )
 from app.features.runs.schemas import Kind
@@ -869,6 +871,101 @@ class MatchingService:
             reasons=dict(reasons),
             pairs=folded,
         )
+
+    async def rebuild_named_from_a_stale_reading(self, *, limit: int = 100) -> RenameReport:
+        """Rename the entries whose only listing no longer reads the way they were named.
+
+        A catalogue entry built from one listing takes its model from that listing's
+        reading. When the reading improves the entry does not follow: discover.lv wrote its
+        working memory into 217 of its model strings, so `Pixel 10` became `Pixel 10 12`,
+        `Pixel 10 16` and so on — one entry per memory size. Fixing the rule fixed the
+        reading and left 189 entries standing under names nothing reads any more.
+
+        Only an entry with exactly one listing on it. Two shops agreeing on an entry is
+        evidence the name is good enough, and one of them disagreeing about a `5G` suffix
+        is not a reason to rename what they share.
+
+        A rename that collides is the answer rather than the problem: the identity key says
+        the entry has just become one that already exists, and the two are merged.
+        """
+        stale = await self._stale_names(limit=limit)
+        renamed = merged = 0
+        reasons: Counter[str] = Counter()
+        catalog = CatalogService(self.session)
+
+        for variant_id, model in stale:
+            try:
+                async with self.session.begin_nested():
+                    await catalog.update_variant(variant_id, VariantUpdate(model=model[:200]))
+                renamed += 1
+            except ConflictError as error:
+                twin = (error.details or {}).get("variant_id")
+                if twin is None:
+                    reasons[error.code] += 1
+                    continue
+                try:
+                    async with self.session.begin_nested():
+                        await catalog.merge_variants(
+                            variant_id,
+                            twin,
+                            reason=f"renamed to {model!r} and became an entry that existed",
+                            decided_by="rule",
+                        )
+                    merged += 1
+                except AppError as failure:
+                    reasons[failure.code] += 1
+                except IntegrityError:
+                    reasons["conflict"] += 1
+            except AppError as error:
+                reasons[error.code] += 1
+            except IntegrityError:
+                reasons["conflict"] += 1
+
+        audit.record_changes(found=len(stale), renamed=renamed, merged=merged, **dict(reasons))
+        return RenameReport(
+            found=len(stale),
+            renamed=renamed,
+            merged=merged,
+            refused=sum(reasons.values()),
+            reasons=dict(reasons),
+        )
+
+    async def _stale_names(self, *, limit: int) -> list[tuple[int, str]]:
+        """Entries with one listing, named after a reading that listing has outgrown."""
+        newest = (
+            select(
+                OfferMatch.variant_id.label("variant_id"),
+                NormalizedOffer.model.label("model"),
+                func.row_number()
+                .over(
+                    partition_by=RawOffer.offer_id,
+                    order_by=(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc()),
+                )
+                .label("rank"),
+            )
+            .join(RawOffer, RawOffer.id == NormalizedOffer.raw_offer_id)
+            .join(
+                OfferMatch,
+                (OfferMatch.offer_id == RawOffer.offer_id) & (OfferMatch.superseded_at.is_(None)),
+            )
+            .where(NormalizedOffer.model.is_not(None))
+            .subquery()
+        )
+        alone = (
+            select(OfferMatch.variant_id)
+            .where(OfferMatch.superseded_at.is_(None))
+            .group_by(OfferMatch.variant_id)
+            .having(func.count() == 1)
+            .subquery()
+        )
+        rows = await self.session.execute(
+            select(newest.c.variant_id, newest.c.model)
+            .join(Variant, Variant.id == newest.c.variant_id)
+            .join(alone, alone.c.variant_id == newest.c.variant_id)
+            .where(newest.c.rank == 1, Variant.model != newest.c.model)
+            .limit(limit)
+        )
+        return [(variant_id, model) for variant_id, model in rows.all()]
 
     async def _barcode_duplicates(self, *, limit: int) -> list[tuple[str, int, int]]:
         """Barcodes whose listings sit on two catalogue entries, as (barcode, one, other)."""

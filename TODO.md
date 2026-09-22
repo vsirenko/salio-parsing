@@ -305,6 +305,24 @@ and the questions that have to be answered with real data first, are written dow
       by barcode**: a part number names a family as often as a product, so two entries
       sharing one are usually two real configurations. 26 found, 26 merged, 0 refused;
       barcodes sitting on two entries went from 26 to 0.
+- [x] Two shops were writing the working memory into the model, and the storefront showed
+      it: discover.lv on 217 of its 560 names (`12/128GB` cut at the unit leaves `12/`, so
+      `Pixel 10` became `Pixel 10 12`) and tet.lv on 189 of its 319 (`12+256GB`, where the
+      capacity pattern finds `256GB` in the middle of the configuration — the cut is the
+      **earliest** of the two matches, not the first one tried). Distinct models: discover
+      135 → 117, tet 126 → 117. discover was also taking out any bracket to be rid of
+      `(SM-S948B)` and cost `Apple iPhone SE (2022)` its year, which on an SE is which one
+      it is; only the string the channel read as the family comes out now.
+- [x] `POST /api/admin/matching/rebuild`. Fixing a reading does not fix the catalogue
+      entries already named from it — they stand under names nothing reads any more. This
+      renames an entry from its listing's current reading, and only where the entry has
+      exactly one listing: two shops agreeing on an entry is evidence its name is good
+      enough, and one of them disagreeing about a `5G` suffix is not a reason to rename what
+      they share. A rename that collides is the answer rather than the problem — the
+      identity key says the entry has become one that already exists, and the two are
+      merged. 189 found, 142 renamed, 47 merged; then 14 more after tet was fixed. Junk
+      entries carrying memory in their name: 251 → 62, and some of those 62 are real names
+      like `Armor Mini 4`.
 - [ ] **145 part numbers still sit on more than one variant.** A barcode does not accuse
       them and never will, so this wants a different kind of evidence — the causes are a
       model string that differs between shops (`Find X9 Ultra` against bm's whole spec sheet

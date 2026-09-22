@@ -192,10 +192,21 @@ def test_the_model_is_the_name_in_front_of_the_configuration(event_loop):
 
 
 def test_the_configuration_written_without_a_unit_is_still_a_cut(event_loop):
-    """58 of the 319 write `8+256` rather than `256GB`. Reading only the second leaves
+    """26 of the 319 write `8+256` rather than `256GB`. Reading only the second leaves
     `M8 5G 8+256 Black` as a model, which is one product per colour and per configuration."""
     poco = product(event_loop) | {"name": "Poco M8 5G 8+256 Black", "brand": "POCO"}
     assert reading(event_loop, poco)["model"] == "M8 5G"
+
+
+def test_the_cut_is_the_earliest_match_and_not_the_first_one_tried(event_loop):
+    """189 of the 319 write `12+256GB`. The capacity pattern finds `256GB` inside that,
+    which is the middle of the configuration rather than its start — cutting there leaves
+    `Galaxy S26 FE 8`, one entry per memory size."""
+    samsung = product(event_loop) | {
+        "name": "Samsung Galaxy S26 FE 8+128GB Graphite",
+        "brand": "SAMSUNG",
+    }
+    assert reading(event_loop, samsung)["model"] == "Galaxy S26 FE"
 
 
 def test_the_colour_comes_out_of_the_specification_table(event_loop):
@@ -203,4 +214,4 @@ def test_the_colour_comes_out_of_the_specification_table(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-5+tet-1")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-5+tet-2")

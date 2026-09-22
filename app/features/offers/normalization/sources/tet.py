@@ -21,12 +21,13 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tet-phones"
-VERSION = "tet-1"
+VERSION = "tet-2"
 
 # `256GB`, `1 TB`. The usual way this shop writes the configuration.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
-# `8+256`, `12+512` — the other way, with no unit at all, which 58 of the 319 use.
-PLUS = re.compile(r"\b\d{1,2}\s*\+\s*\d{2,4}\b")
+# `12+256GB`, `8+256` — the other way, memory and capacity joined by a plus, with the unit
+# on the end or missing altogether. 189 of the 319 write it with the unit and 26 without.
+PLUS = re.compile(r"\b\d{1,2}\s*\+\s*\d{2,4}(?:\s?(?:TB|GB|MB))?\b", re.IGNORECASE)
 _EDGES = re.compile(r"^[\s,/|+-]+|[\s,/|+-]+$")
 
 # The shop's flag for a product it has not got yet. Nothing at all is the other state.
@@ -53,9 +54,12 @@ def _model(
         return {}
 
     head = naming.without_brand(name, payload.get("brand") or "")
-    found = SIZE.search(head) or PLUS.search(head)
+    # The earliest of the two, not the first one tried. On `F7 12+256GB` the capacity
+    # pattern matches `256GB`, which is inside the configuration rather than the start of
+    # it, and cutting there leaves `F7 12+` — the working memory, on the model.
+    found = [match for match in (SIZE.search(head), PLUS.search(head)) if match]
     if found:
-        head = head[: found.start()]
+        head = head[: min(found, key=lambda match: match.start()).start()]
 
     model = _EDGES.sub("", head).strip()
     return {"model": model[:200]} if model else {}
@@ -91,11 +95,15 @@ RULESET = register(
                     " family with the brand on it, and it is on the page rather than the"
                     " card. The name is the usual `BRAND MODEL CONFIGURATION COLOUR`, so the"
                     " brand comes off and the configuration is the cut. It is written two"
-                    " ways: 261 of the 319 use `256GB` and the other 58 use `8+256`, with no"
-                    " unit for a capacity regex to find. Reading only the first leaves"
-                    " `M8 5G 8+256 Black` as a model, which is one product per colour and"
-                    " per configuration; reading both gives 126 distinct models where the"
-                    " first alone gave 146."
+                    " ways, and the second one is the majority: 189 of the 319 write"
+                    " `12+256GB` and 26 write `8+256`, against 104 that write a plain"
+                    " `256GB`. Both have to be read, and the **earliest** of the two"
+                    " matches is the cut — the capacity pattern finds `256GB` inside"
+                    " `12+256GB`, which is the middle of the configuration rather than its"
+                    " start, and cutting there leaves `Galaxy S26 FE 8` and `Galaxy S25 12`:"
+                    " one entry per memory size. Reading only the plain form gave 146"
+                    " distinct models, reading both but cutting at the wrong one gave 126,"
+                    " and cutting at the earliest gives 117."
                 ),
                 body=_model,
             ),

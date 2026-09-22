@@ -1651,3 +1651,85 @@ def test_a_part_number_on_two_entries_is_left_alone(client):
 
     report = client.post("/api/admin/matching/merge", headers=auth(token)).json()
     assert report["found"] == 0, "a part number does not decide this"
+
+
+def test_an_entry_named_after_a_reading_that_changed_is_rebuilt(client):
+    """A catalogue entry built from one listing takes its model from that listing's reading,
+    and does not follow when the reading improves.
+
+    discover.lv wrote its working memory into 217 of its model strings, so `Pixel 10` became
+    `Pixel 10 12` and `Pixel 10 16` — one entry per memory size. Fixing the rule fixed the
+    readings and left 189 entries standing under names nothing reads any more.
+    """
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15 12",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="S-1",
+    )
+    variant_id = promote(client, token, offer)["variant_id"]
+
+    # The reading improves: the same listing, re-read, no longer carries the memory.
+    ingest(
+        client,
+        token,
+        source["id"],
+        {
+            "external_id": "S-1",
+            "market_code": "LV",
+            "payload": {
+                "name": "Apple iPhone 15 256 GB black",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+        },
+    )
+
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert report["found"] == 1
+    assert report["renamed"] == 1
+
+    entry = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    assert entry["model"] == "iPhone 15"
+
+
+def test_an_entry_two_shops_share_is_left_alone(client):
+    """Two shops agreeing on an entry is evidence its name is good enough, and one of them
+    disagreeing about a `5G` suffix is not a reason to rename what they share."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    def listing(external_id, model):
+        return offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 15 256 GB black",
+                "brand": "Apple",
+                "model": model,
+                "ean": "4006381333931",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+            external_id=external_id,
+        )
+
+    promote(client, token, listing("T-1", "iPhone 15"))
+    run_on(client, token, listing("T-2", "iPhone 15 5G"))
+
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert report["found"] == 0

@@ -22,12 +22,13 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "discover-phones"
-VERSION = "discover-1"
+VERSION = "discover-2"
 
 # `256GB`, `1 TB`. The one boundary in a name that has no separators.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
-# `(SM-S948B)` — the family, wherever the shop put it.
-BRACKET = re.compile(r"\([^)]*\)")
+# `12/128GB` writes the working memory and the capacity as one, and only the second half
+# carries a unit — so cutting at the unit leaves `12/` behind, on the model.
+_RAM_PREFIX = re.compile(r"\s*\d+\s*/\s*$")
 _EDGES = re.compile(r"^[\s,/|-]+|[\s,/|-]+$")
 
 
@@ -45,13 +46,24 @@ def _model(
     if not name:
         return {}
 
-    head = naming.without_brand(name, payload.get("brand") or "")
+    head = _without_family(name, payload.get("line") or "")
+    head = naming.without_brand(head, payload.get("brand") or "")
     found = SIZE.search(head)
     if found:
-        head = head[: found.start()]
+        head = _RAM_PREFIX.sub("", head[: found.start()])
 
-    model = _EDGES.sub("", BRACKET.sub(" ", head).strip())
+    model = _EDGES.sub("", " ".join(head.split()))
     return {"model": model[:200]} if model else {}
+
+
+def _without_family(name: str, line: str) -> str:
+    """The name with `(SM-S948B)` taken out, and every other bracket left where it is.
+
+    Taking out any bracket is what this did first, and it cost `Apple iPhone SE (2022)` its
+    year — which is not decoration on an iPhone SE, it is which one. Only the string the
+    channel read as the family comes out.
+    """
+    return name.replace(f"({line})", " ") if line else name
 
 
 def _line(
@@ -75,7 +87,9 @@ def _color(
     if last is None:
         return {}
 
-    tail = _EDGES.sub("", BRACKET.sub(" ", name[last.end() :]).strip())
+    tail = _EDGES.sub(
+        "", " ".join(_without_family(name[last.end() :], payload.get("line") or "").split())
+    )
     canonical = colours.resolve(tail, vocabulary) if tail else None
     return {"identity": {**fields.get("identity", {}), "color": canonical}} if canonical else {}
 
@@ -104,13 +118,20 @@ RULESET = register(
                 id="discover-model",
                 layer=SOURCE,
                 why=(
-                    "The export states no model, so all 560 read without one. The name is the"
-                    " tidiest of the eight shops here — `BRAND MODEL CAPACITY COLOUR`, with"
-                    " no marketing sentence around it — so the brand comes off the front and"
-                    " the first capacity is the cut. Measured: 560 of 560 yield a model,"
-                    " collapsing to 135 distinct, and none carries a capacity through. The"
-                    " brackets are taken out first: 222 names carry the family designation"
-                    " mid-name and it is not part of the model."
+                    "The export states no model, so all 560 read without one. The name is"
+                    " the tidiest of the ten shops here — `BRAND MODEL CAPACITY COLOUR`,"
+                    " with no marketing sentence around it — so the brand comes off the"
+                    " front and the first capacity is the cut. 560 of 560 yield one."
+                    "\n\n"
+                    "Two things it got wrong at first, and both split one phone into"
+                    " several. **217 of the 560 write the configuration as `12/128GB`**,"
+                    " working memory and capacity as one with a unit only on the second"
+                    " half, so cutting at the unit left `12/` behind and `Pixel 10` became"
+                    " `Pixel 10 12`, `Pixel 10 16` and so on — one entry per memory size."
+                    " And **taking out any bracket, to be rid of `(SM-S948B)`, cost"
+                    " `Apple iPhone SE (2022)` its year**, which on an iPhone SE is not"
+                    " decoration but which one it is. Only the string the channel read as"
+                    " the family comes out now. Distinct models: 135 before, 117 after."
                 ),
                 body=_model,
             ),

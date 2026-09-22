@@ -117,6 +117,22 @@ class MergeReport(BaseModel):
     pairs: list[str] = Field(default_factory=list)
 
 
+class RenameReport(BaseModel):
+    """What a pass of rebuilds did.
+
+    A catalogue entry made from one listing is named after that listing's reading. When the
+    reading improves — a rule fixed, a word entered in the registry — the entry keeps the
+    old name and nothing goes back for it. `merged` is the good outcome: renamed, the entry
+    turned out to be one that already existed.
+    """
+
+    found: int
+    renamed: int
+    merged: int
+    refused: int
+    reasons: dict[str, int] = Field(default_factory=dict)
+
+
 class PromotionReport(BaseModel):
     """What a pass of promotions did.
 

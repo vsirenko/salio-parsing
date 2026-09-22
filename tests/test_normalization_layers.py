@@ -321,14 +321,14 @@ FINGERPRINTS = {
     "bm-2": "df8fb9de5bff",
     "cec-1": "e0252dfe4696",
     "dateks-2": "28ca1e200e23",
-    "discover-1": "1b59316dd506",
+    "discover-2": "113eaca94ea9",
     "ksenukai-5": "89aa740d025f",
     "onea-1": "3f30745390d5",
     "euronics-1": "e61bf95a7a78",
     "phones-5": "431fc8bf0c77",
     "rdveikals-4": "f5078e0afc82",
     "samsung-phones-0": "pending",
-    "tet-1": "e22213de8034",
+    "tet-2": "a49facbac61d",
 }
 
 

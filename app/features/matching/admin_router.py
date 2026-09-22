@@ -28,6 +28,7 @@ from app.features.matching.schemas import (
     PromotionReport,
     QueueSummary,
     Reason,
+    RenameReport,
     RunReport,
 )
 from app.schemas.common import ErrorResponse
@@ -153,6 +154,21 @@ async def merge_duplicates(
     """Only a barcode decides. A part number names a family as often as a product, so two
     entries sharing one are usually two real configurations rather than one written twice."""
     return await service.merge_duplicates(limit=limit)
+
+
+@router.post(
+    "/rebuild",
+    response_model=RenameReport,
+    summary="Rebuild the entries named after a reading that has since changed",
+)
+async def rebuild_stale(
+    service: MatchingServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500, description="How many to consider")] = 100,
+) -> RenameReport:
+    """Only an entry with one listing on it. Two shops agreeing on an entry is evidence its
+    name is good enough, and one of them disagreeing about a `5G` suffix is not a reason to
+    rename what they share."""
+    return await service.rebuild_named_from_a_stale_reading(limit=limit)
 
 
 @router.post(

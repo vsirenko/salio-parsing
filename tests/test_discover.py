@@ -142,15 +142,37 @@ def test_the_model_is_the_name_in_front_of_the_first_capacity(event_loop):
     assert fields["brand_raw"] == "Apple"
 
 
-def test_the_brackets_are_not_part_of_the_model(event_loop):
-    """222 names carry the family designation in the middle of them."""
+def test_the_family_designation_is_not_part_of_the_model(event_loop):
+    """222 names carry it in the middle of them — `Galaxy S26 Ultra (SM-S948B) Titanium`."""
     listings = discover(event_loop)
     with_line = next(x.card for x in listings if x.card["line"])
     from app.features.offers.normalization import read
 
     fields = read(with_line, source_slug="discover-phones", category="phones")
-    assert "(" not in (fields["model"] or "")
+    assert with_line["line"] not in (fields["model"] or "")
     assert fields["model"]
+
+
+def test_a_bracket_that_is_not_the_family_stays(event_loop):
+    """Taking out any bracket cost `Apple iPhone SE (2022)` its year, which on an iPhone SE
+    is not decoration but which one it is."""
+    from app.features.offers.normalization import read
+
+    card = dict(one(discover(event_loop), "iPhone"))
+    card |= {"name": "Apple iPhone SE (2022) 5G 64GB Midnight", "brand": "Apple", "line": ""}
+    assert read(card, source_slug="discover-phones", category="phones")["model"] == (
+        "iPhone SE (2022) 5G"
+    )
+
+
+def test_the_working_memory_does_not_travel_with_the_model(event_loop):
+    """217 of the 560 write `12/128GB`, with a unit only on the second half. Cutting at the
+    unit leaves `12/` behind, and `Pixel 10` becomes one entry per memory size."""
+    from app.features.offers.normalization import read
+
+    card = dict(one(discover(event_loop), "iPhone"))
+    card |= {"name": "Google Pixel 10 12/128GB Frost", "brand": "Google", "line": ""}
+    assert read(card, source_slug="discover-phones", category="phones")["model"] == "Pixel 10"
 
 
 def test_there_is_no_barcode_and_no_part_number(event_loop):
@@ -165,4 +187,4 @@ def test_the_colour_is_what_follows_the_capacity(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-5+discover-1")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-5+discover-2")
