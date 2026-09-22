@@ -23,6 +23,7 @@ from app.features.matching.schemas import (
     ManualMatch,
     MatchOutcome,
     MatchQueueRead,
+    MergeReport,
     OfferMatchRead,
     PromotionReport,
     QueueSummary,
@@ -138,6 +139,20 @@ async def promote_queue(
     is promoted, because the one before it may have just created the variant it needed.
     """
     return await service.promote_queue(limit=limit)
+
+
+@router.post(
+    "/merge",
+    response_model=MergeReport,
+    summary="Fold together the entries a barcode says are one product",
+)
+async def merge_duplicates(
+    service: MatchingServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500, description="How many pairs to consider")] = 100,
+) -> MergeReport:
+    """Only a barcode decides. A part number names a family as often as a product, so two
+    entries sharing one are usually two real configurations rather than one written twice."""
+    return await service.merge_duplicates(limit=limit)
 
 
 @router.post(

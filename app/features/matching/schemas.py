@@ -100,6 +100,23 @@ class MatchOutcome(BaseModel):
     candidates: list
 
 
+class MergeReport(BaseModel):
+    """What a pass of merges did.
+
+    A barcode is the strongest thing this system has, so two catalogue entries both holding
+    listings that carry one and the same barcode are not two products. `refused` is the
+    interesting number: a pair the barcode named and something else contradicted.
+    """
+
+    found: int
+    merged: int
+    refused: int
+    # Why a pair was left alone, counted.
+    reasons: dict[str, int] = Field(default_factory=dict)
+    # The pairs that were folded, newest first, as `from -> into`.
+    pairs: list[str] = Field(default_factory=list)
+
+
 class PromotionReport(BaseModel):
     """What a pass of promotions did.
 

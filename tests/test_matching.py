@@ -1497,3 +1497,157 @@ def test_a_brand_the_shop_stated_correctly_is_never_second_guessed(client):
     )
 
     assert run_on(client, token, offer)["reason"] == "brand_unknown"
+
+
+def test_a_barcode_reaches_the_catalogue_from_the_part_number_rung(client):
+    """`_learn_gtin` used to run only where the model rung fired, so a listing that matched
+    by part number kept its barcode to itself.
+
+    That is how one phone became two entries: `PHONE WAVE 7C` matched by part number and
+    taught the catalogue nothing, so the next shop carrying that barcode found nothing to
+    match and built `Wave 7C` beside it. Twenty-six barcodes sat on two entries each when
+    this was found.
+    """
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    # An entry built from a listing that stated a part number and no barcode.
+    plain = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "mpn": "MTLK3ZD/A",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="B-1",
+    )
+    variant_id = promote(client, token, plain)["variant_id"]
+
+    # The same phone from a shop that does state one, arriving by part number because no
+    # entry carries that barcode yet.
+    coded = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "mpn": "MTLK3ZD/A",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="B-2",
+    )
+    assert run_on(client, token, coded)["method"] == "brand_mpn"
+
+    gtins = client.get(f"/api/admin/variants/{variant_id}/gtins", headers=auth(token)).json()
+    assert "4006381333931" in [row["gtin"] for row in gtins], (
+        "the entry never learned the barcode its own listing carried"
+    )
+
+
+# --- two entries that turned out to be one ---
+
+
+def test_a_barcode_on_two_entries_folds_them_into_one(client):
+    """The catalogue splits a phone in two whenever two shops write its model differently
+    and neither listing had a barcode to say otherwise at the time — `PHONE WAVE 7C` and
+    `Wave 7C`. Afterwards a listing on each side carries the same barcode, and that is the
+    strongest signal this system has contradicting itself.
+
+    The split is built by hand here on purpose: with the part-number rung teaching the
+    catalogue what its listings carry, the ladder no longer produces one.
+    """
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    def listing(external_id, model):
+        return offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Apple {model} 256 GB black",
+                "brand": "Apple",
+                "model": model,
+                "ean": "4006381333931",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+            external_id=external_id,
+        )
+
+    spelled_one_way = listing("M-1", "PHONE WAVE 7C")
+    first = promote(client, token, spelled_one_way)["variant_id"]
+
+    # The same phone under the other spelling, placed by hand on an entry of its own.
+    other = post(
+        client,
+        token,
+        "/api/admin/variants",
+        {
+            "brand_id": client.get("/api/admin/brands", headers=auth(token)).json()["items"][0][
+                "id"
+            ],
+            "category_id": category["id"],
+            "model": "Wave 7C",
+        },
+    )
+    spelled_the_other_way = listing("M-2", "Wave 7C")
+    placed = client.put(
+        f"/api/admin/offers/{spelled_the_other_way}/match",
+        headers=auth(token),
+        json={"variant_id": other["id"]},
+    )
+    assert placed.status_code == 200, placed.text
+
+    report = client.post("/api/admin/matching/merge", headers=auth(token)).json()
+    assert report["found"] == 1
+    assert report["merged"] == 1
+
+    # The entry that already held the barcode is the one that keeps its id.
+    for offer in (spelled_one_way, spelled_the_other_way):
+        matches = client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json()
+        assert matches[0]["variant_id"] == first
+
+    gone = client.get(f"/api/admin/variants/{other['id']}", headers=auth(token))
+    assert gone.status_code == 404, "the folded entry is gone, and the merge row remembers it"
+
+
+def test_a_part_number_on_two_entries_is_left_alone(client):
+    """`SM-S948B` covers every colour and capacity of one phone, so two entries sharing one
+    are usually two real configurations rather than one written twice."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    for external_id, colour in (("P-1", "black"), ("P-2", "blue")):
+        promote(
+            client,
+            token,
+            offer_from(
+                client,
+                token,
+                source["id"],
+                {
+                    "name": f"Apple Galaxy S26 256 GB {colour}",
+                    "brand": "Apple",
+                    "model": f"Galaxy S26 {colour}",
+                    "mpn": "SM-S948B",
+                    "attributes": {"storage": "256 GB", "color": colour},
+                },
+                external_id=external_id,
+            ),
+        )
+
+    report = client.post("/api/admin/matching/merge", headers=auth(token)).json()
+    assert report["found"] == 0, "a part number does not decide this"

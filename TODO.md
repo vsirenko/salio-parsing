@@ -281,13 +281,25 @@ and the questions that have to be answered with real data first, are written dow
       harm — those listings matched on a stronger signal and sit on the same entry — but it
       is a wrong colour on a reading, and the next product where it is the only signal will
       not be so lucky.
-- [ ] **155 part numbers sit on more than one variant**, which is one phone wearing two
-      catalogue entries and splitting its prices between them. Worth more than the 78
-      listings still unplaced. Two causes, both visible in the data: a model string that
-      differs between shops — `Find X9 Ultra` against bm's whole spec sheet used as one,
-      `Reno16 F` against `Reno16 F 5G CPH2859`, `600 Smart` against `600 Smart 5G` — and a
-      colour two shops disagree about, as on `631011008288`, black at bm and white at
-      bigbox. `variant_merges` exists for exactly this and still has no producer.
+- [x] The catalogue was splitting one phone into two entries, and the cause was in the
+      matcher: `_learn_gtin` ran only where the model rung fired, so a listing that matched
+      by **part number** kept its barcode to itself. The next shop carrying that barcode
+      found nothing and built a second entry beside the first — `PHONE WAVE 7C` and
+      `Wave 7C`, `Edge 70 Fusion` and `Motorola Edge 70 Fusion`. It learns on that rung now,
+      under the same guard, and the split is no longer reachable through the ladder: the
+      test for the merge has to build one by hand.
+- [x] `variant_merges` has a producer. `CatalogService.merge_variants` moves the listings,
+      the identifiers and only the axes the survivor was missing — an axis both hold is left
+      alone, because two entries disagreeing about a colour is a question and not something
+      a merge may settle quietly. `POST /api/admin/matching/merge` finds the pairs, **only
+      by barcode**: a part number names a family as often as a product, so two entries
+      sharing one are usually two real configurations. 26 found, 26 merged, 0 refused;
+      barcodes sitting on two entries went from 26 to 0.
+- [ ] **145 part numbers still sit on more than one variant.** A barcode does not accuse
+      them and never will, so this wants a different kind of evidence — the causes are a
+      model string that differs between shops (`Find X9 Ultra` against bm's whole spec sheet
+      used as one, `600 Smart` against `600 Smart 5G`) and a colour two shops disagree
+      about. Some of those pairs are two real configurations and must not be merged.
 - [ ] **bigbox's 50 unplaced listings are reachable, and not yet worth reaching.** Its
       model rule declines a title with no capacity in it, deliberately: on that shop it is a
       feature phone or a desk phone, and the colour runs into the name. Cutting a trailing

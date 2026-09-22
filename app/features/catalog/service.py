@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,10 +14,12 @@ from app.db.models import (
     Brand,
     Category,
     CategoryAttribute,
+    OfferMatch,
     Product,
     Variant,
     VariantAttribute,
     VariantGtin,
+    VariantMerge,
     VariantMpn,
 )
 from app.db.query import paginated
@@ -339,6 +341,135 @@ class CatalogService:
         await self.session.refresh(row)
         audit.record_changes(added_mpn=row.mpn_normalized)
         return VariantMpnRead.model_validate(row)
+
+    # --- two entries that turned out to be one ---
+
+    async def merge_variants(
+        self, from_id: int, into_id: int, *, reason: str, decided_by: str = "rule"
+    ) -> VariantRead:
+        """Fold one catalogue entry into another and leave a forwarding note.
+
+        The catalogue splits a product in two whenever two shops write its model
+        differently — `PHONE WAVE 7C` and `Wave 7C`, `Edge 70 Fusion` and
+        `Motorola Edge 70 Fusion` — and neither entry is wrong, they are the same thing seen
+        twice. The listings go over, the identifiers go over, and the axes the survivor was
+        missing are filled from the one being folded in; an axis both of them hold is left
+        alone, because disagreeing about a colour is not something a merge should silently
+        settle.
+
+        The row in `variant_merges` is the point of doing it this way rather than deleting:
+        the old id keeps resolving, so a link that was handed out yesterday still arrives
+        somewhere.
+        """
+        if from_id == into_id:
+            raise ValidationError("A variant cannot be merged into itself", code="same_variant")
+
+        loser = await self._variant(from_id)
+        survivor = await self._variant(into_id)
+        if loser.brand_id != survivor.brand_id or loser.category_id != survivor.category_id:
+            raise ValidationError(
+                "These are filed under different brands or categories, so they are not one"
+                " thing written two ways",
+                code="not_the_same_thing",
+            )
+
+        audit.set_target("variant", survivor.id)
+
+        # The listings first: an offer holds at most one live match, so this is a move and
+        # never a collision.
+        moved = await self.session.execute(
+            update(OfferMatch)
+            .where(OfferMatch.variant_id == from_id, OfferMatch.superseded_at.is_(None))
+            .values(variant_id=into_id)
+        )
+        await self.session.execute(
+            update(OfferMatch).where(OfferMatch.variant_id == from_id).values(variant_id=into_id)
+        )
+
+        carried = await self._carry_identifiers(from_id, into_id)
+        filled = await self._carry_axes(from_id, into_id)
+
+        # The loser's key goes before the survivor's is recomputed: they are about to be
+        # the same string, and the column is unique.
+        loser.identity_key = None
+        await self.session.flush()
+
+        self.session.add(
+            VariantMerge(
+                from_id=from_id,
+                into_id=into_id,
+                reason=reason[:500],
+                decided_by=decided_by,
+            )
+        )
+        await self.session.delete(loser)
+        await self.session.flush()
+
+        await self._regenerate(survivor)
+        await self.session.refresh(survivor)
+        audit.record_changes(
+            merged_from=from_id,
+            listings_moved=moved.rowcount or 0,
+            identifiers_carried=carried,
+            axes_filled=filled,
+            reason=reason,
+        )
+        return VariantRead.model_validate(survivor)
+
+    async def _carry_identifiers(self, from_id: int, into_id: int) -> int:
+        """Every barcode and part number the survivor does not already hold."""
+        carried = 0
+        pairs = ((VariantGtin, VariantGtin.gtin), (VariantMpn, VariantMpn.mpn_normalized))
+        for table, column in pairs:
+            held = set(
+                (
+                    await self.session.scalars(select(column).where(table.variant_id == into_id))
+                ).all()
+            )
+            rows = (
+                await self.session.scalars(select(table).where(table.variant_id == from_id))
+            ).all()
+            for row in rows:
+                value = getattr(row, column.key)
+                if value in held:
+                    await self.session.delete(row)
+                    continue
+                row.variant_id = into_id
+                held.add(value)
+                carried += 1
+        await self.session.flush()
+        return carried
+
+    async def _carry_axes(self, from_id: int, into_id: int) -> int:
+        """The axes the survivor has nothing for, and only those.
+
+        An axis both entries hold is left as the survivor wrote it. Two entries that
+        disagree about a colour are a question, and a merge that answered it quietly would
+        be the confident wrong answer this project keeps refusing to give.
+        """
+        held = set(
+            (
+                await self.session.scalars(
+                    select(VariantAttribute.attribute_id).where(
+                        VariantAttribute.variant_id == into_id
+                    )
+                )
+            ).all()
+        )
+        filled = 0
+        rows = (
+            await self.session.scalars(
+                select(VariantAttribute).where(VariantAttribute.variant_id == from_id)
+            )
+        ).all()
+        for row in rows:
+            if row.attribute_id in held:
+                await self.session.delete(row)
+                continue
+            row.variant_id = into_id
+            filled += 1
+        await self.session.flush()
+        return filled
 
     # --- derivation ---
 

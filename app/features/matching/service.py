@@ -53,6 +53,7 @@ from app.features.matching.schemas import (
     ManualMatch,
     MatchOutcome,
     MatchQueueRead,
+    MergeReport,
     Method,
     OfferMatchRead,
     PromotionReport,
@@ -222,6 +223,18 @@ class MatchingService:
                         {"signal": "mpn", "brand_id": brand.id, "value": reading.mpn, **via},
                         decided_by=by,
                     )
+                    # The barcode this listing carried, on the entry its part number
+                    # found. Without it the strongest signal there is never reaches the
+                    # catalogue from this rung: `PHONE WAVE 7C` matched by part number and
+                    # kept its barcode to itself, so the next shop carrying that barcode
+                    # found nothing, built `Wave 7C` beside it, and one phone became two
+                    # entries. Twenty-six barcodes were sitting on two entries each when
+                    # this was found. Guarded exactly as the rung below it is: every axis
+                    # the category names has to have been weighed, because a part number
+                    # can name a family and agreeing on the capacity while the entry has no
+                    # colour to disagree with is not agreement.
+                    if usable[0] in check.complete:
+                        await self._learn_gtin(usable[0], reading)
                     if check.checked and usable[0] in check.agreed:
                         await self._reconcile(usable[0], reading)
                     return outcome
@@ -808,6 +821,104 @@ class MatchingService:
             skipped=sum(reasons.values()),
             reasons=dict(reasons),
         )
+
+    async def merge_duplicates(self, *, limit: int = 100) -> MergeReport:
+        """Fold together the catalogue entries a barcode says are one product.
+
+        The catalogue splits a phone in two whenever two shops write its model differently
+        and neither listing had a barcode to say otherwise at the time: `PHONE WAVE 7C` and
+        `Wave 7C`, `Edge 70 Fusion` and `Motorola Edge 70 Fusion`, `Moto G37` and
+        `Moto G37 5G`. Afterwards a listing on each side carries the same barcode, and that
+        is not an opinion — it is the strongest signal this system has, contradicting itself.
+
+        Only a barcode. A part number is not enough and never will be: `SM-S948B` covers
+        every colour and capacity of one phone, so two entries sharing one are usually two
+        real configurations rather than one written twice.
+
+        The entry that already holds the barcode survives, because it is the one the first
+        rung will keep finding; failing that the one carrying more listings, which loses
+        less if this is ever undone.
+        """
+        pairs = await self._barcode_duplicates(limit=limit)
+        merged, reasons, folded = 0, Counter(), []
+        catalog = CatalogService(self.session)
+        for gtin, first, second in pairs:
+            survivor, loser = await self._which_survives(gtin, first, second)
+            try:
+                async with self.session.begin_nested():
+                    await catalog.merge_variants(
+                        loser,
+                        survivor,
+                        reason=f"both held a listing carrying {gtin}",
+                        decided_by="rule",
+                    )
+            except AppError as error:
+                reasons[error.code] += 1
+                continue
+            except IntegrityError:
+                reasons["conflict"] += 1
+                continue
+            merged += 1
+            folded.append(f"{loser} -> {survivor}")
+
+        audit.record_changes(found=len(pairs), merged=merged, **dict(reasons))
+        return MergeReport(
+            found=len(pairs),
+            merged=merged,
+            refused=sum(reasons.values()),
+            reasons=dict(reasons),
+            pairs=folded,
+        )
+
+    async def _barcode_duplicates(self, *, limit: int) -> list[tuple[str, int, int]]:
+        """Barcodes whose listings sit on two catalogue entries, as (barcode, one, other)."""
+        newest = (
+            select(
+                NormalizedOffer.gtin.label("gtin"),
+                OfferMatch.variant_id.label("variant_id"),
+                func.row_number()
+                .over(
+                    partition_by=RawOffer.offer_id,
+                    order_by=(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc()),
+                )
+                .label("rank"),
+            )
+            .join(RawOffer, RawOffer.id == NormalizedOffer.raw_offer_id)
+            .join(
+                OfferMatch,
+                (OfferMatch.offer_id == RawOffer.offer_id) & (OfferMatch.superseded_at.is_(None)),
+            )
+            .where(NormalizedOffer.gtin.is_not(None))
+            .subquery()
+        )
+        rows = await self.session.execute(
+            select(newest.c.gtin, func.array_agg(func.distinct(newest.c.variant_id)))
+            .where(newest.c.rank == 1)
+            .group_by(newest.c.gtin)
+            .having(func.count(func.distinct(newest.c.variant_id)) == 2)
+            .limit(limit)
+        )
+        return [(gtin, variants[0], variants[1]) for gtin, variants in rows.all()]
+
+    async def _which_survives(self, gtin: str, first: int, second: int) -> tuple[int, int]:
+        """The entry that keeps its id, and the one folded into it."""
+        holding = await self.session.scalar(
+            select(VariantGtin.variant_id).where(
+                VariantGtin.gtin == gtin, VariantGtin.variant_id.in_((first, second))
+            )
+        )
+        if holding is not None:
+            return (holding, second if holding == first else first)
+
+        counts = {
+            variant_id: await self.session.scalar(
+                select(func.count())
+                .select_from(OfferMatch)
+                .where(OfferMatch.variant_id == variant_id, OfferMatch.superseded_at.is_(None))
+            )
+            for variant_id in (first, second)
+        }
+        return (first, second) if counts[first] >= counts[second] else (second, first)
 
     async def _why_not_promotable(self, offer: Offer, reading: NormalizedOffer) -> str | None:
         """The bar a listing has to clear before it becomes a catalogue entry.
