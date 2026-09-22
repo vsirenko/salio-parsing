@@ -276,6 +276,16 @@ and the questions that have to be answered with real data first, are written dow
       the table. Colour went 90.6% → 95.4% the moment the re-read stopped asking.
 - [x] ksenukai and 1a.lv leave the word for colour off 34 titles altogether and put the
       colour last behind a comma anyway. Read from there, with the registry still the gate.
+- [x] A catalogue entry may be started by a barcode **or** by an identity complete enough
+      that another shop would arrive at the same one. The first bar was the only one for as
+      long as a barcode was the only thing two shops could agree on, and it left 1a.lv —
+      which publishes none — unable to contribute anything: 27 listings fully read and
+      invisible. 1a.lv placed 74.9% → 98.9%.
+- [x] Among candidates that all agree, one that agreed on every axis the category names
+      beats one that agreed on the two it happened to hold. An entry recording no colour
+      agrees with every colour, and one of those beside a real one made every coloured
+      listing of that model ambiguous — with the winner decided by arrival order.
+      `ambiguous` 15 → 7.
 - [ ] **Seven of those 117 are guesses and should be checked against a real product.**
       `arctic seal` and `silhouette` and `miglas` went to grey by how they sound;
       `carbon` is nearer dark grey than black; `black olive` is a dark *green* and was filed

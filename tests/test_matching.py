@@ -1271,3 +1271,190 @@ def test_a_category_with_no_declared_axes_keeps_the_older_bar(client):
     )
     assert run_on(client, token, second)["method"] == "brand_model"
     assert gtins_of(client, token, variant_id) == {"4006381333931", "5902983617747"}
+
+
+# --- a shop that publishes no barcode at all ---
+
+
+def test_a_complete_identity_may_start_an_entry_without_a_barcode(client):
+    """A barcode was the bar for as long as it was the only thing two shops could agree on.
+    It left a whole shop unable to contribute: 1a.lv publishes none, and 27 of its listings
+    sat fully read — brand, model, capacity, colour — and invisible to the catalogue."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="A-1",
+    )
+    # Through the sweep, which is where the bar lives — a listing promoted by hand is a
+    # person saying so and has never had one.
+    client.post("/api/admin/matching/run", headers=auth(token))
+    report = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert (report["promoted"], report["reasons"]) == (1, {}), report
+    assert client.get("/api/admin/variants", headers=auth(token)).json()["total"] == 1
+
+
+def test_an_incomplete_identity_without_a_barcode_still_waits(client):
+    """The second bar is not a weaker one: it asks for every axis the category calls
+    identity-bearing. A listing that names one of two is a guess wearing a catalogue's
+    authority, which is what the barcode bar was written against."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    client.post("/api/admin/matching/run", headers=auth(token))
+    report = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert (report["promoted"], report["reasons"]) == (0, {"no_barcode": 1}), report
+
+
+def test_a_category_with_no_declared_axes_keeps_the_barcode_bar(client):
+    """Requiring nothing would let anything through, which is the opposite of the intent."""
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+
+    offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB black",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="A-1",
+    )
+    client.post("/api/admin/matching/run", headers=auth(token))
+    report = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert (report["promoted"], report["reasons"]) == (0, {"no_barcode": 1}), report
+
+
+def test_two_shops_describing_it_completely_meet_without_a_barcode(client):
+    """The whole point of the second bar: the same complete description is the same key."""
+    token = admin_token(client)
+    shop, first, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+    second = post(
+        client,
+        token,
+        f"/api/admin/shops/{shop['id']}/sources",
+        {
+            "slug": "rd-other",
+            "access": "wholesale",
+            "decode": "xml",
+            "delivers_full": ["catalogue", "price", "availability"],
+            "trust": "high",
+            "category_id": category["id"],
+        },
+    )
+    body = {
+        "brand": "Apple",
+        "model": "iPhone 15",
+        "attributes": {"storage": "256 GB", "color": "black"},
+    }
+    mine = offer_from(
+        client,
+        token,
+        first["id"],
+        {**body, "name": "Apple iPhone 15 256 GB black"},
+        external_id="A-1",
+    )
+    theirs = offer_from(
+        client,
+        token,
+        second["id"],
+        {**body, "name": "iPhone 15, 256 GB, black"},
+        external_id="B-1",
+    )
+
+    promote(client, token, mine)
+    assert run_on(client, token, theirs)["matched"] is True
+    assert client.get("/api/admin/variants", headers=auth(token)).json()["total"] == 1
+
+
+def test_an_entry_that_knows_its_colour_beats_one_that_does_not(client):
+    """An entry recording no colour agrees with every colour, having nothing to disagree
+    with. One of those beside a real one made every coloured listing of that model
+    ambiguous — and which won depended on the order they arrived in."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    # One entry from a listing that never said a colour, and one that did.
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 15 256 GB",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "ean": "4006381333931",
+                "attributes": {"storage": "256 GB"},
+            },
+            external_id="A-1",
+        ),
+    )
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 15 256 GB black",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "ean": "5902983617747",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+            external_id="A-2",
+        ),
+    )
+
+    # A third listing states black. Both entries agree with it; only one knows why.
+    third = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "iPhone 15 black",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "attributes": {"storage": "256 GB", "color": "black"},
+        },
+        external_id="A-3",
+    )
+    outcome = run_on(client, token, third)
+    assert outcome["matched"] is True, "the colourless entry no longer makes this a question"
+    assert outcome["method"] == "brand_model"

@@ -243,6 +243,18 @@ class MatchingService:
                 # accepted.
                 check = await self._identity_agrees(found, reading)
                 agreed, unverifiable = check.agreed, check.unverifiable
+                if len(agreed) > 1:
+                    # An entry that records no colour agrees with every colour, because it
+                    # has nothing to disagree with — and one of those sitting beside a real
+                    # one made every coloured listing of that model ambiguous, with the
+                    # outcome depending on which arrived first. Among candidates that all
+                    # agree, one that agreed on *every* axis the category names has more
+                    # evidence behind it than one that agreed on the two it happened to
+                    # hold, so it wins. Two complete ones would be a real question and stay
+                    # ambiguous.
+                    complete = [variant_id for variant_id in agreed if variant_id in check.complete]
+                    if len(complete) == 1:
+                        agreed = complete
                 if len(agreed) == 1:
                     outcome = await self._link(
                         offer,
@@ -754,15 +766,51 @@ class MatchingService:
         )
 
     async def _why_not_promotable(self, offer: Offer, reading: NormalizedOffer) -> str | None:
-        """The bar a listing has to clear before it becomes a catalogue entry."""
-        if not reading.gtin:
-            # Without one there is nothing another shop could ever agree with, and the
-            # entry would be a guess wearing the authority of a catalogue.
-            return "no_barcode"
+        """The bar a listing has to clear before it becomes a catalogue entry.
+
+        A barcode, **or** an identity complete enough that another shop would arrive at the
+        same one. The first was the only bar for as long as it was the only thing two shops
+        could agree on — and that left a whole shop unable to contribute anything, because
+        1a.lv publishes no barcode at all: 27 of its listings sat in the queue fully read,
+        brand resolved, model, capacity and colour all known, invisible to the catalogue.
+
+        The second bar is not a weaker one. It asks for every axis the *category* calls
+        identity-bearing, which is what `identity_key` is computed from and what makes it
+        unique in the table: two shops that both describe the phone completely arrive at the
+        same key and meet there. A junk listing clears neither bar — it has no model and no
+        colour — and a category that declares no axes has no second bar at all, because
+        requiring nothing would let anything through.
+        """
         source = await self._source_of(offer)
         if source is None or source.trust != "high":
             return "source_not_trusted"
-        return None
+        if reading.gtin:
+            return None
+        if await self._identity_is_complete(reading, source.category_id):
+            return None
+        return "no_barcode"
+
+    async def _identity_is_complete(
+        self, reading: NormalizedOffer, category_id: int | None
+    ) -> bool:
+        """Whether the reading names every axis its category says tells its products apart."""
+        if category_id is None:
+            return False
+        required = {
+            key
+            for (key,) in await self.session.execute(
+                select(Attribute.key)
+                .join(CategoryAttribute, CategoryAttribute.attribute_id == Attribute.id)
+                .where(
+                    CategoryAttribute.category_id == category_id,
+                    CategoryAttribute.identity_bearing.is_(True),
+                )
+            )
+        }
+        if not required:
+            return False
+        named = {key for key, value in (reading.identity or {}).items() if value not in (None, "")}
+        return required <= named
 
     async def _variant_from(self, offer: Offer, reading: NormalizedOffer) -> Variant:
         """Build a catalogue entry out of one listing, identifiers and all."""
