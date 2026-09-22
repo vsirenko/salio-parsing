@@ -996,6 +996,61 @@ def a_colour_axis(client, token, category_id):
     return attribute
 
 
+def test_a_maker_left_on_the_model_is_cut_off_for_the_lookup(client):
+    """A shop that states no maker leaves it on the model, because the reading has no way to
+    know which word it is: m79's German feed reads `Google Pixel 10` where every other shop,
+    and the catalogue, holds `Pixel 10`."""
+    token = admin_token(client)
+    _, source, category, brand = a_shop_we_can_build_from(client, token)
+    variant = post(
+        client,
+        token,
+        "/api/admin/variants",
+        {"brand_id": brand["id"], "category_id": category["id"], "model": "Zeta 9"},
+    )
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": brand["canonical_name"] + " Zeta 9 - 5G Smartphone - Dual-SIM",
+            "model": brand["canonical_name"] + " Zeta 9",
+        },
+        external_id="C-9",
+    )
+    outcome = run_on(client, token, offer)
+    assert outcome["matched"] is True
+    assert outcome["variant_id"] == variant["id"]
+
+
+def test_a_model_that_really_begins_with_its_maker_keeps_it(client):
+    """Only when the full form found nothing, so an entry whose model genuinely starts with
+    the maker's name is still found by it."""
+    token = admin_token(client)
+    _, source, category, brand = a_shop_we_can_build_from(client, token)
+    variant = post(
+        client,
+        token,
+        "/api/admin/variants",
+        {
+            "brand_id": brand["id"],
+            "category_id": category["id"],
+            "model": brand["canonical_name"] + " Watch 5",
+        },
+    )
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": brand["canonical_name"] + " Watch 5",
+            "model": brand["canonical_name"] + " Watch 5",
+        },
+        external_id="C-10",
+    )
+    assert run_on(client, token, offer)["variant_id"] == variant["id"]
+
+
 def test_a_maker_named_at_the_end_of_a_title_is_read(client):
     """A whole supplier feed at m79 writes the maker last, in front of the shop's own
     suffix: `MOBILE PHONE GALAXY FOLD7/512GB SM-F966B SAMSUNG Mobilais Telefons`. Read from

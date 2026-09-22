@@ -69,6 +69,7 @@ from app.features.matching.schemas import (
     RenameReport,
     RunReport,
 )
+from app.features.offers.normalization import naming
 from app.features.runs.schemas import Kind
 from app.schemas.pagination import Pagination
 
@@ -260,6 +261,18 @@ class MatchingService:
             model = reading.model or reading.title
             if model:
                 found = await self._by_model(brand.id, model)
+                if not found:
+                    # A shop that states no maker leaves it on the model, because the
+                    # reading has no way to know which word it is: m79's German feed reads
+                    # `Google Pixel 10` where every other shop, and the catalogue, holds
+                    # `Pixel 10`. Here the brand has just been resolved, so the same cut the
+                    # reading could not make is a lookup — and only when the full form found
+                    # nothing, so a model that really begins with its maker's name keeps it.
+                    shorter = naming.without_brand(model, brand.canonical_name)
+                    if shorter != model:
+                        found = await self._by_model(brand.id, shorter)
+                        if found:
+                            model = shorter
                 # A model string names a family, not a thing you can buy. `Galaxy S26 Ultra
                 # 5G` is the 256, the 512 and the terabyte alike, and matching on it alone
                 # filed fifteen listings spanning a thousand euros as one product. So the

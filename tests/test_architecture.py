@@ -26,6 +26,13 @@ ALLOWED_CROSS_FEATURE = {
     # and belongs where it can be seen.
     ("matching", "brands"): "a brand string has to be normalized as brand aliases were",
     ("offers", "brands"): "a brand ruleset is keyed by the brand as the alias table spells it",
+    ("matching", "offers"): (
+        "a brand has to come off the front of a model string the same way the reading takes"
+        " it off, boundary and all — `CAT` against `Caterpillar CAT S75` once cut mid-word"
+        " and `naming.without_brand` exists because those three lines had been written twice"
+        " with the same bug. A shop that states no maker leaves it on the model and only the"
+        " matcher, which has just resolved the brand, can take it off"
+    ),
     ("matching", "catalog"): (
         "a model string has to be normalized as variants were — and promoting a listing"
         " creates a variant, which is the catalogue's own logic and must not be copied"
