@@ -8,6 +8,7 @@ in the file that already covers its subject rather than adding a section here.
 
 @.claude/rules/workflow.md
 @.claude/rules/architecture.md
+@.claude/rules/reading.md
 @.claude/rules/database.md
 @.claude/rules/auth.md
 @.claude/rules/audit.md

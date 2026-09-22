@@ -14,6 +14,19 @@ from app.features.offers.normalization.rules import CATEGORY, Rule, Ruleset, reg
 SLUG = "phones"
 VERSION = "phones-1"
 
+# ---------------------------------------------------------------------------------------
+# STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
+#
+# That `Iekšējā atmiņa` means built-in storage is a Latvian fact about a word. It belongs in
+# `attribute_aliases`, which has a `language` column for exactly this, and which nothing
+# resolves through yet. What belongs here is the structure: that built-in storage tells two
+# phones apart and working memory does not, which is true in every language.
+#
+# **Do not add a second language beside these.** A Lithuanian `talpa` and an Estonian `mälu`
+# written here turn a category into a dictionary, and the dictionary we already built stays
+# empty. Add the resolution step instead — see TODO.md.
+# ---------------------------------------------------------------------------------------
+
 # Fragments of the names the Baltic shops give the built-in capacity. Matched as a
 # substring rather than whole, because a shop writes the unit into the name itself:
 # ksenukai says `Atmiņas ietilpība` and bigbox says `Iekšējā atmiņa, GB`.

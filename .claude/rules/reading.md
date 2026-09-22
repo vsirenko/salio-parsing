@@ -1,0 +1,48 @@
+## Reading a payload
+
+- Reading is layered general to specific, and what changes down the list is **what selects
+  each layer**: nothing, the category, the channel, `(category, brand)`,
+  `(category, brand, line)`, nothing. `app/features/offers/normalization/rules.py` holds the
+  ordering and the reasons for it. Later wins.
+- **A rule returns only what it changed.** A rule that found nothing returns `{}`, never a
+  `None` that would erase what an earlier layer found.
+- **A rule is an object with a `why`**, and the `why` is the case from the data that put it
+  there — not a restatement of the code. "Normalises the model" explains nothing; "this
+  shop's article numbers all begin `Y0000` and can never agree with another shop" can be
+  argued with. Rules are objects so that the set an offer will get is readable *before* any
+  of them runs; a chain of conditionals answers that only by being executed.
+- **A rule may be declared with no body.** `Rule.pending` is a gap that is visible, which
+  beats one that is not. Half a canonicalisation is worse than none: a colour mapped wrongly
+  splits one product into several, confidently.
+- **Rules are written against collected bytes, never against a guess.** Collect, measure,
+  then write — and put the measurement in the `why`. A source with no ruleset is read
+  generically, and the coverage on its run is what says which rules it needs.
+
+## Vocabulary is data, structure is code
+
+- **A rule may not carry a shop's or a language's words.** That `Iekšējā atmiņa` means
+  built-in storage is a Latvian fact and belongs in `attribute_aliases`, which has a
+  `language` column for it; that built-in storage tells two phones apart and working memory
+  does not is true in every language and belongs in the category's rules.
+- The registries are the language tables: `attribute_aliases` and `attribute_value_aliases`,
+  both keyed by a normalized string and a language, both nullable where the string belongs
+  to no particular language — a maker's marketing name is the same word everywhere.
+  `markets.languages` is ordered, and the first is the market's default.
+- Nothing resolves through those registries yet, so `categories/phones.py` holds Latvian
+  strings **as a stopgap, marked as one**. Do not add a second language beside them; add the
+  resolution step instead.
+- Matching leans on the language-neutral signals on purpose — barcode, part number, model
+  designation — so language is a question about attributes and the storefront, not about
+  identifying a product.
+
+## What a channel may decide, and what it may not
+
+- A channel returns the **shop's own shapes**: its field names, its attribute labels, its
+  codes as it listed them. Turning them into ours is a reading decision, done against stored
+  bytes and re-runnable.
+- In particular a channel does not choose which of a shop's numbers is a barcode.
+  `normalization/barcodes.py` does, once, for every shop: check digits and GS1's reserved
+  prefixes are a standard, not something a shop invented.
+- `normalized_offers.attributes` holds the shop's own names untouched;
+  `normalized_offers.identity` holds ours, canonical and parsed. Mixing them leaves no way to
+  tell which is which.

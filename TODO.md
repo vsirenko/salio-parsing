@@ -105,10 +105,15 @@ and the questions that have to be answered with real data first, are written dow
       across 520 phones, of which the maker's marketing names (`obsidian`, `glacier`) are
       brand knowledge and the plain-English ones need a language table. `phones-color` is
       declared `pending` and says so.
-- [ ] **Nothing resolves an attribute name to the registry.** `attribute_aliases` exists for
-      exactly that — `Atmiņas ietilpība` → an attribute row — and nothing calls it, so
-      `identity` is filled only by what a category's rules parse themselves. That resolution
-      cannot live in `read()`, which is pure; it is a second step over a stored reading.
+- [ ] **Nothing resolves an attribute name to the registry, so vocabulary sits in code.**
+      `attribute_aliases` and `attribute_value_aliases` exist for exactly this and both carry
+      a `language` column; nothing calls either, so `categories/phones.py` holds Latvian
+      strings as a marked stopgap. It is the piece that makes a second country cheap: a
+      Lithuanian shop needs rows, not another tuple in a category module. The resolution
+      cannot live in `read()`, which is pure — it is a second step over a stored reading,
+      taking the offer's market for the language order (`markets.languages`, first is
+      default) and falling back to aliases that belong to no language at all, which is what
+      a maker's marketing names are.
 - [ ] **The brand registry and the catalogue are both empty.** All 520 real offers queue,
       and there is nothing to match them against: zero brands, zero variants. Filling the
       brand registry is the cheapest large win there is.
