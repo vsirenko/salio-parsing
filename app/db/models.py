@@ -468,6 +468,41 @@ class BrandAlias(Base):
     )
 
 
+class ModelAlias(Base):
+    """`galaxy s26 5g`, `s26`, `galaxy s26` -> `Galaxy S26`, under Samsung.
+
+    Which words in a title are the model is the same kind of fact as which words are a
+    colour: a vocabulary, not a structure, so it is rows rather than a rule. The reader
+    finds the longest of these whole in a title and takes `model` as the spelling — which
+    is what makes twelve shops arrive at one catalogue name instead of twelve, and what
+    stops a shop with no model field naming a product after its spec sheet.
+
+    Per brand, because a model name only means something beside its maker: `Note 17` is a
+    Xiaomi and, one day, somebody else's too. The canonical spelling is a string rather
+    than a row of its own, the way `category_aliases` does it: the registry is consulted
+    by the reader and never joined to the catalogue, and a canonical that was a foreign
+    key would tie a reading to a product row that may not exist yet.
+    """
+
+    __tablename__ = "model_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    brand_id: Mapped[int] = mapped_column(ForeignKey("brands.id", ondelete="CASCADE"))
+    # Words, casefolded, separated by single spaces, and nothing else kept but `+`: it is
+    # the one mark that tells two models apart — `Galaxy S26+` is not `Galaxy S26`.
+    alias_normalized: Mapped[str] = mapped_column(String(200))
+    # The spelling the catalogue uses. Several aliases point at one of these.
+    model: Mapped[str] = mapped_column(String(200))
+    origin: Mapped[str] = mapped_column(String(10), default="human", server_default="human")
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("brand_id", "alias_normalized", name="uq_model_alias_per_brand"),
+        CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
+        Index("ix_model_aliases_normalized", "alias_normalized"),
+    )
+
+
 class Product(Base):
     """The family a human searches for: "iPhone 15 Pro".
 

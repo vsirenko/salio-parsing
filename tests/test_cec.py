@@ -174,4 +174,4 @@ def test_the_identity_axes_come_from_the_options(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-8+cec-1")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-9+cec-1")

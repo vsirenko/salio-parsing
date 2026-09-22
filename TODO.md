@@ -504,6 +504,26 @@ and the questions that have to be answered with real data first, are written dow
       `Demo`, `Renew`, `Grade A`, `Pre-owned`, `Mazlietots`, `Atjaunots` are six spellings
       from five shops in three languages, and they belong in the registry with the colours,
       not in six channel modules.
+- [ ] **26 families are still named by subtraction, and every one is a phone only bm or
+      m79 sells.** `Nord CE 5 5G Dual Sim`, `Phone 3a 5G Dual Sim`, `Find X9 5G Dual Sim`,
+      `13 5G Dual Sim`: no clean shop reads them, so the seed had nothing to give, and the
+      registry rows are entered by hand — `POST /api/admin/brands/{id}/models`, then a
+      reparse and a rebuild. Four of them are Poco phones bm files under `Xiaomi`, where the
+      clean shops file them under `Poco`: the page a listing opens is its maker's, so those
+      need either a Poco alias on Xiaomi's page or bm's brand read as Poco.
+- [ ] **The model registry exists only in this database.** Like the colour registry:
+      `87be04a227a1` creates `model_aliases` empty and `tools/seed_models.py` filled it from
+      the eight clean sources on 22.09.2026. A fresh database has no names and the reader
+      keeps every shop's own subtraction, which is the state before this was built. The
+      seed is re-runnable; the hand-entered rows are not.
+- [ ] **`normalize_model` drops the `+`, so `Galaxy S26` and `Galaxy S26+` share a
+      `model_normalized`.** Twelve pairs in `variants` today, every one of them Samsung:
+      `S25`/`S25+`, `S26`/`S26+`, and the `Fold 8`/`Fold8` spellings that *should* meet. The
+      identity key is computed from that column, so two shops describing the plain and the
+      plus phone completely arrive at the same key and would be merged as one. It has not
+      fired only because their capacities and colours have not lined up yet. The registry's
+      own `normalize_model_name` keeps `+` for exactly this reason; the catalogue's should
+      too, and every identity key recomputed after it does.
 - [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
       Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
       not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals

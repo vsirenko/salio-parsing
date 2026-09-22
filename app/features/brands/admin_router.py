@@ -18,6 +18,8 @@ from app.features.brands.schemas import (
     BrandMatch,
     BrandRead,
     BrandUpdate,
+    ModelAliasCreate,
+    ModelAliasRead,
 )
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
@@ -125,4 +127,43 @@ async def add_alias(
 )
 async def remove_alias(brand_id: int, alias_id: int, service: BrandServiceDep) -> Response:
     await service.remove_alias(brand_id, alias_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{brand_id}/models",
+    response_model=list[ModelAliasRead],
+    summary="List a brand's model names",
+)
+async def list_models(brand_id: int, service: BrandServiceDep) -> list[ModelAliasRead]:
+    """Every spelling of every model this maker is known to make, and the name the
+    catalogue gives each. The reader finds these whole in a title; a title holding none
+    of them keeps whatever the shop's own rule cut out."""
+    return await service.list_models(brand_id)
+
+
+@router.post(
+    "/{brand_id}/models",
+    response_model=ModelAliasRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a model name",
+    responses={409: {"model": ErrorResponse, "description": "Already names a model here"}},
+)
+async def add_model(
+    brand_id: int, payload: ModelAliasCreate, service: BrandServiceDep
+) -> ModelAliasRead:
+    """`alias` is what a shop writes, `model` is what the catalogue calls it. Adding the
+    canonical spelling as an alias of itself is the usual first row. Registry work moves
+    no ruleset version, so it has to be followed by a reparse to reach stored readings."""
+    return await service.add_model(brand_id, payload)
+
+
+@router.delete(
+    "/{brand_id}/models/{alias_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a model name",
+    responses={404: {"model": ErrorResponse, "description": "Not a model name of this brand"}},
+)
+async def remove_model(brand_id: int, alias_id: int, service: BrandServiceDep) -> Response:
+    await service.remove_model(brand_id, alias_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

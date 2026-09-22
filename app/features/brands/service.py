@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.exceptions import ConflictError, NotFoundError
-from app.db.models import Brand, BrandAlias
+from app.db.models import Brand, BrandAlias, ModelAlias
 from app.db.query import paginated
-from app.features.brands.normalization import normalize_brand
+from app.features.brands.normalization import normalize_brand, normalize_model_name
 from app.features.brands.schemas import (
     AliasKind,
     BrandAliasCreate,
@@ -17,6 +17,8 @@ from app.features.brands.schemas import (
     BrandMatch,
     BrandRead,
     BrandUpdate,
+    ModelAliasCreate,
+    ModelAliasRead,
 )
 from app.schemas.pagination import Pagination
 
@@ -117,6 +119,54 @@ class BrandService:
         audit.set_target("brand", brand_id)
         audit.record_changes(removed_alias=alias.alias_normalized)
         await self.session.execute(delete(BrandAlias).where(BrandAlias.id == alias_id))
+
+    # --- the model registry: what this maker calls what it makes ---
+
+    async def list_models(self, brand_id: int) -> list[ModelAliasRead]:
+        await self._brand(brand_id)
+        rows = await self.session.scalars(
+            select(ModelAlias)
+            .where(ModelAlias.brand_id == brand_id)
+            .order_by(ModelAlias.model, ModelAlias.alias_normalized)
+        )
+        return [ModelAliasRead.model_validate(row) for row in rows]
+
+    async def add_model(self, brand_id: int, payload: ModelAliasCreate) -> ModelAliasRead:
+        """One spelling a shop uses, and the name the catalogue gives it.
+
+        Unique per brand on the normalized alias: one spelling must not read as two models.
+        The reverse is the point — several spellings read as one model.
+        """
+        await self._brand(brand_id)
+        audit.set_target("brand", brand_id)
+
+        normalized = normalize_model_name(payload.alias)
+        alias = ModelAlias(
+            brand_id=brand_id,
+            alias_normalized=normalized,
+            model=payload.model,
+            origin=payload.origin.value,
+        )
+        self.session.add(alias)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError(f"'{normalized}' already names a model of this brand") from exc
+
+        await self.session.refresh(alias)
+        audit.record_changes(added_model_alias=normalized, model=payload.model)
+        return ModelAliasRead.model_validate(alias)
+
+    async def remove_model(self, brand_id: int, alias_id: int) -> None:
+        await self._brand(brand_id)
+        alias = await self.session.get(ModelAlias, alias_id)
+        if alias is None or alias.brand_id != brand_id:
+            raise NotFoundError(f"Model alias {alias_id} is not on brand {brand_id}")
+
+        audit.set_target("brand", brand_id)
+        audit.record_changes(removed_model_alias=alias.alias_normalized, model=alias.model)
+        await self.session.execute(delete(ModelAlias).where(ModelAlias.id == alias_id))
 
     # --- what the matcher will call ---
 

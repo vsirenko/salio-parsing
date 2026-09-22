@@ -5,7 +5,11 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.features.brands.normalization import normalize_brand
+from app.features.brands.normalization import (
+    LONGEST_MODEL_NAME,
+    normalize_brand,
+    normalize_model_name,
+)
 
 SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
@@ -94,6 +98,49 @@ class BrandAliasRead(BaseModel):
     alias_normalized: str
     alias_raw: str
     kind: AliasKind
+    origin: Origin
+
+
+class ModelAliasCreate(BaseModel):
+    """One way a shop writes a model, and the spelling the catalogue uses for it.
+
+    `alias` is what is found in a title; `model` is what the reading comes out as. Adding
+    the canonical spelling as an alias of itself is the usual first row, and the one the
+    seed writes — a name that is only a target is never found.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    alias: str = Field(min_length=1, max_length=200)
+    model: str = Field(min_length=1, max_length=200)
+    origin: Origin = Origin.HUMAN
+
+    @field_validator("alias")
+    @classmethod
+    def _a_name_not_a_title(cls, value: str) -> str:
+        # Rejected here rather than stored and never found: the reader looks up windows of
+        # at most `LONGEST_MODEL_NAME` words, so a longer alias would sit in the table and
+        # match nothing. Anything that long is a spec sheet, not a name.
+        words = normalize_model_name(value).split()
+        if len(words) > LONGEST_MODEL_NAME:
+            raise ValueError(f"a model name is at most {LONGEST_MODEL_NAME} words")
+        return value
+
+    @field_validator("model")
+    @classmethod
+    def _spelled(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value.strip()
+
+
+class ModelAliasRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    brand_id: int
+    alias_normalized: str
+    model: str
     origin: Origin
 
 

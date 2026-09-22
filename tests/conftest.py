@@ -57,6 +57,7 @@ TABLES = (
     "variants",
     "product_merges",
     "products",
+    "model_aliases",
     "brand_aliases",
     "brands",
     "categories",

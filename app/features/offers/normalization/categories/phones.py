@@ -9,7 +9,8 @@ shop that sells them.
 import re
 from typing import Any
 
-from app.features.offers.normalization import colours, naming
+from app.features.brands.normalization import normalize_brand
+from app.features.offers.normalization import colours, models, naming
 from app.features.offers.normalization.rules import (
     CATEGORY,
     FINISH,
@@ -23,7 +24,7 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-8"
+VERSION = "phones-9"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -208,6 +209,43 @@ def _without_the_maker(
     return {}
 
 
+def _from_the_registry(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The model as the registry spells it, found whole in the title.
+
+    Last of all, and reading the title rather than the model the layers before this one
+    cut out: a shop with no model field leaves its own spec sheet on the model — `Galaxy
+    S26 S942 5G Dual Sim` — and the name is still in the title, whole. When it is not, the
+    shop's own reading stands; this fills nothing in and only replaces.
+
+    Scoped to the maker the shop stated, when the registry holds a page for it. A shop that
+    states none — m79's German feed — gets every page, and only an answer exactly one of
+    them gives: `Note 17` under two makers is a question for the brand rung, not for this.
+    """
+    if not vocabulary.models:
+        return {}
+    maker = _maker_key(fields.get("brand_raw"))
+    pages = [vocabulary.models[maker]] if maker in vocabulary.models else vocabulary.models.values()
+    for text in (fields.get("title"), fields.get("model")):
+        if not text:
+            continue
+        found = {name for page in pages if (name := models.from_title(str(text), page))}
+        if len(found) == 1:
+            return {"model": found.pop()}
+    return {}
+
+
+def _maker_key(raw: Any) -> str | None:
+    """The brand as the registry is keyed, or nothing — the same function the keys use."""
+    if not raw:
+        return None
+    try:
+        return normalize_brand(str(raw))
+    except ValueError:
+        return None
+
+
 def _megabytes(text: str) -> int | None:
     """The largest size in the text, because a title that carries two carries both kinds.
 
@@ -371,6 +409,40 @@ RULESET = register(
                     " boundary: `CAT` against `Caterpillar CAT S75` once cut mid-word."
                 ),
                 body=_without_the_maker,
+            ),
+            Rule(
+                id="phones-model-from-the-registry",
+                layer=FINISH,
+                why=(
+                    "211 of 1524 catalogue entries were named `Galaxy S26 S942 5G Dual Sim`,"
+                    " `razr fold 20.6 cm Dual SIM Android 16.0` and the like, 170 of them by"
+                    " the two shops that publish no model field. Their rules cut the model"
+                    " out of the title by subtraction — everything before the first capacity"
+                    " — and subtraction cannot be made clean, because the list of what to cut"
+                    " is open: `5G`, `Dual Sim`, `Hybrid Dual SIM`, `USB Type-C`, `17.3 cm`,"
+                    " an internal code, a German `Interner Speicher`. Every rule closes one"
+                    " tail and the next shop opens another."
+                    "\n\n"
+                    "Recognition is closed: a title holds a name the registry knows or it"
+                    " does not. Measured against the 845 spellings the eight clean shops"
+                    " read, a known name sits whole in 77% of bm's titles and 88% of m79's,"
+                    " where the model those shops' own rules read agrees with the rest of"
+                    " the market on 21% and 26%. The name was there all along."
+                    "\n\n"
+                    "Which words are a model is the same kind of fact as which words are a"
+                    " colour, so it is rows — `model_aliases`, per maker — handed in as"
+                    " vocabulary, and this holds only the matching: whole words, longest"
+                    " wins, two different names decide nothing. The registry cannot be"
+                    " derived from the catalogue it is meant to clean: `Galaxy S26 S942 5G"
+                    " Dual Sim` is in the title too, and as the longest known name it would"
+                    " win. It is seeded from the shops that read cleanly and grown by hand."
+                    "\n\n"
+                    "A title holding no known name keeps what the shop's rule cut out. The"
+                    " tail is a shop selling what nobody else sells — Nubia, Blackview,"
+                    " ZTE — and a spelling the registry has not been told: `Samsung S26`"
+                    " without its `Galaxy`. Both are rows, not rules."
+                ),
+                body=_from_the_registry,
             ),
         ),
     ),

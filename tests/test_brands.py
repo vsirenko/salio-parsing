@@ -229,3 +229,85 @@ def test_adding_an_alias_is_recorded(client):
     assert entry["target_type"] == "brand"
     assert entry["target_id"] == str(brand["id"])
     assert entry["changes"] == {"added_alias": "самсунг", "kind": "spelling"}
+
+
+# --- the model registry: what a maker calls what it makes ---
+
+
+def add_model(client, token, brand_id, alias, model, **extra):
+    return client.post(
+        f"/api/admin/brands/{brand_id}/models",
+        headers=auth(token),
+        json={"alias": alias, "model": model, **extra},
+    )
+
+
+def test_a_model_name_is_stored_as_words_and_once(client):
+    token = admin_token(client)
+    brand = add_brand(client, token, "samsung", "Samsung")
+
+    created = add_model(client, token, brand["id"], "Galaxy  S26 5G", "Galaxy S26")
+    assert created.status_code == 201, created.text
+    assert created.json()["alias_normalized"] == "galaxy s26 5g"
+    assert created.json()["model"] == "Galaxy S26"
+    # The same words once case and spacing are computed away — one row, not two.
+    assert add_model(client, token, brand["id"], "galaxy s26 5g", "Galaxy S26").status_code == 409
+
+    # `+` survives: it is the one mark that tells two models apart.
+    plus = add_model(client, token, brand["id"], "Galaxy S26+", "Galaxy S26+")
+    assert plus.status_code == 201
+    assert plus.json()["alias_normalized"] == "galaxy s26+"
+
+    listed = client.get(f"/api/admin/brands/{brand['id']}/models", headers=auth(token)).json()
+    assert [(row["alias_normalized"], row["model"]) for row in listed] == [
+        ("galaxy s26 5g", "Galaxy S26"),
+        ("galaxy s26+", "Galaxy S26+"),
+    ]
+
+
+def test_a_spec_sheet_is_not_a_model_name(client):
+    """The reader looks up windows of at most six words; a longer alias would sit in the
+    table and match nothing, so it is refused rather than stored."""
+    token = admin_token(client)
+    brand = add_brand(client, token, "motorola", "Motorola")
+    refused = add_model(
+        client,
+        token,
+        brand["id"],
+        "Motorola razr fold 20.6 cm Dual SIM Android 16.0 5G USB Type-C",
+        "razr fold",
+    )
+    assert refused.status_code == 422
+    assert add_model(client, token, brand["id"], "(+)", "x").status_code == 422
+
+
+def test_remove_a_model_name_and_only_from_its_own_brand(client):
+    token = admin_token(client)
+    samsung = add_brand(client, token, "samsung", "Samsung")
+    apple = add_brand(client, token, "apple", "Apple")
+    row = add_model(client, token, samsung["id"], "Galaxy S26", "Galaxy S26").json()
+
+    wrong_brand = client.delete(
+        f"/api/admin/brands/{apple['id']}/models/{row['id']}", headers=auth(token)
+    )
+    assert wrong_brand.status_code == 404
+
+    removed = client.delete(
+        f"/api/admin/brands/{samsung['id']}/models/{row['id']}", headers=auth(token)
+    )
+    assert removed.status_code == 204
+    assert client.get(f"/api/admin/brands/{samsung['id']}/models", headers=auth(token)).json() == []
+
+
+def test_adding_a_model_name_is_recorded(client):
+    token = admin_token(client)
+    brand = add_brand(client, token, "samsung", "Samsung")
+    add_model(client, token, brand["id"], "S26", "Galaxy S26")
+
+    entries = client.get(
+        "/api/admin/audit", headers=auth(token), params={"path": "/models"}
+    ).json()["items"]
+    entry = next(e for e in entries if e["status_code"] == 201)
+    assert entry["target_type"] == "brand"
+    assert entry["target_id"] == str(brand["id"])
+    assert entry["changes"] == {"added_model_alias": "s26", "model": "Galaxy S26"}

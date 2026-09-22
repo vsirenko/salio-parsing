@@ -133,6 +133,18 @@ The first of those words is what a shop calls the category, which is how bigbox'
 read (see [categories](../categories/README.md)). They are Latvian here and Lithuanian one
 shop later, so they are rows — a tuple in this module would be a code change per country.
 
+The last of them is what a maker calls what it makes, and **the model is the registry's
+spelling, found whole in the title.** Two shops publish no model field; their rules cut the
+model out of the title by subtraction — everything before the first capacity — and what the
+shop wrote in between stayed on, so 211 of 1524 catalogue entries were named
+`Galaxy S26 S942 5G Dual Sim`. The last rule of the category reads the title again and
+takes the longest name the registry knows: whole words, longest wins, two different names
+decide nothing. Measured before it was written, a known name sits whole in 77% of bm's
+titles and 88% of m79's, where their own rules agreed with the rest of the market on 21%
+and 26%. A title holding no known name keeps what the shop's rule read. The registry
+itself — where it came from, why it is per brand, why `+` survives — is described in
+[brands](../brands/README.md), "The model registry".
+
 **A brand lives inside a category**, which is why the tree nests
 `normalization/brands/phones/apple.py`. A module there is mostly the measurement that
 justifies its rules, as the first two are: Apple's part number is five characters of

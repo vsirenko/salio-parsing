@@ -19,6 +19,7 @@ from app.db.models import (
     Category,
     CategoryAlias,
     Market,
+    ModelAlias,
     NormalizedOffer,
     Offer,
     RawOffer,
@@ -28,6 +29,7 @@ from app.db.models import (
     Source,
 )
 from app.db.query import paginated
+from app.features.brands.normalization import normalize_brand
 from app.features.offers.normalization import (
     Vocabulary,
     content_hash,
@@ -506,10 +508,24 @@ class OfferService:
                 .where(Attribute.key == COLOR_KEY)
             )
             makers = await self.session.scalars(select(Brand.canonical_name))
+            # What each maker calls what it makes, keyed the way a reading spells a maker
+            # — `normalize_brand` on both sides, so the page a listing's `brand_raw` opens
+            # is the page its maker's names were filed under.
+            spellings = await self.session.execute(
+                select(Brand.canonical_name, ModelAlias.alias_normalized, ModelAlias.model).join(
+                    ModelAlias, ModelAlias.brand_id == Brand.id
+                )
+            )
+            pages: dict[str, dict[str, str]] = {}
+            for maker, alias, model in spellings.all():
+                pages.setdefault(normalize_brand(maker), {})[alias] = model
             self._vocabularies[source.category_id] = Vocabulary(
                 category_names=frozenset(names),
                 brand_names=frozenset(name.casefold() for name in makers if name),
                 colours=MappingProxyType({alias: value for alias, value in colours.all()}),
+                models=MappingProxyType(
+                    {maker: MappingProxyType(page) for maker, page in pages.items()}
+                ),
             )
         return self._vocabularies[source.category_id]
 

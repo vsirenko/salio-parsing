@@ -91,3 +91,34 @@ def _strip_legal_suffix(text: str) -> str:
         if candidate:
             return candidate
     return text
+
+
+# A model name is at most this many words. The bound is what makes finding one in a title
+# cheap — every window of up to six words is looked up, rather than every alias tried
+# against every title — and it is also a statement: anything longer is a spec sheet, not
+# a name. The longest real one in the corpus, `Galaxy Z Fold7 FE 5G`, is five.
+LONGEST_MODEL_NAME = 6
+
+# Everything that is not a letter, a digit or `+` separates words. `+` stays because it
+# is the one mark that tells two models apart: `Galaxy S26+` is not `Galaxy S26`, and a
+# form that dropped it would file them together.
+_NOT_MODEL_WORD = re.compile(r"[^\w+]+|_+", re.UNICODE)
+
+
+def normalize_model_name(value: str) -> str:
+    """The form a model alias is stored and looked up as: words, casefolded, one space apart.
+
+    Not `catalog.identity.normalize_model`, deliberately. That strips every separator to
+    compare two designations, which is right for `WW90T554DAX` against `WW 90 T554 DAX` and
+    wrong here twice over: a title has to be cut into words to find a name in it, and it
+    drops the `+` that makes `Galaxy S26+` a different phone.
+
+    Raises when nothing is left, because a blank alias would be found in every title.
+    """
+    text = unicodedata.normalize("NFKC", value).casefold()
+    words = _NOT_MODEL_WORD.sub(" ", text).split()
+    # `+` is kept inside a word; a word that is nothing but `+` is a bundle's plus sign,
+    # and an alias made of one would be found in every bundle.
+    if not any(char.isalnum() for word in words for char in word):
+        raise ValueError("nothing left after normalization")
+    return " ".join(words)

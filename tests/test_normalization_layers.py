@@ -57,6 +57,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         "ksenukai-article-is-not-a-part-number",
         # Last of all: the model is what every layer before it worked out.
         "phones-model-does-not-repeat-the-maker",
+        "phones-model-from-the-registry",
     ]
     # General to specific: the category before the shop, canonicalisation last.
     assert [rule.layer for rule in rules] == [
@@ -66,6 +67,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         SOURCE,
         SOURCE,
         SOURCE,
+        FINISH,
         FINISH,
         FINISH,
     ]
@@ -105,10 +107,10 @@ def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
     assert version_for(KSENUKAI) == "generic-1+ksenukai-5"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-8+ksenukai-5"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-9+ksenukai-5"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-8+ksenukai-5"
+        == "generic-1+phones-9+ksenukai-5"
     )
 
 
@@ -256,7 +258,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-8+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-1+phones-9+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -486,7 +488,7 @@ FINGERPRINTS = {
     "mdata-1": "4c3e79e938e3",
     "onea-1": "3f30745390d5",
     "euronics-1": "e61bf95a7a78",
-    "phones-8": "5f102ff7e96d",
+    "phones-9": "c77f2d09b65a",
     "rdveikals-4": "f5078e0afc82",
     "samsung-phones-2": "5fa9e1989091",
     "tet-2": "a49facbac61d",
@@ -584,3 +586,100 @@ def test_a_name_that_is_only_the_brand_is_left_alone():
     assert naming.without_brand("Apple", "Apple") == "Apple"
     assert naming.without_brand("", "Apple") == ""
     assert naming.without_brand("Apple iPhone", "") == "Apple iPhone"
+
+
+# --- the model is the registry's spelling, found whole in the title ---
+
+
+REGISTRY = {
+    "samsung": {
+        "galaxy s26": "Galaxy S26",
+        "s26": "Galaxy S26",
+        "galaxy s26+": "Galaxy S26+",
+        "galaxy s26 ultra": "Galaxy S26 Ultra",
+        "galaxy s26 ultra 5g": "Galaxy S26 Ultra",
+        "galaxy a56": "Galaxy A56",
+    },
+    "xiaomi": {"redmi note 17": "Redmi Note 17"},
+}
+
+
+def test_the_model_is_the_registry_s_spelling_found_whole_in_the_title():
+    """bm.market has no model field, and cutting the title before the first capacity leaves
+    `Galaxy S26 S942 5G Dual Sim`, which named a catalogue entry. The name is in the title
+    whole; the registry is what says which words it is."""
+    words = Vocabulary(models=REGISTRY)
+    fields = read(
+        {
+            "name": "Samsung Galaxy S26 S942 5G Dual Sim 12GB RAM 128GB - Cobalt Violet",
+            "brand": "Samsung",
+            "model": "Galaxy S26 S942 5G Dual Sim",
+        },
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert fields["model"] == "Galaxy S26"
+
+    # A spelling the registry was told about, without the line's name in front of it.
+    short = read(
+        {"name": "Viedtālrunis Samsung S26 256GB SM-S942B Black", "brand": "Samsung"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert short["model"] == "Galaxy S26"
+
+
+def test_the_longest_known_name_wins_and_a_plus_is_a_different_phone():
+    words = Vocabulary(models=REGISTRY)
+    ultra = read(
+        {"name": "Samsung Galaxy S26 Ultra 5G 256GB", "brand": "Samsung"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert ultra["model"] == "Galaxy S26 Ultra"
+    plus = read(
+        {"name": "Samsung Galaxy S26+ (S947) (Silver Shadow) Dual SIM 6.7", "brand": "Samsung"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert plus["model"] == "Galaxy S26+"
+
+
+def test_a_title_naming_two_models_keeps_what_the_shop_s_rule_read():
+    """A bundle, or a listing that names two phones: picking one is a wrong answer rather
+    than half of one, so the reading the layers before this one produced stands."""
+    fields = read(
+        {"name": "Samsung Galaxy S26 + Galaxy A56", "brand": "Samsung", "model": "as read"},
+        category=PHONES,
+        vocabulary=Vocabulary(models=REGISTRY),
+    )
+    assert fields["model"] == "as read"
+
+
+def test_a_stated_maker_opens_only_its_own_page():
+    """The shop said Xiaomi, so Samsung's names are not consulted — whatever the title says."""
+    fields = read(
+        {"name": "Xiaomi Galaxy S26 lookalike 128GB", "brand": "Xiaomi", "model": "as read"},
+        category=PHONES,
+        vocabulary=Vocabulary(models=REGISTRY),
+    )
+    assert fields["model"] == "as read"
+
+
+def test_a_maker_the_shop_did_not_state_is_found_through_every_page():
+    """m79's German feed states no maker at all. Every page is consulted, and one answer
+    from one maker is an answer."""
+    fields = read(
+        {"name": 'Xiaomi Redmi Note 17 | Sky Teal | 6.99 " | 2396 x 1080 pixels'},
+        category=PHONES,
+        vocabulary=Vocabulary(models=REGISTRY),
+    )
+    assert fields["model"] == "Redmi Note 17"
+
+
+def test_with_no_registry_the_shop_s_reading_stands():
+    fields = read(
+        {"name": "Samsung Galaxy S26 S942 5G Dual Sim", "brand": "Samsung", "model": "as read"},
+        category=PHONES,
+    )
+    assert fields["model"] == "as read"

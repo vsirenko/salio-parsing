@@ -68,6 +68,13 @@ class Vocabulary:
     # because a rule reading a Latvian field and a rule reading an English name are both
     # asking the same question and neither should carry the answer.
     colours: Mapping[str, str] = MappingProxyType({})
+    # What each maker calls what it makes: keyed by the maker as `normalize_brand` spells
+    # it, then by a spelling as `normalize_model_name` spells it, to the name the catalogue
+    # uses. `{"samsung": {"galaxy s26": "Galaxy S26", "s26": "Galaxy S26"}}`. The reader
+    # finds the longest of these whole in a title, which is what makes twelve shops arrive
+    # at one name — and it is data, because which words are a model is the same kind of
+    # fact as which words are a colour, and a rule that carried them would carry a shop's.
+    models: Mapping[str, Mapping[str, str]] = MappingProxyType({})
 
 
 # What a rule is handed: the raw payload, the reading so far, and the words it was given.
