@@ -355,6 +355,27 @@ and the questions that have to be answered with real data first, are written dow
       (2 of 2); `charcoal`, `coralred` and `pinkgold` declared and unwritten.
       Counted **per shop**, not per listing: five listings of one phone in one shop is one
       opinion, and counting listings is what made these words look contested before.
+- [x] **m79.lv, the eleventh shop and the cheapest full pass of the eleven.** 2693 phones in
+      22 seconds and not one product page opened: the listing card carries the id, the
+      title, the price, the stock word, the shop's item code as base64, and the barcode in
+      the product's own address — `barcodes.pick` finds a valid one on 72% of them, beaten
+      only by two of the other ten. Two traps, both measured before the channel was written.
+      A **numeric path segment is looked up as a product code before it is a page number**:
+      `/mobilie-telefoni/150` served a board game whose `Preces kods` is 150, and `/250` a
+      toy truck, so two of five sampled page numbers silently swallowed a page of products.
+      And the **page size is not a query parameter** — four guesses at one were wrong; it is
+      `POST /ajax/set-setting` with `settingValue=96` against the session cookie, which
+      takes the walk from 314 pages to 40 and the collision surface with it. The shop
+      ignores that POST until it has a session, so the channel checks the page it gets back
+      and asks again rather than trusting it — one run walked the category twelve to a page
+      believing it was walking it ninety-six to a page.
+- [x] **A listing with no brand field at all now reads the title for one.** `_resolve_brand`
+      returned `none_given` and stopped, because the title fallback was written for a shop
+      that states a brand nobody knows. A shop that states none is not a shop stating one
+      correctly, so there is nothing to second-guess and the risk is strictly lower. m79 is
+      why: it names a maker in a field on 28% of its listings and in the title on almost all
+      of them, and without this 425 fully-read phones could not become a catalogue entry.
+      Promotion refusals for `brand_unresolved` went 425 -> 84.
 - [ ] **`titanium` is a material and the registry calls it a colour.** It is the single
       worst word in the corpus for disagreeing with what shops state in a field: 44 of the
       320 disagreements are `Titanium Silverblue` and friends, where the shop's own field

@@ -632,6 +632,14 @@ class MatchingService:
         network call.
         """
         if not reading.brand_raw:
+            # No field at all is not a shop stating a brand correctly, so the title is
+            # weighed here for the same reason it is weighed below and with less risk:
+            # there is nothing to second-guess. m79.lv is why — it states a maker on 28% of
+            # its listings and names one in the title of almost all of them, and without
+            # this 425 fully-read phones could not become a catalogue entry.
+            named = await self._brand_from_title(reading)
+            if named is not None:
+                return BrandLookup(named, "resolved_title", [named.id])
             return BrandLookup(None, "none_given", [])
         try:
             normalized = normalize_brand(reading.brand_raw)
