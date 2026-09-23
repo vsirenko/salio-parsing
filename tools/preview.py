@@ -388,6 +388,23 @@ const stock = s => {
   return `<span class="${esc(cls)}">${esc(label)}</span>`;
 };
 const money = (n, c) => n == null ? "—" : n.toFixed(2) + " " + (c === "EUR" ? "\\u20ac" : c || "");
+// A brand dropdown built from the rows themselves, counted, so an option that would show
+// nothing is never offered. Keyed case-insensitively: shops write `SAMSUNG` and `Samsung`
+// for one maker, and two options for it would split one list in two.
+// Rows with no maker at all get an option of their own; an empty value would be "all".
+const brandKey = name => (name || "—").toLowerCase();
+function brandOptions(select, names) {
+  const counts = new Map();
+  for (const name of names) {
+    const key = brandKey(name);
+    const seen = counts.get(key);
+    counts.set(key, seen ? [seen[0], seen[1] + 1] : [name || "—", 1]);
+  }
+  select.innerHTML = '<option value="">All brands</option>' + [...counts]
+    .sort((a, b) => a[1][0].localeCompare(b[1][0]))
+    .map(([key, [label, n]]) => `<option value="${esc(key)}">${esc(label)} (${n})</option>`)
+    .join("");
+}
 __SCRIPT__
 </script>
 </body></html>
@@ -412,6 +429,7 @@ const main = document.getElementById("main");
 main.innerHTML = `
   <div class="bar">
     <input id="q" placeholder="Search a product, a brand, a model…" autofocus>
+    <select id="brand"></select>
     <select id="sort">
       <option value="shops">Most shops first</option>
       <option value="offers">Most listings first</option>
@@ -457,8 +475,9 @@ function brand(r) {
 function draw() {
   const q = document.getElementById("q").value.trim().toLowerCase();
   const by = document.getElementById("sort").value;
-  let rows = DATA.products.filter(p => !q ||
-    (p.title + " " + p.brand + " " + p.category).toLowerCase().includes(q));
+  const maker = document.getElementById("brand").value;
+  let rows = DATA.products.filter(p => (!maker || brandKey(p.brand) === maker) && (!q ||
+    (p.title + " " + p.brand + " " + p.category).toLowerCase().includes(q)));
   const order = {
     shops: (a, b) => b.shops.length - a.shops.length || b.offer_count - a.offer_count,
     offers: (a, b) => b.offer_count - a.offer_count,
@@ -470,7 +489,9 @@ function draw() {
     rows.length ? rows.map(card).join("")
                 : '<div class="empty">Nothing matches that.</div>';
 }
+brandOptions(document.getElementById("brand"), DATA.products.map(p => p.brand));
 document.getElementById("q").addEventListener("input", draw);
+document.getElementById("brand").addEventListener("change", draw);
 document.getElementById("sort").addEventListener("change", draw);
 draw();
 """
@@ -478,7 +499,10 @@ draw();
 UNMATCHED_JS = """
 const main = document.getElementById("main");
 main.innerHTML = `
-  <div class="bar"><input id="q" placeholder="Search a title, a brand, a shop…" autofocus></div>
+  <div class="bar">
+    <input id="q" placeholder="Search a title, a brand, a shop…" autofocus>
+    <select id="brand"></select>
+  </div>
   <div id="list"></div>`;
 
 function group(key, rows) {
@@ -511,9 +535,10 @@ function brand(r) {
 
 function draw() {
   const q = document.getElementById("q").value.trim().toLowerCase();
-  const rows = DATA.queued.filter(r => !q ||
+  const maker = document.getElementById("brand").value;
+  const rows = DATA.queued.filter(r => (!maker || brandKey(makerOf(r)) === maker) && (!q ||
     ((r.title || "") + " " + (r.brand_raw || "") + " " + (r.brand_read || "") + " " + r.shop)
-      .toLowerCase().includes(q));
+      .toLowerCase().includes(q)));
   const buckets = new Map();
   for (const r of rows) (buckets.get(r.missing) ?? buckets.set(r.missing, []).get(r.missing))
     .push(r);
@@ -521,7 +546,13 @@ function draw() {
     rows.length ? [...buckets].map(([k, v]) => group(k, v)).join("")
                 : '<div class="empty">Nothing matches that.</div>';
 }
+// The shop's word for the maker when it gave one, the matcher's when it did not — the
+// same order the Brand column shows them in.
+function makerOf(r) { return r.brand_raw || r.brand_read || ""; }
+
+brandOptions(document.getElementById("brand"), DATA.queued.map(makerOf));
 document.getElementById("q").addEventListener("input", draw);
+document.getElementById("brand").addEventListener("change", draw);
 draw();
 """
 
