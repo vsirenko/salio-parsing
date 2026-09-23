@@ -193,7 +193,7 @@ def test_the_colour_is_what_follows_the_capacity(event_loop):
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
     assert reading(event_loop)["ruleset_version"].startswith(
-        "generic-3+phones-13+discover-shop-1+discover-4"
+        "generic-3+phones-13+discover-shop-1+discover-5"
     )
 
 
@@ -239,3 +239,15 @@ def test_a_tablet_s_maker_screen_and_model_come_out_of_its_name():
     air = tablet("Planšetdators Apple iPad Air 13 M3 (2025) 128GB Space Gray", brand="Apple")
     assert air["model"] == "iPad Air M3 (2025)"
     assert air["identity"]["screen_inch"] == 13
+
+
+def test_an_ipad_naming_no_radio_is_the_wifi_one():
+    """27 of 27 such iPads are Wi-Fi at the other shops that list their part number."""
+    assert tablet("Apple iPad Air 11 M4 (2026) 128GB Blue (MH314)", "Apple")["identity"][
+        "connectivity"
+    ] == ("wifi")
+    assert tablet("Apple iPad Air 13 M3 (2025) 256GB + Cellular Blue (MCJ74)", "Apple")["identity"][
+        "connectivity"
+    ] == ("cellular")
+    # Not checked for any other maker, so not read.
+    assert "connectivity" not in tablet("Samsung Galaxy Tab A11 8.7 64GB Gray (Grey)")["identity"]

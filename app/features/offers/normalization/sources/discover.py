@@ -22,7 +22,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "discover-phones"
-VERSION = "discover-4"
+VERSION = "discover-5"
 
 # `256GB`, `1 TB`. The one boundary in a name that has no separators.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -153,7 +153,7 @@ RULESET = register(
 # number: `Samsung Galaxy Tab S10 FE WiFi 10.9 128GB Gray (SM-X520)`, `Apple iPad Air 11 M3
 # (2025) 128GB`. Measured on 222 collected on 23.09.2026.
 TABLETS_SLUG = "discover-tablets"
-TABLETS_VERSION = "discover-tablets-1"
+TABLETS_VERSION = "discover-tablets-2"
 
 # `X230`, `T636`: Samsung's short model code, which this shop puts between the maker and
 # `Galaxy` — `Samsung X230 Galaxy Tab A11+`.
@@ -216,6 +216,22 @@ def _tablet_model(
     return {"model": model[:200], **found_screen} if model else found_screen
 
 
+_RADIO = re.compile(r"\b(?:Wi-?Fi|Cell(?:ular)?|LTE|[345]G)\b", re.IGNORECASE)
+
+
+def _an_ipad_naming_no_radio(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """Wi-Fi, for an iPad whose name states no radio at all."""
+    identity = fields.get("identity") or {}
+    name = str(payload.get("name") or "")
+    if identity.get("connectivity") or not re.search(r"\biPad\b", name, re.IGNORECASE):
+        return {}
+    if _RADIO.search(name):
+        return {}
+    return {"identity": {**identity, "connectivity": "wifi"}}
+
+
 TABLETS_RULESET = register(
     SOURCE,
     TABLETS_SLUG,
@@ -252,6 +268,19 @@ TABLETS_RULESET = register(
                 layer=SOURCE,
                 why="The code in brackets is a family here as it is for the phones.",
                 body=_line,
+            ),
+            Rule(
+                id="discover-tablets-an-ipad-naming-no-radio-is-wifi",
+                layer=SOURCE,
+                why=(
+                    "This shop names a cellular iPad `… + Cellular …` and a Wi-Fi one with no"
+                    " radio at all: `Apple iPad Air 11 M4 (2026) 128GB Blue (MH314)`. Checked"
+                    " by the part number in brackets on 23.09.2026: of the 27 such iPads"
+                    " another shop also lists, all 27 are Wi-Fi there, and none is cellular."
+                    " Only iPads: no other maker's unworded tablets could be checked, and"
+                    " they are left without the axis."
+                ),
+                body=_an_ipad_naming_no_radio,
             ),
             Rule(
                 id="discover-tablets-colour",
