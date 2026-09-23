@@ -10,20 +10,24 @@ What is left is one word. The channel returns the shop's own stock wording, and 
 happens to normalise itself — the generic reader lowercases it and finds `in_stock` in its
 table. `On order` is this shop's phrasing for the other state and nothing knows it, so 58 of
 319 read as `unknown` on a channel that declares it delivers availability.
+
+The one rule is about the shop, not the category, so it lives here rather than under the
+channel; `sources/euronics.py` held nothing else and is gone.
 """
 
 from typing import Any
 
 from app.features.offers.normalization.rules import (
-    SOURCE,
+    SHOP,
     Rule,
     Ruleset,
     Vocabulary,
     register,
 )
 
-SLUG = "euronics-phones"
-VERSION = "euronics-1"
+SLUG = "euronics"
+VERSION = "euronics-shop-1"
+
 
 # The shop's two words, as the listing card prints them.
 TO_ORDER = ("On order",)
@@ -37,14 +41,14 @@ def _availability(
 
 
 RULESET = register(
-    SOURCE,
+    SHOP,
     SLUG,
     Ruleset(
         version=VERSION,
         rules=(
             Rule(
                 id="euronics-on-order",
-                layer=SOURCE,
+                layer=SHOP,
                 why=(
                     "`In stock` needs nothing: the generic reader lowercases it into"
                     " `in_stock`, which is already in its table, and 261 of 319 land"

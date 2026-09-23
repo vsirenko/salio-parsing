@@ -9,9 +9,8 @@ looks like a part number and is not.
 import re
 from typing import Any
 
-from app.features.offers.normalization import barcodes, colours
+from app.features.offers.normalization import colours
 from app.features.offers.normalization.rules import (
-    FINISH,
     SOURCE,
     Rule,
     Ruleset,
@@ -20,11 +19,8 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "ksenukai-phones"
-VERSION = "ksenukai-6"
+VERSION = "ksenukai-7"
 
-# The shop's own article number. Every one of the 541 phones in the older corpus began
-# `Y0000`, without exception.
-INTERNAL_PREFIX = "Y0000"
 
 # `…, 256 GB, melna krās.` — the shop closes a title with the colour and the word for
 # it, and a two-tone case repeats the word: `melna krās./oranža krās.`. Anchored on the
@@ -32,12 +28,6 @@ INTERNAL_PREFIX = "Y0000"
 # The group writes the word for colour three ways — `melna krās.`, `sudraba kr.`,
 # `melnā krāsā` — and a title that uses the short one is not a title without a colour.
 COLOUR = re.compile(r"([^,/]+?)\s+(?:kr\.|kr[āa]s[āa]?\.?)(?=\s*[/,]|\s*$)", re.IGNORECASE)
-
-
-def _barcode(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
-) -> dict[str, Any]:
-    return {"gtin": barcodes.pick(payload.get("alternative_codes"))}
 
 
 def _model(
@@ -82,33 +72,12 @@ def color_from_title(
     return {"identity": {**fields.get("identity", {}), "color": canonical}} if canonical else {}
 
 
-def _not_a_part_number(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
-) -> dict[str, Any]:
-    mpn = fields.get("mpn")
-    if mpn and str(mpn).startswith(INTERNAL_PREFIX):
-        return {"mpn": None}
-    return {}
-
-
 RULESET = register(
     SOURCE,
     SLUG,
     Ruleset(
         version=VERSION,
         rules=(
-            Rule(
-                id="ksenukai-barcode",
-                layer=SOURCE,
-                why=(
-                    "The barcode is in `alternative_codes` with three other numbers and no"
-                    " label: the shop's product code, its article number, and the EAN with"
-                    " its check digit lopped off. Generic looks for a field called `ean` or"
-                    " `barcode` and finds neither, so without this the strongest signal the"
-                    " matcher has is invisible on every one of these products."
-                ),
-                body=_barcode,
-            ),
             Rule(
                 id="ksenukai-model",
                 layer=SOURCE,
@@ -139,20 +108,6 @@ RULESET = register(
                     " colour last behind a comma anyway; those are read from there."
                 ),
                 body=color_from_title,
-            ),
-            Rule(
-                id="ksenukai-article-is-not-a-part-number",
-                layer=FINISH,
-                why=(
-                    "All 541 phones in the older corpus had an article number beginning"
-                    " `Y0000`: Kesko's own sequence, which no other shop can ever agree"
-                    " with. The previous system filed it as the part number and reported"
-                    " 100% MPN coverage for this shop — a number that described nothing."
-                    " A real manufacturer code is in the title on about 13% of them"
-                    " (`Samsung Galaxy A57 5G SM-A576BLB`), which is work for a brand rule,"
-                    " not for this one."
-                ),
-                body=_not_a_part_number,
             ),
         ),
     ),

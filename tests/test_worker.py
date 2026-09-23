@@ -342,6 +342,7 @@ def test_a_store_that_cannot_be_written_to_fails_the_run_once(client, event_loop
         # A channel that is registered, so the run gets past that check and stops on this
         # one. It never reaches the network: the store is refused before the first request.
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         kind=Kind.FULL,
         access="retail",
         decode="markup",

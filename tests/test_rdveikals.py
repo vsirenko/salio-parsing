@@ -28,6 +28,7 @@ def job(kind: Kind = Kind.FULL) -> Job:
         run_id=1,
         source_id=1,
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         kind=kind,
         access="retail",
         decode="markup",
@@ -127,7 +128,12 @@ def test_the_article_is_not_offered_as_a_part_number(event_loop):
     fields = parsed()
     assert fields["product_code"] == "553544"
     assert "sku" not in fields and "article" not in fields
-    assert read(fields, source_slug="rdveikals-phones", category="phones")["mpn"] is None
+    assert (
+        read(fields, source_slug="rdveikals-phones", shop_slug="rdveikals", category="phones")[
+            "mpn"
+        ]
+        is None
+    )
 
 
 def test_price_and_availability_are_the_shop_s_own_words(event_loop):
@@ -159,7 +165,9 @@ def test_the_colour_arrives_as_a_field_rather_than_a_guess(event_loop):
 def test_the_generic_layer_already_reads_most_of_it(event_loop):
     """No source ruleset has been written for this shop yet, and it is still legible: the
     coverage on its first run is what says which rules it needs."""
-    fields = read(parsed(), source_slug="rdveikals-phones", category="phones")
+    fields = read(
+        parsed(), source_slug="rdveikals-phones", shop_slug="rdveikals", category="phones"
+    )
     assert fields["gtin"] == "05025232891863"
     assert fields["brand_raw"] == "Panasonic"
     assert fields["price"] is not None
@@ -196,7 +204,7 @@ def test_a_snapshot_with_no_product_page_is_an_error(event_loop):
 
 
 def read_it(fields: dict) -> dict:
-    return read(fields, source_slug="rdveikals-phones", category="phones")
+    return read(fields, source_slug="rdveikals-phones", shop_slug="rdveikals", category="phones")
 
 
 def named(name: str, **over) -> dict:
@@ -236,7 +244,9 @@ def test_the_shop_s_own_model_field_is_a_line_not_a_model(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert read_it(parsed())["ruleset_version"] == "generic-2+phones-12+rdveikals-4"
+    assert (
+        read_it(parsed())["ruleset_version"] == "generic-2+phones-12+rdveikals-shop-1+rdveikals-5"
+    )
 
 
 # --- stock on the pass that opens no pages ---
@@ -255,6 +265,7 @@ def test_the_cheap_pass_reads_stock_from_the_delivery_estimate(event_loop):
         fields = read(
             {"id": "1", "delivery_code": code, "price": "9.99", "currency": "EUR"},
             source_slug="rdveikals-phones",
+            shop_slug="rdveikals",
             category="phones",
         )
         assert fields["availability"] == expected, code
@@ -266,6 +277,7 @@ def test_the_product_page_outranks_the_estimate(event_loop):
     fields = read(
         {**parsed(), "delivery_code": "15day"},
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         category="phones",
     )
     assert fields["availability"] == "in_stock", "the page said InStock"
@@ -278,6 +290,7 @@ def test_a_code_in_days_cannot_tell_to_order_from_gone(event_loop):
     fields = read(
         {"id": "1", "delivery_code": "10day", "price": "9.99", "currency": "EUR"},
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         category="phones",
     )
     assert fields["availability"] == "preorder"
@@ -318,6 +331,7 @@ def test_colour_comes_from_the_field_and_resolves(event_loop):
     fields = read(
         {**parsed(), "specs": {"Kopējie parametri / Krāsa": "Melna"}},
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         category="phones",
         vocabulary=with_colours(),
     )
@@ -330,6 +344,7 @@ def test_a_two_tone_case_is_its_own_colour(event_loop):
     fields = read(
         {**parsed(), "specs": {"Kopējie parametri / Krāsa": "Melna / Oranža"}},
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         category="phones",
         vocabulary=with_colours(),
     )
@@ -349,6 +364,7 @@ def test_a_marketing_name_resolves_to_nothing(event_loop):
             "specs": {"Kopējie parametri / Krāsa": "Obsidian"},
         },
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         category="phones",
         vocabulary=with_colours(),
     )
@@ -366,6 +382,7 @@ def test_a_name_with_no_capacity_loses_its_colour_instead(event_loop):
         fields = read(
             {**parsed(), "name": name},
             source_slug="rdveikals-phones",
+            shop_slug="rdveikals",
             category="phones",
             vocabulary=with_colours(),
         )
@@ -377,6 +394,7 @@ def test_a_name_that_ends_in_no_colour_is_left_alone(event_loop):
     fields = read(
         {**parsed(), "name": "Stone 4G"},
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         category="phones",
         vocabulary=with_colours(),
     )
@@ -388,6 +406,7 @@ def test_without_the_registry_the_gap_stays_visible(event_loop):
     fields = read(
         {**parsed(), "name": "GL695 Black"},
         source_slug="rdveikals-phones",
+        shop_slug="rdveikals",
         category="phones",
     )
     assert fields["model"] is None

@@ -26,6 +26,7 @@ def job(kind: Kind = Kind.FULL) -> Job:
         run_id=1,
         source_id=1,
         source_slug="dateks-phones",
+        shop_slug="dateks",
         kind=kind,
         access="retail",
         decode="markup",
@@ -198,7 +199,7 @@ def test_a_snapshot_with_no_product_page_is_an_error():
 def test_the_generic_layer_already_reads_most_of_it():
     from app.features.offers.normalization import read
 
-    fields = read(product(), source_slug="dateks-phones")
+    fields = read(product(), source_slug="dateks-phones", shop_slug="dateks")
     assert fields["title"] == "Honor 600 Lite, 8GB/128GB, Velvet Black"
     assert fields["brand_raw"] == "Honor"
     assert fields["mpn"] == "5109CJCV"
@@ -234,6 +235,7 @@ def reading(payload: dict | None = None):
     return read(
         payload or product(),
         source_slug="dateks-phones",
+        shop_slug="dateks",
         category="phones",
         vocabulary=Vocabulary(colours=colours),
     )
@@ -311,9 +313,9 @@ def test_a_marketing_name_resolves_to_nothing():
 def test_without_the_registry_the_gap_stays_visible():
     from app.features.offers.normalization import read
 
-    fields = read(product(), source_slug="dateks-phones", category="phones")
+    fields = read(product(), source_slug="dateks-phones", shop_slug="dateks", category="phones")
     assert "color" not in fields["identity"]
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-2+phones-12+dateks-3"
+    assert reading()["ruleset_version"] == "generic-2+phones-12+dateks-shop-1+dateks-4"

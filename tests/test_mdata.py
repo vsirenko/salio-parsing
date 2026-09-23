@@ -27,6 +27,7 @@ def job(kind: Kind = Kind.FULL) -> Job:
         run_id=1,
         source_id=1,
         source_slug="mdata-phones",
+        shop_slug="mdata",
         kind=kind,
         access="retail",
         decode="markup",
@@ -188,6 +189,7 @@ def reading(payload: dict | None = None):
     return read(
         payload or _from_page(PRODUCT, card=card()),
         source_slug="mdata-phones",
+        shop_slug="mdata",
         category="phones",
         vocabulary=Vocabulary(colours={"black": "black", "white": "white"}),
     )
@@ -225,4 +227,4 @@ def test_a_record_the_shop_never_described_is_cut_at_the_configuration():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"].startswith("generic-2+phones-12+mdata-2")
+    assert reading()["ruleset_version"].startswith("generic-2+phones-12+mdata-shop-1+mdata-3")

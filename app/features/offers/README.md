@@ -89,23 +89,30 @@ Rules are declared objects, not a chain of conditionals, so the set an offer wil
 read **before** any of them has run — a chain answers that question only by being executed,
 and then only for the offer you happened to try. `rules_for(...)` is that answer.
 
-Five layers, general to specific, each seeing what the ones before it tidied. What changes
+Six layers, general to specific, each seeing what the ones before it tidied. What changes
 down the list is not only how specific the knowledge is but **what selects it**:
 
 | layer | selected by | reads |
 |---|---|---|
 | `GENERIC` | nothing | any flat object: conventional key names, a comma decimal, a barcode shape |
 | `CATEGORY` | the category | what this kind of product means |
-| `SOURCE` | the channel | where this shop hides things |
+| `SHOP` | the shop | what its codes and stock words mean, in every category it sells |
+| `SOURCE` | the channel | how it names this category's products |
 | `BRAND` | (category, brand) | this maker's conventions |
 | `PRODUCT` | (category, brand, line) | one line's own habits |
 | `FINISH` | nothing | check digits, reserved prefixes, canon |
 
-Three things that ordering encodes:
+Four things that ordering encodes:
 
 - **The category comes before the shop.** The same shape of value means different things to
   a laptop and a monitor — `128 GB` is an identity axis for one and a footnote for the other
   — and keeping their rules in one list means applying the wrong one eventually.
+- **The shop comes before the channel.** Barcodes, part numbers and stock words mean the
+  same whichever of a shop's categories a listing is in; how it names a product may not. They
+  were filed under the channel until 23.09.2026, which would have read a second category of
+  the same shop without any of them. Split then, 16 rules out of 11 channels, and re-read
+  over 9013 listings with no field of any reading moving. cec's one rule stayed: it supplies
+  `Apple` because the shop's category is `iPhone`, which is a fact about the channel.
 - **The shop comes before the brand**, because a brand knows more about its own product than
   any shop does and should see a string the shop's rules have already tidied.
 - **A brand is scoped to a category, not global.** `phones/apple` and `laptops/apple` are

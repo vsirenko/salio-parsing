@@ -1,0 +1,78 @@
+"""ksenukai: what its codes and stock words mean, in every category it sells.
+
+Moved out of `sources/ksenukai.py` on 23.09.2026, when a second category made the
+difference matter: these rules are true of the shop, and a new category of it would
+otherwise have been read without them. How the shop names a product stays there.
+"""
+
+from typing import Any
+
+from app.features.offers.normalization import barcodes
+from app.features.offers.normalization.rules import (
+    FINISH,
+    SHOP,
+    Rule,
+    Ruleset,
+    Vocabulary,
+    register,
+)
+
+SLUG = "ksenukai"
+VERSION = "ksenukai-shop-1"
+
+
+# The shop's own article number. Every one of the 541 phones in the older corpus began
+# `Y0000`, without exception.
+INTERNAL_PREFIX = "Y0000"
+
+
+def _barcode(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    return {"gtin": barcodes.pick(payload.get("alternative_codes"))}
+
+
+def _not_a_part_number(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    mpn = fields.get("mpn")
+    if mpn and str(mpn).startswith(INTERNAL_PREFIX):
+        return {"mpn": None}
+    return {}
+
+
+RULESET = register(
+    SHOP,
+    SLUG,
+    Ruleset(
+        version=VERSION,
+        rules=(
+            Rule(
+                id="ksenukai-barcode",
+                layer=SHOP,
+                why=(
+                    "The barcode is in `alternative_codes` with three other numbers and no"
+                    " label: the shop's product code, its article number, and the EAN with"
+                    " its check digit lopped off. Generic looks for a field called `ean` or"
+                    " `barcode` and finds neither, so without this the strongest signal the"
+                    " matcher has is invisible on every one of these products."
+                ),
+                body=_barcode,
+            ),
+            Rule(
+                id="ksenukai-article-is-not-a-part-number",
+                layer=FINISH,
+                why=(
+                    "All 541 phones in the older corpus had an article number beginning"
+                    " `Y0000`: Kesko's own sequence, which no other shop can ever agree"
+                    " with. The previous system filed it as the part number and reported"
+                    " 100% MPN coverage for this shop — a number that described nothing."
+                    " A real manufacturer code is in the title on about 13% of them"
+                    " (`Samsung Galaxy A57 5G SM-A576BLB`), which is work for a brand rule,"
+                    " not for this one."
+                ),
+                body=_not_a_part_number,
+            ),
+        ),
+    ),
+)

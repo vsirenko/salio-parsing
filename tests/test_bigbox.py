@@ -22,6 +22,7 @@ JOB = Job(
     run_id=1,
     source_id=1,
     source_slug="bigbox-phones",
+    shop_slug="bigbox",
     kind=Kind.FULL,
     access="wholesale",
     decode="private_api",
@@ -163,10 +164,10 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     assert generic["gtin"] is None
     assert generic["mpn"] is None
 
-    full = read(fields, source_slug="bigbox-phones", category="phones")
+    full = read(fields, source_slug="bigbox-phones", shop_slug="bigbox", category="phones")
     assert full["gtin"] == "06941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-2+phones-12+bigbox-5"
+    assert full["ruleset_version"] == "generic-2+phones-12+bigbox-shop-1+bigbox-6"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):
@@ -182,7 +183,7 @@ def test_the_phone_line_is_not_the_model(event_loop):
 
 def test_capacity_comes_from_the_category_not_the_shop(event_loop):
     fields = parsed(event_loop)
-    full = read(fields, source_slug="bigbox-phones", category="phones")
+    full = read(fields, source_slug="bigbox-phones", shop_slug="bigbox", category="phones")
     assert full["identity"]["storage_mb"] == 512 * 1024
 
 
@@ -195,6 +196,7 @@ def read_it(fields, words=("telefons", "tālrunis", "viedtālrunis", "mobilais")
     return read(
         fields,
         source_slug="bigbox-phones",
+        shop_slug="bigbox",
         category="phones",
         vocabulary=Vocabulary(category_names=frozenset(words)),
     )

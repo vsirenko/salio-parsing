@@ -27,6 +27,7 @@ def job() -> Job:
         run_id=1,
         source_id=1,
         source_slug="bm-phones",
+        shop_slug="bm",
         kind=Kind.FULL,
         access="wholesale",
         decode="graphql",
@@ -156,7 +157,7 @@ def test_half_the_catalogue_carries_no_attributes_at_all():
 def test_the_generic_layer_already_reads_most_of_it():
     from app.features.offers.normalization import read
 
-    fields = read(one("Xiaomi 15T"), source_slug="bm-phones")
+    fields = read(one("Xiaomi 15T"), source_slug="bm-phones", shop_slug="bm")
     assert fields["brand_raw"] == "Xiaomi"
     assert fields["gtin"] == "06932554448912"
     assert fields["mpn"] == "MZB0KY9EU"
@@ -180,6 +181,7 @@ def reading(payload: dict | None = None):
     return read(
         payload or one("Xiaomi 15T"),
         source_slug="bm-phones",
+        shop_slug="bm",
         category="phones",
         vocabulary=Vocabulary(colours=palette),
     )
@@ -263,4 +265,4 @@ def test_a_marketing_name_resolves_to_nothing():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-2+phones-12+bm-2"
+    assert reading()["ruleset_version"] == "generic-2+phones-12+bm-shop-1+bm-3"

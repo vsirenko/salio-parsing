@@ -16,6 +16,7 @@ from app.features.offers.normalization.rules import (
     CATEGORY,
     FINISH,
     PRODUCT,
+    SHOP,
     SOURCE,
     Vocabulary,
 )
@@ -45,7 +46,7 @@ def test_a_key_with_no_rules_is_read_by_what_is_more_general():
 
 def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
     """The whole reason rules are objects rather than a chain of conditionals."""
-    rules = rules_for(KSENUKAI, category=PHONES)
+    rules = rules_for(KSENUKAI, shop_slug="ksenukai", category=PHONES)
     assert [rule.id for rule in rules] == [
         "phones-color",
         "phones-color-from-title",
@@ -60,12 +61,13 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         "phones-model-from-the-registry",
         "phones-model-without-a-trailing-colour",
     ]
-    # General to specific: the category before the shop, canonicalisation last.
+    # General to specific: the category, then what is true of the shop, then of this
+    # channel, and canonicalisation last.
     assert [rule.layer for rule in rules] == [
         CATEGORY,
         CATEGORY,
         CATEGORY,
-        SOURCE,
+        SHOP,
         SOURCE,
         SOURCE,
         FINISH,
@@ -82,7 +84,7 @@ def test_the_layers_run_general_to_specific():
 
 def test_every_rule_says_why_it_exists():
     """A reason that restates the code explains nothing; one from the data can be argued."""
-    for rule in rules_for(KSENUKAI, category=PHONES):
+    for rule in rules_for(KSENUKAI, shop_slug="ksenukai", category=PHONES):
         assert len(rule.why) > 80, rule.id
 
 
@@ -108,21 +110,24 @@ def test_a_rule_can_be_declared_and_not_written():
 def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-2"
-    assert version_for(KSENUKAI) == "generic-2+ksenukai-6"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-2+phones-12+ksenukai-6"
+    assert version_for(KSENUKAI, shop_slug="ksenukai") == "generic-2+ksenukai-shop-1+ksenukai-7"
     assert (
-        read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-2+phones-12+ksenukai-6"
+        version_for(KSENUKAI, shop_slug="ksenukai", category=PHONES)
+        == "generic-2+phones-12+ksenukai-shop-1+ksenukai-7"
+    )
+    assert (
+        read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)["ruleset_version"]
+        == "generic-2+phones-12+ksenukai-shop-1+ksenukai-7"
     )
 
 
 def test_the_capacity_is_read_as_an_exact_number():
     """Megabytes, not gigabytes: a 32 MB feature phone would otherwise be 0.03125 GB, and
     an identity axis that is a fraction is one that gets compared wrongly eventually."""
-    fields = read(item(), source_slug=KSENUKAI, category=PHONES)
+    fields = read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)
     assert fields["identity"]["storage_mb"] == 32
 
-    big = read(item("1268710"), source_slug=KSENUKAI, category=PHONES)
+    big = read(item("1268710"), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)
     assert big["identity"]["storage_mb"] == 128 * 1024
 
 
@@ -177,33 +182,45 @@ def test_generic_alone_misses_what_matching_needs(client=None):
 
 
 def test_the_barcode_is_found_among_the_other_numbers():
-    fields = read(item(), source_slug=KSENUKAI, category=PHONES)
+    fields = read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)
     assert fields["gtin"] == "05902983617747"
 
 
 def test_the_model_is_found_in_the_attribute_table():
-    fields = read(item(), source_slug=KSENUKAI, category=PHONES)
+    fields = read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)
     assert fields["model"] == "Hammer Rock"
 
 
 def test_an_internal_article_number_is_not_a_part_number():
     """541 of 541 began `Y0000`, and the old system reported 100% MPN coverage for it."""
-    fields = read({**item(), "mpn": "Y00001210299"}, source_slug=KSENUKAI, category=PHONES)
+    fields = read(
+        {**item(), "mpn": "Y00001210299"},
+        source_slug=KSENUKAI,
+        shop_slug="ksenukai",
+        category=PHONES,
+    )
     assert fields["mpn"] is None
     # A real one is left alone.
-    kept = read({**item(), "mpn": "SM-A576BLB"}, source_slug=KSENUKAI, category=PHONES)
+    kept = read(
+        {**item(), "mpn": "SM-A576BLB"}, source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES
+    )
     assert kept["mpn"] == "SM-A576BLB"
 
 
 def test_a_rule_that_finds_nothing_erases_nothing():
     """A missing model must not wipe one generic happened to find."""
     payload = {**item(), "model": "Galaxy S24", "attributes": {}}
-    assert read(payload, source_slug=KSENUKAI, category=PHONES)["model"] == "Galaxy S24"
+    assert (
+        read(payload, source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)["model"]
+        == "Galaxy S24"
+    )
 
 
 def test_every_real_phone_in_the_fixture_reads(client=None):
     for record in FIXTURE["items"]:
-        fields = read(item(str(record["id"])), source_slug=KSENUKAI, category=PHONES)
+        fields = read(
+            item(str(record["id"])), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES
+        )
         assert fields["title"]
         assert fields["brand_raw"]
         assert fields["model"], record["id"]
@@ -488,22 +505,32 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
     "apple-phones-2": "f940eea49212",
-    "bigbox-5": "a7a353460786",
-    "bm-2": "7a3d7ac028a2",
+    "bigbox-6": "2fc5930c7aa2",
+    "bigbox-shop-1": "a1194a23b2e7",
+    "bm-3": "3361a10390bd",
+    "bm-shop-1": "3d09a6688700",
     "cec-1": "e0252dfe4696",
-    "dateks-3": "a857d7710f38",
-    "discover-2": "4eac3808c544",
+    "dateks-4": "cfa03a1c3a01",
+    "dateks-shop-1": "76bf8766fb11",
+    "discover-3": "b9c94e3c76fa",
+    "discover-shop-1": "6065096d8d22",
+    "euronics-shop-1": "07e9d1415e04",
     "google-phones-3": "b13ca41b33fa",
-    "ksenukai-6": "4abed58b2f32",
-    "m79-6": "26db29a39cbf",
+    "ksenukai-7": "c39ae807fae8",
+    "ksenukai-shop-1": "b5a073020a15",
+    "m79-7": "21cb3684ca13",
+    "m79-shop-1": "ad962ef2618c",
+    "mdata-3": "f9fdde9ae356",
+    "mdata-shop-1": "c0edf1b90896",
+    "onea-3": "819a4890c469",
+    "onea-shop-1": "24e6184df567",
     "oneplus-phones-1": "29eaabd5e1ad",
-    "mdata-2": "7d117e88b2ff",
-    "onea-2": "9f01fd11d540",
-    "euronics-1": "e61bf95a7a78",
     "phones-12": "e44fa34c0a51",
-    "rdveikals-4": "f5078e0afc82",
+    "rdveikals-5": "6ba57027ffed",
+    "rdveikals-shop-1": "e0b3a42600f7",
     "samsung-phones-2": "9653d4e6a46a",
-    "tet-2": "0e2bb4bd31c5",
+    "tet-3": "bd343fa22553",
+    "tet-shop-1": "3129e8453377",
 }
 
 
@@ -531,7 +558,13 @@ def _fingerprints() -> dict[str, str]:
     import inspect
     import re
 
-    from app.features.offers.normalization.rules import BRANDS, CATEGORIES, PRODUCTS, SOURCES
+    from app.features.offers.normalization.rules import (
+        BRANDS,
+        CATEGORIES,
+        PRODUCTS,
+        SHOPS,
+        SOURCES,
+    )
 
     package = "app.features.offers.normalization"
     framework = {package, f"{package}.rules"}
@@ -560,7 +593,7 @@ def _fingerprints() -> dict[str, str]:
                 digest.update(f"{name}={value.pattern!r}".encode())
 
     seen: dict[str, str] = {}
-    for registry in (CATEGORIES, SOURCES, BRANDS, PRODUCTS):
+    for registry in (CATEGORIES, SHOPS, SOURCES, BRANDS, PRODUCTS):
         for ruleset in registry.values():
             bodies = [rule.body for rule in ruleset.rules if rule.body is not None]
             if not bodies:  # pragma: no cover - a ruleset of nothing but pending rules

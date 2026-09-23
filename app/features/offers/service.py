@@ -212,7 +212,11 @@ class OfferService:
                 reading is None
                 or await self._is_reparse(run_id)
                 or reading.ruleset_version
-                != version_for(source.slug, category=await self._category_slug(source))
+                != version_for(
+                    source.slug,
+                    shop_slug=await self._shop_slug(source),
+                    category=await self._category_slug(source),
+                )
             ):
                 reading = await self._store_reading(existing, source=source)
                 self._apply_reading_to_offer(offer, reading)
@@ -417,6 +421,7 @@ class OfferService:
         fields = read(
             raw.payload,
             source_slug=source.slug,
+            shop_slug=await self._shop_slug(source),
             category=await self._category_slug(source),
             vocabulary=await self._vocabulary(source),
         )
@@ -544,6 +549,10 @@ class OfferService:
                 ),
             )
         return self._vocabularies[source.category_id]
+
+    async def _shop_slug(self, source: Source) -> str | None:
+        """Which shop a channel is into — what selects the rules that are true of the shop."""
+        return await self.session.scalar(select(Shop.slug).where(Shop.id == source.shop_id))
 
     async def _category_slug(self, source: Source) -> str | None:
         """What this channel collects, when it collects one thing.

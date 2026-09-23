@@ -26,6 +26,7 @@ def job() -> Job:
         run_id=1,
         source_id=1,
         source_slug="cec-phones",
+        shop_slug="cec",
         kind=Kind.FULL,
         access="wholesale",
         decode="graphql",
@@ -134,6 +135,7 @@ def reading(event_loop, sku: str = "MK2D4HX/A"):
     return read(
         one(discover(event_loop), sku),
         source_slug="cec-phones",
+        shop_slug="cec",
         category="phones",
         vocabulary=Vocabulary(
             colours={"star white": "white"},
@@ -154,7 +156,10 @@ def test_the_brand_is_tied_to_the_category_and_not_to_the_channel(event_loop):
 
     card = dict(one(discover(event_loop), "MK2D4HX/A"))
     card["category"] = "Speakers"
-    assert read(card, source_slug="cec-phones", category="phones")["brand_raw"] is None
+    assert (
+        read(card, source_slug="cec-phones", shop_slug="cec", category="phones")["brand_raw"]
+        is None
+    )
 
 
 def test_the_part_number_and_the_model_need_no_rule(event_loop):

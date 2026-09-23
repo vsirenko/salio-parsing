@@ -1,7 +1,7 @@
 ## Reading a payload
 
 - Reading is layered general to specific, and what changes down the list is **what selects
-  each layer**: nothing, the category, the channel, `(category, brand)`,
+  each layer**: nothing, the category, the shop, the channel, `(category, brand)`,
   `(category, brand, line)`, nothing. `app/features/offers/normalization/rules.py` holds the
   ordering and the reasons for it. Later wins.
 - **A rule returns only what it changed.** A rule that found nothing returns `{}`, never a
@@ -70,6 +70,13 @@
 - Matching leans on the language-neutral signals on purpose — barcode, part number, model
   designation — so language is a question about attributes and the storefront, not about
   identifying a product.
+
+- **A rule about the shop goes under the shop, a rule about how it names this category's
+  products under the channel.** Barcodes, part numbers and stock words live in
+  `normalization/shops/`, and a new category of the shop gets them on its first day; a
+  model or a colour rule lives in `normalization/sources/`, and a new category starts
+  without it, to be written against what it collects. When unsure, it belongs to the
+  channel: a shop rule that turns out to be about phones is read into every other category.
 
 ## What a channel may decide, and what it may not
 

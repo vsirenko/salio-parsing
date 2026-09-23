@@ -34,6 +34,7 @@ def job(kind: Kind = Kind.FULL) -> Job:
         run_id=1,
         source_id=1,
         source_slug="m79-phones",
+        shop_slug="m79",
         kind=kind,
         access="retail",
         decode="markup",
@@ -236,7 +237,10 @@ def test_a_bracketed_plus_is_the_maker_s_and_stays_on_the_model():
 
     def model(name: str) -> str:
         return read(
-            {"name": name, "brand": "Ulefone"}, source_slug="m79-phones", category="phones"
+            {"name": name, "brand": "Ulefone"},
+            source_slug="m79-phones",
+            shop_slug="m79",
+            category="phones",
         )["model"]
 
     assert model("Ulefone Armor 34 (Plus) 16/512GB 5G") == "Armor 34 Plus"

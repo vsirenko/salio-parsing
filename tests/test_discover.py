@@ -25,6 +25,7 @@ def job() -> Job:
         run_id=1,
         source_id=1,
         source_slug="discover-phones",
+        shop_slug="discover",
         kind=Kind.FULL,
         access="wholesale",
         decode="xml",
@@ -126,6 +127,7 @@ def reading(event_loop, name_contains: str = "iPhone 16 128GB Black"):
     return read(
         one(discover(event_loop), name_contains),
         source_slug="discover-phones",
+        shop_slug="discover",
         category="phones",
         vocabulary=Vocabulary(colours={"black": "black", "titanium silver": "silver"}),
     )
@@ -148,7 +150,7 @@ def test_the_family_designation_is_not_part_of_the_model(event_loop):
     with_line = next(x.card for x in listings if x.card["line"])
     from app.features.offers.normalization import read
 
-    fields = read(with_line, source_slug="discover-phones", category="phones")
+    fields = read(with_line, source_slug="discover-phones", shop_slug="discover", category="phones")
     assert with_line["line"] not in (fields["model"] or "")
     assert fields["model"]
 
@@ -160,9 +162,9 @@ def test_a_bracket_that_is_not_the_family_stays(event_loop):
 
     card = dict(one(discover(event_loop), "iPhone"))
     card |= {"name": "Apple iPhone SE (2022) 5G 64GB Midnight", "brand": "Apple", "line": ""}
-    assert read(card, source_slug="discover-phones", category="phones")["model"] == (
-        "iPhone SE (2022) 5G"
-    )
+    assert read(card, source_slug="discover-phones", shop_slug="discover", category="phones")[
+        "model"
+    ] == ("iPhone SE (2022) 5G")
 
 
 def test_the_working_memory_does_not_travel_with_the_model(event_loop):
@@ -172,7 +174,10 @@ def test_the_working_memory_does_not_travel_with_the_model(event_loop):
 
     card = dict(one(discover(event_loop), "iPhone"))
     card |= {"name": "Google Pixel 10 12/128GB Frost", "brand": "Google", "line": ""}
-    assert read(card, source_slug="discover-phones", category="phones")["model"] == "Pixel 10"
+    assert (
+        read(card, source_slug="discover-phones", shop_slug="discover", category="phones")["model"]
+        == "Pixel 10"
+    )
 
 
 def test_there_is_no_barcode_and_no_part_number(event_loop):
@@ -187,4 +192,6 @@ def test_the_colour_is_what_follows_the_capacity(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-2+phones-12+discover-2")
+    assert reading(event_loop)["ruleset_version"].startswith(
+        "generic-2+phones-12+discover-shop-1+discover-3"
+    )

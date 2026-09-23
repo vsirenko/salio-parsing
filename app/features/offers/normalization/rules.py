@@ -11,7 +11,8 @@ down the list is not only how specific the knowledge is but **what selects it**:
     ────────   ───────────────────────────────   ────────────────────────────────────
     GENERIC    nothing                           any flat payload: known key names
     CATEGORY   the category                      what this kind of product means
-    SOURCE     the channel                       where this shop hides things
+    SHOP       the shop                          what its codes and stock words mean
+    SOURCE     the channel                       how it names this category's products
     BRAND      (category, brand)                 this maker's conventions
     PRODUCT    (category, brand, line)           one line's own habits
     FINISH     nothing                           check digits, reserved prefixes, canon
@@ -21,6 +22,10 @@ Three things that ordering encodes, and each was learned the expensive way somew
 - **The category comes before the shop.** The same shape of code means different things to
   a laptop and a monitor, and keeping their rules in one list means applying the wrong one
   eventually.
+- **The shop comes before the channel.** A shop's barcodes, part numbers and stock words
+  mean the same whichever of its categories a listing is in; how it writes a product's name
+  may not. Filed under the channel, the first were lost to every new category of the same
+  shop, which would have been read worse than its phones on its first day.
 - **The shop comes before the brand**, because a brand knows more about its own product
   than any shop does and should see a string the shop's rules have already tidied.
 - **A brand is scoped to a category, not global.** `phones/apple` and `laptops/apple` are
@@ -40,7 +45,7 @@ from typing import Any
 
 from app.features.attributes.normalization import normalize_attribute_name
 
-GENERIC, CATEGORY, SOURCE, BRAND, PRODUCT, FINISH = 10, 20, 30, 40, 50, 90
+GENERIC, CATEGORY, SHOP, SOURCE, BRAND, PRODUCT, FINISH = 10, 20, 25, 30, 40, 50, 90
 
 
 @dataclass(frozen=True)
@@ -135,12 +140,14 @@ class Ruleset:
 # One registry per layer that has a key. A key with no entry is not a failure: it is how a
 # sample gets loaded and measured before any rules are written for it.
 CATEGORIES: dict[str, Ruleset] = {}
+SHOPS: dict[str, Ruleset] = {}
 SOURCES: dict[str, Ruleset] = {}
 BRANDS: dict[tuple[str, str], Ruleset] = {}
 PRODUCTS: dict[tuple[str, str, str], Ruleset] = {}
 
 _REGISTRIES: dict[int, dict] = {
     CATEGORY: CATEGORIES,
+    SHOP: SHOPS,
     SOURCE: SOURCES,
     BRAND: BRANDS,
     PRODUCT: PRODUCTS,

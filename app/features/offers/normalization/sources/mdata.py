@@ -10,7 +10,7 @@ in a sentence. Three things are left.
 import re
 from typing import Any
 
-from app.features.offers.normalization import barcodes, naming
+from app.features.offers.normalization import naming
 from app.features.offers.normalization.rules import (
     SOURCE,
     Rule,
@@ -20,10 +20,8 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "mdata-phones"
-VERSION = "mdata-2"
+VERSION = "mdata-3"
 
-# What this shop says instead of whether it has the thing. Both mean it can be bought.
-SHIPS_IN = ("VEIKALĀ", "1-2 days", "3-5 days")
 
 # `128GB`, `4/ 64GB`, `6/ 256GB` — the configuration, written with the working memory in
 # front of the capacity as often as not, and with the shop's own stray space after a slash.
@@ -33,19 +31,6 @@ SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
 # model becomes `ARMOR MINI` with the 20 thrown away.
 SLASH = re.compile(r"\b\d{1,3}\s*/\s*\d{2,4}(?:\s?(?:TB|GB|MB))?\b", re.IGNORECASE)
 _EDGES = re.compile(r"^[\s,./|-]+|[\s,./|-]+$")
-
-
-def _barcode(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
-) -> dict[str, Any]:
-    return {"gtin": barcodes.pick(payload.get("barcodes"))}
-
-
-def _availability(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
-) -> dict[str, Any]:
-    flag = str(payload.get("availability") or "").strip()
-    return {"availability": "in_stock"} if flag in SHIPS_IN else {}
 
 
 def _model(
@@ -73,35 +58,6 @@ RULESET = register(
     Ruleset(
         version=VERSION,
         rules=(
-            Rule(
-                id="mdata-barcode",
-                layer=SOURCE,
-                why=(
-                    "The shop has two of its own `schema.org` fields the wrong way round:"
-                    " `model` holds the barcode and `mpn` an internal number, and the"
-                    " maker's part number is in the prose of `description` behind"
-                    " `Manufacturer code:`. So nothing is trusted by the name of the field"
-                    " it came in: the channel hands the numbers over as a list and"
-                    " `barcodes.pick` chooses, as it does for every shop. All 98 carry at"
-                    " least one candidate and the check digit sorts them."
-                ),
-                body=_barcode,
-            ),
-            Rule(
-                id="mdata-availability",
-                layer=SOURCE,
-                why=(
-                    "This shop says how soon rather than whether: `1-2 days` on 90 of the 98"
-                    " and `3-5 days` on the other 8, with `VEIKALĀ` for what is on a shelf."
-                    " All three mean it can be bought. There is no out-of-stock word here"
-                    " because the shop does not list what it has not got — and if one ever"
-                    " appears it will read as `unknown` and be visible, which is the right"
-                    " way round. Not from the page's own JSON-LD, which reads `InStock` for"
-                    " everything: the fifth shop in a row whose structured data means it"
-                    " will sell the thing rather than that it has it."
-                ),
-                body=_availability,
-            ),
             Rule(
                 id="mdata-model",
                 layer=SOURCE,

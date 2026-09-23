@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tet-phones"
-VERSION = "tet-2"
+VERSION = "tet-3"
 
 # `256GB`, `1 TB`. The usual way this shop writes the configuration.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -29,16 +29,6 @@ SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
 # on the end or missing altogether. 189 of the 319 write it with the unit and 26 without.
 PLUS = re.compile(r"\b\d{1,2}\s*\+\s*\d{2,4}(?:\s?(?:TB|GB|MB))?\b", re.IGNORECASE)
 _EDGES = re.compile(r"^[\s,/|+-]+|[\s,/|+-]+$")
-
-# The shop's flag for a product it has not got yet. Nothing at all is the other state.
-SOON = "Drīzumā"
-
-
-def _availability(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
-) -> dict[str, Any]:
-    flag = str(payload.get("availability") or "").strip()
-    return {"availability": "preorder" if flag == SOON else "in_stock"}
 
 
 def _model(
@@ -71,21 +61,6 @@ RULESET = register(
     Ruleset(
         version=VERSION,
         rules=(
-            Rule(
-                id="tet-availability",
-                layer=SOURCE,
-                why=(
-                    "This shop says what it has not got and says nothing about what it has:"
-                    " 8 of its 333 cards carry a `Drīzumā` flag and the other 325 carry no"
-                    " flag at all. So an empty field is the answer here rather than a gap,"
-                    " which is the opposite of every other channel and the reason this is"
-                    " read rather than left to generic. Not from the page's own JSON-LD,"
-                    " which reads `InStock` on all 40 sampled including the 3 the shop"
-                    " itself flags as not yet in — the fourth shop in a row whose structured"
-                    " data means it will sell the thing rather than that it has it."
-                ),
-                body=_availability,
-            ),
             Rule(
                 id="tet-model",
                 layer=SOURCE,

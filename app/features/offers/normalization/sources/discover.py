@@ -22,7 +22,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "discover-phones"
-VERSION = "discover-2"
+VERSION = "discover-3"
 
 # `256GB`, `1 TB`. The one boundary in a name that has no separators.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -30,12 +30,6 @@ SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
 # carries a unit — so cutting at the unit leaves `12/` behind, on the model.
 _RAM_PREFIX = re.compile(r"\s*\d+\s*/\s*$")
 _EDGES = re.compile(r"^[\s,/|-]+|[\s,/|-]+$")
-
-
-def _availability(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
-) -> dict[str, Any]:
-    return {"availability": "in_stock"} if str(payload.get("in_stock") or "").strip() == "1" else {}
 
 
 def _model(
@@ -100,20 +94,6 @@ RULESET = register(
     Ruleset(
         version=VERSION,
         rules=(
-            Rule(
-                id="discover-availability",
-                layer=SOURCE,
-                why=(
-                    "`in_stock` is `1` on all 560, so as a field it says nothing — and as a"
-                    " fact it says everything: the export holds what the shop is willing to"
-                    " sell, and a product that leaves it has left the shop. Read here rather"
-                    " than left to generic, whose table knows `true` and `yes` and not `1`,"
-                    " so all 560 were arriving `unknown` on a channel that declares it"
-                    " delivers availability. What this shop cannot say is the difference"
-                    " between stock and to-order; it does not distinguish them either."
-                ),
-                body=_availability,
-            ),
             Rule(
                 id="discover-model",
                 layer=SOURCE,

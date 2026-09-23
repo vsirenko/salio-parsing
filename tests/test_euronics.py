@@ -29,6 +29,7 @@ def job(kind: Kind = Kind.FULL) -> Job:
         run_id=1,
         source_id=1,
         source_slug="euronics-phones",
+        shop_slug="euronics",
         kind=kind,
         access="retail",
         decode="json_ld",
@@ -187,7 +188,7 @@ def test_a_snapshot_with_no_product_page_is_an_error():
 def test_the_generic_layer_already_reads_nearly_all_of_it(event_loop):
     from app.features.offers.normalization import read
 
-    fields = read(product(event_loop), source_slug="euronics-phones")
+    fields = read(product(event_loop), source_slug="euronics-phones", shop_slug="euronics")
     assert fields["brand_raw"] == "Samsung"
     assert fields["gtin"] == "08806095851136"
     assert fields["mpn"] == "SM-S931BLBDEUE"
@@ -217,6 +218,7 @@ def reading(event_loop, payload: dict | None = None):
     return read(
         payload or product(event_loop),
         source_slug="euronics-phones",
+        shop_slug="euronics",
         category="phones",
         vocabulary=Vocabulary(
             colours={"light blue": "blue", "blue": "blue"},
@@ -251,5 +253,5 @@ def test_the_ruleset_version_says_what_was_applied(event_loop):
     # The Samsung the fixture holds also selects the brand layer, which is the point of
     # the composed version: it names every ruleset that touched the reading.
     assert reading(event_loop)["ruleset_version"] == (
-        "generic-2+phones-12+euronics-1+samsung-phones-2"
+        "generic-2+phones-12+euronics-shop-1+samsung-phones-2"
     )

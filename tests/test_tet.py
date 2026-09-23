@@ -27,6 +27,7 @@ def job(kind: Kind = Kind.FULL) -> Job:
         run_id=1,
         source_id=1,
         source_slug="tet-phones",
+        shop_slug="tet",
         kind=kind,
         access="retail",
         decode="markup",
@@ -208,6 +209,7 @@ def reading(event_loop, payload: dict | None = None):
     return read(
         payload or product(event_loop),
         source_slug="tet-phones",
+        shop_slug="tet",
         category="phones",
         vocabulary=Vocabulary(
             colours={"burgundijas sarkana": "red"},
@@ -258,4 +260,4 @@ def test_the_colour_comes_out_of_the_specification_table(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-2+phones-12+tet-2")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-2+phones-12+tet-shop-1+tet-3")

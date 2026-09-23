@@ -23,11 +23,13 @@ from app.features.offers.normalization.rules import (
     BRANDS,
     CATEGORIES,
     PRODUCTS,
+    SHOPS,
     SOURCES,
     Rule,
     Ruleset,
     Vocabulary,
 )
+from app.features.offers.normalization.shops import __all__ as _shops  # noqa: F401
 from app.features.offers.normalization.sources import __all__ as _sources  # noqa: F401
 
 # What a payload with no rules of its own is read by. Bumped whenever the generic reading
@@ -48,7 +50,12 @@ __all__ = [
 
 
 def _applicable(
-    *, category: str | None, source_slug: str | None, brand: str | None, line: str | None
+    *,
+    category: str | None,
+    shop_slug: str | None,
+    source_slug: str | None,
+    brand: str | None,
+    line: str | None,
 ) -> list[Ruleset]:
     """The rulesets that apply, general first.
 
@@ -57,6 +64,7 @@ def _applicable(
     """
     found = [
         CATEGORIES.get(category or ""),
+        SHOPS.get(shop_slug or ""),
         SOURCES.get(source_slug or ""),
         BRANDS.get((category or "", brand or "")),
         PRODUCTS.get((category or "", brand or "", line or "")),
@@ -67,6 +75,7 @@ def _applicable(
 def rules_for(
     source_slug: str | None = None,
     *,
+    shop_slug: str | None = None,
     category: str | None = None,
     brand: str | None = None,
     line: str | None = None,
@@ -79,7 +88,11 @@ def rules_for(
     rules = [
         rule
         for ruleset in _applicable(
-            category=category, source_slug=source_slug, brand=brand, line=line
+            category=category,
+            shop_slug=shop_slug,
+            source_slug=source_slug,
+            brand=brand,
+            line=line,
         )
         for rule in ruleset.rules
     ]
@@ -89,6 +102,7 @@ def rules_for(
 def version_for(
     source_slug: str | None = None,
     *,
+    shop_slug: str | None = None,
     category: str | None = None,
     brand: str | None = None,
     line: str | None = None,
@@ -101,7 +115,11 @@ def version_for(
     parts = [RULESET_VERSION] + [
         ruleset.version
         for ruleset in _applicable(
-            category=category, source_slug=source_slug, brand=brand, line=line
+            category=category,
+            shop_slug=shop_slug,
+            source_slug=source_slug,
+            brand=brand,
+            line=line,
         )
     ]
     return "+".join(parts)
@@ -111,6 +129,7 @@ def read(
     payload: dict[str, Any],
     *,
     source_slug: str | None = None,
+    shop_slug: str | None = None,
     category: str | None = None,
     vocabulary: Vocabulary | None = None,
 ) -> dict[str, Any]:
@@ -129,7 +148,9 @@ def read(
 
     brand: str | None = None
     line: str | None = None
-    for rule in rules_for(source_slug, category=category, brand=brand, line=line):
+    for rule in rules_for(
+        source_slug, shop_slug=shop_slug, category=category, brand=brand, line=line
+    ):
         # Each rule sees what the ones before it tidied, and later wins. A rule that finds
         # nothing returns nothing rather than a None that would erase an earlier answer.
         fields.update(rule.apply(payload, fields, words))
@@ -141,11 +162,15 @@ def read(
     # are picked up on this pass rather than on a second one.
     brand = _brand_key(fields)
     line = fields.get("_line") or line
-    for rule in rules_for(source_slug, category=category, brand=brand, line=line):
+    for rule in rules_for(
+        source_slug, shop_slug=shop_slug, category=category, brand=brand, line=line
+    ):
         if rule.layer >= 40:  # BRAND and below: the layers that could not be selected yet
             fields.update(rule.apply(payload, fields, words))
 
-    fields["ruleset_version"] = version_for(source_slug, category=category, brand=brand, line=line)
+    fields["ruleset_version"] = version_for(
+        source_slug, shop_slug=shop_slug, category=category, brand=brand, line=line
+    )
     return {key: value for key, value in fields.items() if not key.startswith("_")}
 
 

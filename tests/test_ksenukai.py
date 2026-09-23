@@ -19,6 +19,7 @@ JOB = Job(
     run_id=1,
     source_id=1,
     source_slug="ksenukai-phones",
+    shop_slug="ksenukai",
     kind=Kind.FULL,
     access="wholesale",
     decode="private_api",
@@ -221,6 +222,7 @@ def coloured(title: str):
     return read(
         {"id": "1", "title_lv": title, "price": "1", "currency": "EUR"},
         source_slug="ksenukai-phones",
+        shop_slug="ksenukai",
         category="phones",
         vocabulary=with_colours(),
     )["identity"].get("color")

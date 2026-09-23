@@ -24,6 +24,7 @@ def parsed(title: str, brand: str) -> dict:
     return read(
         {"id": "1", "title_lv": title, "brand": brand, "price": "199.00", "currency": "EUR"},
         source_slug=SLUG,
+        shop_slug="onea",
         category="phones",
         vocabulary=vocabulary(),
     )
@@ -92,5 +93,5 @@ def test_a_marketing_colour_stays_unresolved():
 def test_the_version_says_what_was_applied():
     assert (
         parsed("Mobilais telefons Nokia 3210, 128 MB, melna krās.", "Nokia")["ruleset_version"]
-        == "generic-2+phones-12+onea-2"
+        == "generic-2+phones-12+onea-shop-1+onea-3"
     )
