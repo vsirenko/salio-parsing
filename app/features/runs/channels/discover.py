@@ -32,6 +32,7 @@ offered as `mpn` it would send the part-number rung looking for one thing and fi
 import json
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from typing import Any
 
 from app.features.runs.channel import Listing, Part, Snapshot, register
@@ -59,15 +60,24 @@ _FAMILY = re.compile(r"\(([A-Z][A-Z0-9][A-Z0-9/–-]{2,})\)")
 class Discover:
     """One channel: this shop's phones, out of its export."""
 
-    slug = SLUG
+    def __init__(
+        self,
+        slug: str = SLUG,
+        selects: Callable[[str, str], bool] | None = None,
+        maker_of: Callable[[str], str] | None = None,
+    ) -> None:
+        self.slug = slug
+        self.selects = selects or _a_phone
+        self.maker_of = maker_of or _maker_from_section
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         part = await fetcher.get(FEED, role="feed")
-        records = _phones(part.body)
+        records = _records(part.body, self.selects, self.maker_of)
         if not records:
-            # The export answered and holds no phones. That is a section that was renamed,
-            # not a shop that sold out, and reporting none would licence an absence.
-            raise ValueError(f"no products under {CATEGORY_PREFIX!r} in the export")
+            # The export answered and holds nothing of this channel's. That is a section
+            # that was renamed, not a shop that sold out, and reporting none would licence
+            # an absence.
+            raise ValueError(f"no products for {self.slug} in the export")
         return [
             Listing(external_id=record["id"], url=record["url"], card=record) for record in records
         ]
@@ -100,8 +110,40 @@ class Discover:
         return dict(listing.card)
 
 
-def _phones(xml: str) -> list[dict[str, Any]]:
-    """Every phone in the export, as the shop wrote it.
+def _a_phone(section: str, name: str) -> bool:
+    return section.startswith(CATEGORY_PREFIX)
+
+
+def _maker_from_section(section: str) -> str:
+    """The section after the separator is the maker: `Mobilie telefoni >> Samsung`."""
+    return _plain(section.split(">>")[-1])
+
+
+# The tablets have no section of their own. They share `Portatīvie/Planšetdatori` with a
+# laptop (122 of 123 on 23.09.2026) and `Apple` with MacBooks, iMacs and a Pencil (100 of 137
+# are iPads).
+MIXED_SECTION = "Datortehnika >> Portatīvie/Planšetdatori"
+APPLE_SECTION = "Datortehnika >> Apple"
+_LAPTOP = re.compile(r"\b(?:Laptop|MacBook|Notebook)\b", re.IGNORECASE)
+_IPAD = re.compile(r"\biPad\b", re.IGNORECASE)
+
+
+def a_tablet(section: str, name: str) -> bool:
+    if section == MIXED_SECTION:
+        return not _LAPTOP.search(name)
+    return section == APPLE_SECTION and bool(_IPAD.search(name))
+
+
+def tablet_maker(section: str) -> str:
+    """`Apple` where the section names it; nothing where the section is a kind of thing,
+    and the matcher reads the maker off the name — `Samsung Galaxy Tab S10 FE …`."""
+    return "Apple" if section == APPLE_SECTION else ""
+
+
+def _records(
+    xml: str, selects: Callable[[str, str], bool], maker_of: Callable[[str], str]
+) -> list[dict[str, Any]]:
+    """Every product of this channel in the export, as the shop wrote it.
 
     The whole export is parsed and then filtered rather than filtered while parsing: the
     section names are the shop's and reading them all is what makes a renamed one visible
@@ -112,7 +154,7 @@ def _phones(xml: str) -> list[dict[str, Any]]:
     for item in list(root)[:MAX_ITEMS]:
         fields = {child.tag: (child.text or "").strip() for child in item}
         section = _plain(fields.get("category_full"))
-        if not section.startswith(CATEGORY_PREFIX):
+        if not selects(section, _plain(fields.get("name"))):
             continue
 
         link = (fields.get("link") or "").strip()
@@ -129,7 +171,7 @@ def _phones(xml: str) -> list[dict[str, Any]]:
                 "name": name,
                 # The section after the separator is the maker. The tags come off: one of
                 # them arrives as `<b>Apple`.
-                "brand": _plain(section.split(">>")[-1]),
+                "brand": maker_of(section),
                 "category": section,
                 "price": (fields.get("price") or "").strip(),
                 "currency": "EUR",
@@ -150,3 +192,5 @@ def _plain(value: str | None) -> str:
 
 
 register(Discover())
+TABLETS_SLUG = "discover-tablets"
+TABLETS_CHANNEL = register(Discover(slug=TABLETS_SLUG, selects=a_tablet, maker_of=tablet_maker))

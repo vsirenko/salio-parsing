@@ -22,7 +22,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "discover-phones"
-VERSION = "discover-3"
+VERSION = "discover-4"
 
 # `256GB`, `1 TB`. The one boundary in a name that has no separators.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -141,6 +141,122 @@ RULESET = register(
                     " this shop, colour is one of the two axes its listings are told apart"
                     " by, and a wrong one would not be caught by a stronger signal."
                 ),
+                body=_color,
+            ),
+        ),
+    ),
+)
+
+
+# The tablets come out of the same export, in two sections that name no maker —
+# `Datortehnika >> Portatīvie/Planšetdatori` — and in names that state the screen as a bare
+# number: `Samsung Galaxy Tab S10 FE WiFi 10.9 128GB Gray (SM-X520)`, `Apple iPad Air 11 M3
+# (2025) 128GB`. Measured on 222 collected on 23.09.2026.
+TABLETS_SLUG = "discover-tablets"
+TABLETS_VERSION = "discover-tablets-1"
+
+# `X230`, `T636`: Samsung's short model code, which this shop puts between the maker and
+# `Galaxy` — `Samsung X230 Galaxy Tab A11+`.
+_LEADING_CODE = re.compile(r"^[A-Z]\d{3}[A-Z]?\s+(?=Galaxy\b)")
+_BARE_SIZE = re.compile(r"^\d{1,2}(?:[.,]\d{1,2})?\"?$")
+_SMALLEST, _LARGEST = 7, 15
+
+
+def _maker_from_name(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The first word of the name that is a maker the catalogue knows, where the section
+    named none. The words for the category come first on some: `Planšetdators Apple …`."""
+    if fields.get("brand_raw"):
+        return {}
+    for word in str(payload.get("name") or "").split():
+        folded = word.casefold()
+        if folded in vocabulary.category_names:
+            continue
+        return {"brand_raw": word} if folded in vocabulary.brand_names else {}
+    return {}
+
+
+def _screen_token(head: str) -> str | None:
+    """The last bare number in the name's head that is a tablet's screen."""
+    found = None
+    for word in head.split():
+        if _BARE_SIZE.match(word):
+            size = float(word.rstrip('"').replace(",", "."))
+            if _SMALLEST <= size < _LARGEST + 0.5:
+                found = word
+    return found
+
+
+def _tablet_model(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The phones' cut, less the maker's short code and the screen standing in the name."""
+    name = (payload.get("name") or "").strip()
+    head = _without_family(name, payload.get("line") or "")
+    found = SIZE.search(head)
+    if found:
+        head = head[: found.start()]
+    screen = _screen_token(head)
+    words = head.split()
+    maker = str(fields.get("brand_raw") or payload.get("brand") or "").casefold()
+    while words and (
+        words[0].casefold() in vocabulary.category_names or words[0].casefold() == maker
+    ):
+        words = words[1:]
+    if screen and screen in words:
+        # The last one: `Xiaomi Pad 8 11` is the Pad 8 with an 11-inch screen.
+        at = len(words) - 1 - words[::-1].index(screen)
+        words = words[:at] + words[at + 1 :]
+    model = _LEADING_CODE.sub("", _EDGES.sub("", _RAM_PREFIX.sub("", " ".join(words))))
+    found_screen = {}
+    if screen:
+        inches = int(float(screen.rstrip('"').replace(",", ".")) + 0.5)
+        found_screen = {"identity": {**fields.get("identity", {}), "screen_inch": inches}}
+    return {"model": model[:200], **found_screen} if model else found_screen
+
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="discover-tablets-maker-from-name",
+                layer=SOURCE,
+                why=(
+                    "The phones' section names the maker, `Mobilie telefoni >> Samsung`; the"
+                    " tablets' names a kind of thing, `Portatīvie/Planšetdatori`, so 122 of"
+                    " 222 tablets came with no brand. The name begins with the maker on all"
+                    " of them, after the word for the category where there is one."
+                ),
+                body=_maker_from_name,
+            ),
+            Rule(
+                id="discover-tablets-model",
+                layer=SOURCE,
+                why=(
+                    "The phones' cut at the first capacity read a model for 15 of 222: the"
+                    " maker stayed on the front where the section gave none. The screen is"
+                    " a bare number in the name — `Tab S10 FE WiFi 10.9 128GB`, `iPad Air 11"
+                    " M3` — on 195 of 222, and every lone one in 7-15 inches before the"
+                    " capacity was the screen; where there are two, `Xiaomi Pad 8 11`, the"
+                    " first is the model's and the last the screen. It goes to the axis and"
+                    " out of the model, and so does Samsung's short code before `Galaxy`."
+                ),
+                body=_tablet_model,
+            ),
+            Rule(
+                id="discover-tablets-line",
+                layer=SOURCE,
+                why="The code in brackets is a family here as it is for the phones.",
+                body=_line,
+            ),
+            Rule(
+                id="discover-tablets-colour",
+                layer=SOURCE,
+                why="The name ends in the colour after the capacity, as for the phones.",
                 body=_color,
             ),
         ),

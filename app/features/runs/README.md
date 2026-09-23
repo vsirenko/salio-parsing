@@ -199,6 +199,7 @@ lifecycle changes.
 | `euronics-tablets` | euronics.lv | retail | json_ld | 122 | 100% placed |
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
 | `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
+| `discover-tablets` | discover.lv | wholesale | xml | 222 | not yet run |
 | `tet-phones` | tet.lv | retail | markup | 319 | not yet run |
 
 ksenukai and 1a share one lupasearch index; a category is one leaf name in it

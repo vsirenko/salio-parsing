@@ -193,5 +193,49 @@ def test_the_colour_is_what_follows_the_capacity(event_loop):
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
     assert reading(event_loop)["ruleset_version"].startswith(
-        "generic-3+phones-13+discover-shop-1+discover-3"
+        "generic-3+phones-13+discover-shop-1+discover-4"
     )
+
+
+# --- tablets: two sections that share their shelves ---
+
+
+def test_the_tablets_are_picked_out_of_the_sections_they_share():
+    from app.features.runs.channels.discover import APPLE_SECTION, MIXED_SECTION, a_tablet
+
+    assert a_tablet(MIXED_SECTION, "Samsung Galaxy Tab S10 FE WiFi 10.9 128GB Gray (SM-X520)")
+    assert not a_tablet(MIXED_SECTION, "Microsoft Surface Laptop 13.5 16GB/512GB/Intel i7")
+    assert a_tablet(APPLE_SECTION, "Apple iPad Air 11 M3 (2025) 128GB Cellular Blue (MCFW4)")
+    assert not a_tablet(APPLE_SECTION, "Apple MacBook Neo 13 A18 Pro 8GB/256GB 6C Silver")
+    assert not a_tablet("Mobilie telefoni >> Apple", "Apple iPhone 17 256GB Black")
+
+
+def tablet(name: str, brand: str = "") -> dict:
+    from app.features.offers.normalization import read
+    from app.features.offers.normalization.rules import Vocabulary
+
+    return read(
+        {"id": "1", "name": name, "brand": brand, "line": ""},
+        source_slug="discover-tablets",
+        shop_slug="discover",
+        category="tablets",
+        vocabulary=Vocabulary(
+            category_names=frozenset({"planšetdators"}),
+            brand_names=frozenset({"samsung", "xiaomi", "apple"}),
+        ),
+    )
+
+
+def test_a_tablet_s_maker_screen_and_model_come_out_of_its_name():
+    """The section names no maker, and the screen is a bare number in the name."""
+    fields = tablet("Samsung X230 Galaxy Tab A11+ 11 128GB Gray (Grey)")
+    assert fields["brand_raw"] == "Samsung"
+    assert fields["model"] == "Galaxy Tab A11+"
+    assert fields["identity"]["screen_inch"] == 11
+    # Two numbers: the first is the model's, the last the screen.
+    pad = tablet("Xiaomi Pad 8 Pro 11 8/256GB Gray (Grey)")
+    assert (pad["model"], pad["identity"]["screen_inch"]) == ("Pad 8 Pro", 11)
+    # The screen inside the name, and the word for the category before the maker.
+    air = tablet("Planšetdators Apple iPad Air 13 M3 (2025) 128GB Space Gray", brand="Apple")
+    assert air["model"] == "iPad Air M3 (2025)"
+    assert air["identity"]["screen_inch"] == 13
