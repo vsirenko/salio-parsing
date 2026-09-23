@@ -50,6 +50,12 @@ MAX_PAGES = 40
 class Onea:
     """One channel: this shop's phones, through its own index."""
 
+    # The product pages are rate-limited where the index is not: at the default eight a
+    # second, 145 of 229 tablet pages were refused on 23.09.2026 and every one of them read
+    # as the index alone. Two at a time, two a second, reads the tablets in two minutes.
+    rate = 2.0
+    concurrency = 2
+
     def __init__(self, slug: str = SLUG, categories: tuple[str, ...] = CATEGORIES) -> None:
         self.slug = slug
         self.categories = categories

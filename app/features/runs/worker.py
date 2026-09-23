@@ -65,7 +65,12 @@ async def collect(
         # that were already served, not against the site as it is today.
         seen, payloads, failed = _reparse(job, channel, store)
     else:
-        async with fetcher or Fetcher() as session:
+        # A channel may ask for less than the default: a shop whose pages sit behind a
+        # rate limiter answers 429 at the pace its index is happy with.
+        polite = Fetcher(
+            rate=getattr(channel, "rate", None), concurrency=getattr(channel, "concurrency", None)
+        )
+        async with fetcher or polite as session:
             try:
                 listings = await channel.discover(session, job)
             except Exception as error:  # noqa: BLE001 - discovery failing is the whole run
