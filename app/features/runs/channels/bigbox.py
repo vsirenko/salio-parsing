@@ -17,6 +17,7 @@ be readable would not be a snapshot.
 """
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -52,7 +53,7 @@ class Bigbox:
         self,
         slug: str = SLUG,
         category_ids: tuple[int, ...] = CATEGORY_IDS,
-        leaves_out: Callable[[str], bool] = is_a_tablet,
+        leaves_out: Callable[[str, dict[str, str]], bool] = lambda name, fields: is_a_tablet(name),
     ) -> None:
         self.slug = slug
         self.category_ids = category_ids
@@ -81,7 +82,8 @@ class Bigbox:
                 # The phones category holds three tablets, `planšetdators` in their names,
                 # and nothing else here says a card is one: a tablet collected as a phone
                 # becomes a phone entry nobody can tell from a real one.
-                if item.get("id") is not None and not self.leaves_out(_text(item.get("title")))
+                if item.get("id") is not None
+                and not self.leaves_out(_text(item.get("title")), _attributes(item, names))
             ]
             offset += len(items)
             if offset >= int(page.get("total") or 0):
@@ -119,7 +121,12 @@ class Bigbox:
             raise ValueError("snapshot has no index record")
         names_part = snapshot.part("names")
         names = json.loads(names_part.body) if names_part else {}
-        return _fields(json.loads(record.body), names)
+        item = json.loads(record.body)
+        # Here as well as in `discover`: a reparse reads the snapshots on disk and never asks
+        # the index again, so a filter only up there would let a mouse mat back in.
+        if self.leaves_out(_text(item.get("title")), _attributes(item, names)):
+            raise ValueError(f"{snapshot.external_id} is not what this channel collects")
+        return _fields(item, names)
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:  # pragma: no cover - no quick pass
         return _fields(listing.card["item"], listing.card["names"])
@@ -160,6 +167,26 @@ class Bigbox:
             },
             headers={"Origin": SITE, "Referer": SITE + "/"},
         )
+
+
+# A capacity in the name — `128GB`, `8/256`, `8+128` — or a memory the shop filled in.
+_CAPACITY = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|Gt)\b|\b\d{1,2}\s*[/+]\s*\d{2,4}\b", re.I)
+MEMORY_FIELDS = ("Iekšējā atmiņa, GB", "Operatīvā atmiņa, (RAM)")
+
+
+def _not_a_device(name: str, fields: dict[str, str]) -> bool:
+    """Whether a card in the tablet category is something that is not one.
+
+    The category holds mouse mats, drawing tablets, keyboards, e-readers and wall displays
+    beside its tablets, and the shop's own sub-categories do not tell them apart: a Wacom
+    and an iPad sit under the same `Planšetdatori`. What does is that a tablet has memory.
+    Measured on the first run, 23.09.2026: a card stating no capacity and filling in neither
+    memory field was 43 of 580, and every one of them was not a tablet, or was a card
+    titled `Acer` and nothing else.
+    """
+    if _CAPACITY.search(name):
+        return False
+    return not any(fields.get(label) for label in MEMORY_FIELDS)
 
 
 def _fields(item: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
@@ -211,4 +238,4 @@ def _text(value: Any) -> str:
 register(Bigbox())
 # The tablet category keeps everything it is given. What else the shop files there is
 # measured on the first run rather than guessed at in advance.
-register(Bigbox(slug=TABLETS_SLUG, category_ids=TABLET_CATEGORY_IDS, leaves_out=lambda name: False))
+register(Bigbox(slug=TABLETS_SLUG, category_ids=TABLET_CATEGORY_IDS, leaves_out=_not_a_device))

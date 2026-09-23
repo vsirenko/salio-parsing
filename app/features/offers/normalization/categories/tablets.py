@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-1"
+VERSION = "tablets-2"
 
 CONNECTIVITY_KEY = "connectivity"
 # The words are the standard's, not a language's: `LTE`, `4G` and `Wi-Fi` are written the
@@ -74,6 +74,18 @@ def _model_without_connectivity(
         return {}
     shorter = " ".join(_DANGLING.sub(" ", _CONNECTIVITY_WORD.sub(" ", model)).split())
     return {"model": shorter} if shorter and shorter != model else {}
+
+
+# A shop's quotes and table rules at either end of a name: `"Acer Iconia A10`, `| Iconia V11`.
+_EDGE_MARKS = re.compile(r"^[\s\"'„“”|/,.:;-]+|[\s\"'„“”|/,.:;-]+$")
+
+
+def _model_bare(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    model = fields.get("model") or ""
+    bare = _EDGE_MARKS.sub("", model)
+    return {"model": bare} if bare and bare != model else {}
 
 
 def _screen_inches(title: str) -> int | None:
@@ -151,6 +163,17 @@ RULESET = register(
                 body=_connectivity,
             ),
             Rule(
+                id="tablets-model-bare-of-marks",
+                layer=FINISH,
+                why=(
+                    '`"Acer Iconia A10` and `| Iconia V11-21M`: a quote a shop opened and a'
+                    " table rule it wrote its title in, left at the edge of the model by the"
+                    " cut. First of the model rules, because the maker comes off only a model"
+                    " that begins with the maker's name."
+                ),
+                body=_model_bare,
+            ),
+            Rule(
                 id="tablets-model-does-not-repeat-the-maker",
                 layer=FINISH,
                 why="As for a phone: the title composes brand and model, so a model holds none.",
@@ -180,7 +203,7 @@ RULESET = register(
                 body=_model_without_connectivity,
             ),
             Rule(
-                id="tablets-model-with-its-size",
+                id="tablets-size-ends-the-model",
                 layer=FINISH,
                 why=(
                     '`iPad Air 11"` and `iPad Air 13"` are two tablets at two prices, and'

@@ -122,6 +122,18 @@ def test_the_tablet_channel_asks_for_its_own_category_and_keeps_tablets(event_lo
     assert sent[1]["filters"]["categories_ids"] == [1652]
 
 
+def test_what_has_no_memory_is_not_a_tablet():
+    """Mouse mats, drawing tablets and keyboards share the shop's tablet category; 43 of 580
+    stated no capacity and filled in no memory field, and none of them was a tablet."""
+    from app.features.runs.channels.bigbox import _not_a_device
+
+    assert _not_a_device("Hator Tonn EVO L HTP-031 grafīta pelēks", {})
+    assert _not_a_device("Grafiskā planšete Wacom Intuos M CTL-6100K", {})
+    assert not _not_a_device("Planšetdators Apple iPad Air 11 M4 Wi-Fi 128GB", {})
+    assert not _not_a_device("OPPO Pad 5 8+128 5G", {})
+    assert not _not_a_device("Lenovo Idea Tab Pro G2", {"Iekšējā atmiņa, GB": "256"})
+
+
 # --- reading the shop's shape ---
 
 
@@ -185,7 +197,7 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     full = read(fields, source_slug="bigbox-phones", shop_slug="bigbox", category="phones")
     assert full["gtin"] == "06941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-2+phones-13+bigbox-shop-1+bigbox-7"
+    assert full["ruleset_version"] == "generic-2+phones-13+bigbox-shop-1+bigbox-8"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):

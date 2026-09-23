@@ -13,7 +13,7 @@ from app.features.offers.normalization import colours
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-7"
+VERSION = "bigbox-8"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -37,7 +37,11 @@ LINE_KEY = "Tālruņa modelis"
 
 
 def _model(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+    payload: dict[str, Any],
+    fields: dict[str, Any],
+    vocabulary: Vocabulary,
+    *,
+    also_cut_at: re.Pattern[str] | None = None,
 ) -> dict[str, Any]:
     """The model, cut out of a title whose word order this shop keeps.
 
@@ -62,7 +66,8 @@ def _model(
         at += 1
 
     rest = " ".join(words[at:])
-    found = SIZE.search(rest)
+    cuts = [m for m in (SIZE.search(rest), also_cut_at and also_cut_at.search(rest)) if m]
+    found = min(cuts, key=lambda match: match.start()) if cuts else None
     if not found:
         # Nothing to cut at. On this shop that is a feature phone or a desk phone, where
         # there is no capacity to state — and the colour then runs into the name, so two
@@ -180,7 +185,20 @@ RULESET = register(
 # left a model on 525 of its 580 tablets. The line rule stays behind: `Tālruņa modelis` is a
 # phone's field.
 TABLETS_SLUG = "bigbox-tablets"
-TABLETS_VERSION = "bigbox-tablets-1"
+TABLETS_VERSION = "bigbox-tablets-2"
+
+# `8+128`, `16/512`, `8/256` — memory and storage with no unit. A tablet's title states its
+# configuration that way as often as `128GB`, where a phone's that says none is a feature
+# phone with nothing to state.
+_PAIR = re.compile(r"\b\d{1,2}\s*[+/]\s*\d{2,4}\b")
+
+
+def _tablet_model(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The phone rule, cut at a unitless pair as well: `OPPO Pad 5 8+128 5G` read no model."""
+    return _model(payload, fields, vocabulary, also_cut_at=_PAIR)
+
 
 TABLETS_RULESET = register(
     SOURCE,
@@ -195,8 +213,11 @@ TABLETS_RULESET = register(
                     "bigbox's phone model rule: the kind word off the front, the cut at the"
                     " configuration. 525 of 580 tablets read a model with it unchanged; the"
                     " screen size it cuts away is put back by the tablet category's rule."
+                    " The configuration is also cut at a pair with no unit, `8+128` or"
+                    " `16/512`: the phone rule reads a title with no capacity as a feature"
+                    " phone and leaves the model empty, and nine tablets were read that way."
                 ),
-                body=_model,
+                body=_tablet_model,
             ),
             Rule(
                 id="bigbox-tablets-color-from-title",

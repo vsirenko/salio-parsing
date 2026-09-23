@@ -55,4 +55,26 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-2+tablets-1"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-2+tablets-2"
+
+
+def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
+    assert (
+        reading('"Acer Iconia A10 10.1" 128GB', '"Acer Iconia A10')["model"] == "Acer Iconia A10 10"
+    )
+    assert reading('Acer | Iconia V11-21M | 11 " | Grey', "| Iconia V11-21M |")["model"] == (
+        "Iconia V11-21M 11"
+    )
+
+
+def test_a_configuration_with_no_unit_still_ends_the_model():
+    """`OPPO Pad 5 8+128 5G` states its memory and storage without a unit; bigbox's phone rule
+    read that as a feature phone with no capacity and left the model empty."""
+    fields = read(
+        {"title": "OPPO Pad 5 8+128 5G", "brand": "Oppo"},
+        source_slug="bigbox-tablets",
+        shop_slug="bigbox",
+        category=TABLETS,
+        vocabulary=Vocabulary(brand_names=frozenset({"oppo"})),
+    )
+    assert fields["model"] == "Pad 5"
