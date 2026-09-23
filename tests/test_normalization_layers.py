@@ -505,9 +505,9 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
     "apple-phones-2": "f940eea49212",
-    "bigbox-9": "1b267f2782f3",
+    "bigbox-10": "4497939fdfce",
     "bigbox-shop-1": "a1194a23b2e7",
-    "bigbox-tablets-3": "42e0853e918a",
+    "bigbox-tablets-4": "2cf6e57ea6f2",
     "bm-3": "3361a10390bd",
     "bm-shop-1": "3d09a6688700",
     "cec-1": "e0252dfe4696",

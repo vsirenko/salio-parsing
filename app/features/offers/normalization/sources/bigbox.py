@@ -13,7 +13,7 @@ from app.features.offers.normalization import colours
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-9"
+VERSION = "bigbox-10"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -51,7 +51,24 @@ def _model(
     title = (fields.get("title") or "").strip()
     if not title:
         return {}
+    rest = _after_kind_and_brand(title, fields, vocabulary)
+    cuts = [m for m in (SIZE.search(rest), also_cut_at and also_cut_at.search(rest)) if m]
+    found = min(cuts, key=lambda match: match.start()) if cuts else None
+    if not found:
+        # Nothing to cut at. On this shop that is a feature phone or a desk phone, where
+        # there is no capacity to state — and the colour then runs into the name, so two
+        # colours of one handset would become two products. Better a visible gap.
+        return {}
 
+    head = rest[: found.start()]
+    if not keep_diagonal:
+        head = _FROM_DIAGONAL.sub("", head)
+    model = _TRAILING.sub("", _RAM_PREFIX.sub("", head)).strip()
+    return {"model": model[:200]} if model else {}
+
+
+def _after_kind_and_brand(title: str, fields: dict[str, Any], vocabulary: Vocabulary) -> str:
+    """The title with the words for the category and the maker off its front."""
     words = title.split()
     at = 0
     # The words naming the category come from the registry, not from here: they are Latvian,
@@ -66,20 +83,7 @@ def _model(
     if brand and at < len(words) and words[at].casefold() == brand.casefold():
         at += 1
 
-    rest = " ".join(words[at:])
-    cuts = [m for m in (SIZE.search(rest), also_cut_at and also_cut_at.search(rest)) if m]
-    found = min(cuts, key=lambda match: match.start()) if cuts else None
-    if not found:
-        # Nothing to cut at. On this shop that is a feature phone or a desk phone, where
-        # there is no capacity to state — and the colour then runs into the name, so two
-        # colours of one handset would become two products. Better a visible gap.
-        return {}
-
-    head = rest[: found.start()]
-    if not keep_diagonal:
-        head = _FROM_DIAGONAL.sub("", head)
-    model = _TRAILING.sub("", _RAM_PREFIX.sub("", head)).strip()
-    return {"model": model[:200]} if model else {}
+    return " ".join(words[at:])
 
 
 def _color(
@@ -188,12 +192,18 @@ RULESET = register(
 # left a model on 525 of its 580 tablets. The line rule stays behind: `Tālruņa modelis` is a
 # phone's field.
 TABLETS_SLUG = "bigbox-tablets"
-TABLETS_VERSION = "bigbox-tablets-3"
+TABLETS_VERSION = "bigbox-tablets-4"
 
 # `8+128`, `16/512`, `8/256` — memory and storage with no unit. A tablet's title states its
 # configuration that way as often as `128GB`, where a phone's that says none is a feature
 # phone with nothing to state.
 _PAIR = re.compile(r"\b\d{1,2}\s*[+/]\s*\d{2,4}\b")
+# A distributor's spec sheet pasted in as the title, one cell per field:
+# `Acer | Iconia V11-21M | 11 " | Grey | TFT LCD | … | 8 GB | 256 GB | Wi-Fi`.
+_CELL = re.compile(r"\s+\|\s*")
+# A remark of several words in brackets, `(w/o power adapter)`; one word in brackets is a
+# name's own — `iPad (A16)`, `Galaxy Tab A11+ (X230)`.
+_ASIDE = re.compile(r"\s*\([^()]*\s[^()]*\)")
 
 
 def _tablet_model(
@@ -202,7 +212,32 @@ def _tablet_model(
     """The phone rule, cut at a unitless pair as well: `OPPO Pad 5 8+128 5G` read no model."""
     # The diagonal is kept: on a tablet what follows it is the chip — `iPad Air 11" M4` — and
     # `iPad Air M3` and `M4` are two generations. The category's rule moves the size itself.
+    title = (fields.get("title") or "").strip()
+    if _CELL.search(title):
+        return _model_from_the_sheet(title, fields, vocabulary)
     return _model(payload, fields, vocabulary, also_cut_at=_PAIR, keep_diagonal=True)
+
+
+def _model_from_the_sheet(
+    title: str, fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The first cell of a distributor's spec sheet that is not the maker alone."""
+    brand = (fields.get("brand_raw") or "").strip().casefold()
+    cells = [cell.strip() for cell in _CELL.split(title)]
+    for cell in cells:
+        if not cell or cell.casefold() == brand:
+            continue
+        name = _after_kind_and_brand(_ASIDE.sub("", cell), fields, vocabulary)
+        # A cell can still run on into the configuration: `… Dimensity 6400/8GB/256GB/…`.
+        cuts = [m for m in (SIZE.search(name), _PAIR.search(name)) if m]
+        if cuts:
+            name = name[: min(m.start() for m in cuts)]
+        name = _TRAILING.sub("", _RAM_PREFIX.sub("", name)).strip()
+        # A cell that was only the word for the category — `Tablet | Iconia V11-21M | …` —
+        # names nothing, and the model is in the next one.
+        if name:
+            return {"model": name[:200]}
+    return {}
 
 
 TABLETS_RULESET = register(
@@ -217,10 +252,16 @@ TABLETS_RULESET = register(
                 why=(
                     "bigbox's phone model rule: the kind word off the front, the cut at the"
                     " configuration. 525 of 580 tablets read a model with it unchanged; the"
-                    " screen size it cuts away is put back by the tablet category's rule."
+                    " screen it keeps is the tablet category's to move onto the axis."
                     " The configuration is also cut at a pair with no unit, `8+128` or"
                     " `16/512`: the phone rule reads a title with no capacity as a feature"
                     " phone and leaves the model empty, and nine tablets were read that way."
+                    " And 29 carry a distributor's spec sheet for a title, one cell per field"
+                    " — `Lenovo Idea Tab Plus | ZAG70195SE | | Cloud grey | IPS | …` — where"
+                    " the cut found no capacity until the end and the whole table became the"
+                    " model. There the model is the first cell that names something: not the"
+                    " maker alone, not the word for the category, without a remark of several"
+                    " words in brackets (`(w/o power adapter)`)."
                 ),
                 body=_tablet_model,
             ),

@@ -197,7 +197,7 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     full = read(fields, source_slug="bigbox-phones", shop_slug="bigbox", category="phones")
     assert full["gtin"] == "06941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-2+phones-13+bigbox-shop-1+bigbox-9"
+    assert full["ruleset_version"] == "generic-2+phones-13+bigbox-shop-1+bigbox-10"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):
@@ -287,3 +287,43 @@ def test_a_pair_sharing_one_unit_is_two_sizes(event_loop):
     # The other order still reads the same way: the larger of the pair is the capacity.
     assert _megabytes("Oukitel WP56 5G 12GB/512GB Black") == 512 * 1024
     assert _megabytes("Nokia 3210 LTE Gold") is None
+
+
+def sheet(title: str, brand: str) -> str | None:
+    from app.features.offers.normalization import read
+    from app.features.offers.normalization.rules import Vocabulary
+
+    return read(
+        {"title": title, "brand": brand},
+        source_slug="bigbox-tablets",
+        shop_slug="bigbox",
+        category="tablets",
+        vocabulary=Vocabulary(
+            category_names=frozenset({"tablet", "planšetdators"}),
+            brand_names=frozenset({brand.casefold()}),
+        ),
+    ).get("model")
+
+
+def test_a_spec_sheet_for_a_title_gives_its_first_cell():
+    """29 of 580 tablets on 23.09.2026 carried a distributor's table as the title, and the
+    whole table became the model: `Idea Tab Plus | ZAG70195SE | | Cloud grey | IPS | …`."""
+    assert sheet(
+        "Lenovo Idea Tab Plus | ZAG70195SE | | Cloud grey | IPS | 2560 x 1600 pixels | MediaTek",
+        "Lenovo",
+    ) == ("Idea Tab Plus")
+    # The maker alone in the first cell, and a remark in brackets on the name.
+    assert sheet(
+        'Acer | Iconia V11-21M | 11 " | Grey | TFT LCD | 1920 x 1200 pixels | 8 GB | 256 GB', "Acer"
+    ) == ("Iconia V11-21M")
+    assert sheet(
+        'Lenovo Yoga Tab Wi-Fi (w/o power adapter) | ZAG60208SE | 11.1 " | Seashell', "Lenovo"
+    ) == ("Yoga Tab")
+    # A cell that is only the word for the category names nothing; the next one does.
+    assert sheet(
+        "Tablet | Iconia V12-11M-84D2 | | Mist Green | 2000 x 1200 pixels | MT8781", "Acer"
+    ) == ("Iconia V12-11M-84D2")
+
+
+def test_a_name_s_own_brackets_stay():
+    assert sheet("Apple iPad (A16) | Wi-Fi | 128 GB | Silver", "Apple") == "iPad (A16)"
