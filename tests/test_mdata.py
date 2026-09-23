@@ -65,6 +65,23 @@ def test_a_page_with_no_products_is_an_error(event_loop):
         discover(event_loop, body="<html><body><h1>Mobilie telefoni</h1></body></html>")
 
 
+def test_a_first_page_of_second_hand_stock_is_not_an_empty_category(event_loop):
+    """On 23.09.2026 all 48 cards on the first page were demo stock. The filter dropped them,
+    as it should, and the run failed as if the category were gone."""
+    import re
+
+    demo = re.sub(r'alt="([^"]+)"', r'alt="\1 Demo"', LISTING)
+
+    async def serve(request: httpx2.Request) -> httpx2.Response:
+        first = "/page/1/" in str(request.url)
+        return httpx2.Response(200, text=demo if first else LISTING)
+
+    fetcher = Fetcher(rate=0, client=httpx2.AsyncClient(transport=httpx2.MockTransport(serve)))
+    listings = event_loop.run_until_complete(MData().discover(fetcher, job()))
+    assert listings, "the new phones on the later pages are collected"
+    assert not any("Demo" in x.card["name"] for x in listings)
+
+
 def test_a_card_carries_what_the_cheap_pass_needs():
     got = card()
     assert got["name"].startswith("MOBILE PHONE IPHONE 15")
@@ -115,6 +132,17 @@ def test_the_specification_comes_over_one_fact_to_a_line():
     assert specs["Built-in Memory"] == "128 GB"
     # A bare line is kept under its own text, because a colour arrives that way.
     assert "Black" in specs
+
+
+def test_a_colour_and_a_storage_line_are_split_into_name_and_value():
+    """`Colour Black/Green` was kept whole as its own name, and nothing looking a field up by
+    its name could find the colour inside it."""
+    from app.features.runs.channels.mdata import _specs
+
+    specs = _specs("Colour Black/Green\nStorage 128 GB\nNetwork 4G")
+    assert specs["Colour"] == "Black/Green"
+    assert specs["Storage"] == "128 GB"
+    assert specs["Network 4G"] == "Network 4G"
 
 
 def test_the_price_is_the_one_that_is_charged():
@@ -197,4 +225,4 @@ def test_a_record_the_shop_never_described_is_cut_at_the_configuration():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"].startswith("generic-1+phones-11+mdata-1")
+    assert reading()["ruleset_version"].startswith("generic-1+phones-12+mdata-1")

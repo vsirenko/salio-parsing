@@ -80,8 +80,11 @@ class MData:
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         first = await self._page(fetcher, 1)
-        cards = _cards(first.body)
-        if not cards:
+        # Whether the page holds products at all, not whether any survived the filter. On
+        # 23.09.2026 all 48 cards on the first page were demo and second-hand stock, the
+        # filter rightly dropped every one, and the run failed as if the category were gone
+        # — with seven more pages of new phones behind it.
+        if not _has_products(first.body):
             raise ValueError(f"no products on the first page of category {CATEGORY}")
 
         last = min(_last_page(first.body), MAX_PAGES)
@@ -134,6 +137,12 @@ class MData:
 def _last_page(body: str) -> int:
     """The highest page the paginator names, which is the end of the category."""
     return max((int(n) for n in _PAGE_LINK.findall(body)), default=1)
+
+
+def _has_products(body: str) -> bool:
+    """Whether a listing page carries any product card, whatever it is."""
+    doc = lxml.html.fromstring(body)
+    return bool(doc.cssselect(f'div.product_box_listing a[href*="products/lv/{CATEGORY}/"]'))
 
 
 def _cards(body: str) -> list[Listing]:
@@ -245,7 +254,11 @@ def _specs(description: str) -> dict[str, str]:
         if labelled:
             specs.setdefault(labelled.group(1).strip(), labelled.group(2).strip())
             continue
-        known = re.match(r"(Model|Built-in Memory|Built-in storage|RAM|OS|Screen)\s+(.+)$", line)
+        # `Colour` and `Storage` were missing, so `Colour Black/Green` was kept whole as its own
+        # name and value, and no lookup of a field name could find the colour in it.
+        known = re.match(
+            r"(Model|Built-in Memory|Built-in storage|Storage|Colour|RAM|OS|Screen)\s+(.+)$", line
+        )
         if known:
             specs.setdefault(known.group(1), known.group(2).strip())
             continue
