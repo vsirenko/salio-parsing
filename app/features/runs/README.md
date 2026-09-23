@@ -191,6 +191,7 @@ lifecycle changes.
 | `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
 | `onea-tablets` | 1a.lv | wholesale | private_api | 229 | not yet run |
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
+| `rdveikals-tablets` | rdveikals.lv | retail | markup | 584 | not yet run |
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |

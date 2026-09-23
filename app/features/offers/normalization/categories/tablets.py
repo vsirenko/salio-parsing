@@ -21,13 +21,14 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-3"
+VERSION = "tablets-4"
 
 CONNECTIVITY_KEY = "connectivity"
 SCREEN_KEY = "screen_inch"
 # The words are the standard's, not a language's: `LTE`, `4G` and `Wi-Fi` are written the
 # same in a Latvian, a Polish and a Finnish feed. `no 4G` is a tablet saying what it lacks.
-_CELLULAR = re.compile(r"(?<!no )(?<!bez )\b(?:LTE|4G|5G|Cellular)\b", re.IGNORECASE)
+# `Cell` is rdveikals' short form, `WiFi+Cell`, on 9 of its 584 tablets.
+_CELLULAR = re.compile(r"(?<!no )(?<!bez )\b(?:LTE|4G|5G|Cell(?:ular)?)\b", re.IGNORECASE)
 # Any hyphen: 1a and ksenukai write `Wi‑Fi` with a non-breaking one, U+2011, and the plain
 # `-` alone found 148 of their 229 tablets' connectivity where the titles stated it on more.
 _WIFI = re.compile(r"\bWi[-\u2010\u2011]?Fi\b", re.IGNORECASE)
@@ -35,7 +36,7 @@ _WIFI = re.compile(r"\bWi[-\u2010\u2011]?Fi\b", re.IGNORECASE)
 # `Galaxy Tab S10 FE 5G` is the cellular `Galaxy Tab S10 FE`. On a phone they do not, which
 # is why this is a tablet's rule — `Galaxy A16` and `Galaxy A16 5G` are two phones.
 _CONNECTIVITY_WORD = re.compile(
-    r"\s*\b(?:Wi[-\u2010\u2011]?Fi|LTE|4G|5G|Cellular)\b", re.IGNORECASE
+    r"\s*\b(?:Wi[-\u2010\u2011]?Fi|LTE|4G|5G|Cell(?:ular)?)\b", re.IGNORECASE
 )
 # What is left between two of them: `Wi-Fi + Cellular` loses both words and keeps its `+`.
 _DANGLING = re.compile(r"(?:^|\s)[+&/](?=\s|$)")
@@ -52,6 +53,7 @@ _SIZE_ON_MODEL = re.compile(
     r"(?:\(\s*)?(?<![\d.,])\d{1,2}(?:[.,]\d{1,2})?\s*(?:\"|''|”|″|-?\s?inch(?:es)?\b|\s?in\b|\s?cm\b)(?:\s*\))?",
     re.IGNORECASE,
 )
+_BARE_DECIMAL = re.compile(r"\d{1,2}[.,]\d{1,2}")
 # A maker names a tablet by its screen in whole inches — `iPad Air 11`, `iPad Pro 13` — and
 # a shop writes the same screen as `10.9"`, `11"` or `27,59cm`. Within one line the sizes a
 # maker sells differ by an inch or more, so rounding cannot fold two of them into one.
@@ -62,13 +64,39 @@ def _connectivity(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
     title = str(fields.get("title") or "")
-    if _CELLULAR.search(title):
-        found = "cellular"
-    elif _WIFI.search(title):
-        found = "wifi"
-    else:
+    said = {
+        found for found in (_said_in_title(title), _said_in_a_field(fields, vocabulary)) if found
+    }
+    # Two sources naming different radios: neither is taken, as with storage.
+    if len(said) != 1:
         return {}
-    return {"identity": {**fields.get("identity", {}), CONNECTIVITY_KEY: found}}
+    return {"identity": {**fields.get("identity", {}), CONNECTIVITY_KEY: said.pop()}}
+
+
+def _said_in_title(title: str) -> str | None:
+    if _CELLULAR.search(title):
+        return "cellular"
+    if _WIFI.search(title):
+        return "wifi"
+    return None
+
+
+def _said_in_a_field(fields: dict[str, Any], vocabulary: Vocabulary) -> str | None:
+    """A field the registry knows as connectivity: a cellular standard in it, or none.
+
+    rdveikals' `Mobīlo datu pārraide` holds `5G`, `4G` or `3G + 4G` for a tablet with a
+    modem and the Latvian word for none for one without — 580 of its 584 fill it. The field
+    exists to name the standard, so naming none is the tablet having none, and no word of
+    the shop's language is needed to read it.
+    """
+    for name, value in (fields.get("attributes") or {}).items():
+        if vocabulary.attribute_key(str(name)) != CONNECTIVITY_KEY:
+            continue
+        text = str(value or "").strip()
+        if not text:
+            continue
+        return "cellular" if _CELLULAR.search(text) else "wifi"
+    return None
 
 
 def _model_without_connectivity(
@@ -143,6 +171,16 @@ def _model_with_its_size(
     if not model or inches is None:
         return {}
     bare = " ".join(_SIZE_ON_MODEL.sub(" ", model).split())
+    # The size with no unit, where the name runs straight on into the configuration:
+    # rdveikals' `Galaxy Tab A11 8.7 8GB`. Only a decimal that rounds to the screen stated,
+    # because a whole number at the end is as often the model's own (`Redmi Pad 2`).
+    last = bare.rsplit(" ", 1)
+    if (
+        len(last) == 2
+        and _BARE_DECIMAL.fullmatch(last[1])
+        and int(float(last[1].replace(",", ".")) + 0.5) == inches
+    ):
+        bare = last[0]
     if not bare:
         return {}
     # Already named by it — `iPad Pro 13`, a registry name carrying its size.
@@ -191,7 +229,9 @@ RULESET = register(
                     " also has Wi-Fi. The other 393 say neither, and most of those are"
                     " models with no cellular version at all; reading them as Wi-Fi would"
                     " be right more often than not and would still be a guess, so they are"
-                    " left without the axis."
+                    " left without the axis. A field the registry knows as connectivity"
+                    " is read too, and a title and a field naming different radios leave"
+                    " the axis empty rather than pick one."
                 ),
                 body=_connectivity,
             ),

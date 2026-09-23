@@ -8,11 +8,13 @@ network.
 import gzip
 import pathlib
 import re
+from types import MappingProxyType
 
 import httpx2
 import pytest
 
 from app.features.offers.normalization import read
+from app.features.offers.normalization.rules import Vocabulary
 from app.features.runs.channel import Part, Snapshot
 from app.features.runs.channels.rdveikals import SITE, Rdveikals
 from app.features.runs.fetching import Fetcher
@@ -245,7 +247,7 @@ def test_the_shop_s_own_model_field_is_a_line_not_a_model(event_loop):
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
     assert (
-        read_it(parsed())["ruleset_version"] == "generic-2+phones-13+rdveikals-shop-1+rdveikals-5"
+        read_it(parsed())["ruleset_version"] == "generic-2+phones-13+rdveikals-shop-1+rdveikals-6"
     )
 
 
@@ -410,3 +412,74 @@ def test_without_the_registry_the_gap_stays_visible(event_loop):
         category="phones",
     )
     assert fields["model"] is None
+
+
+# --- tablets: the same pages under another category ---
+
+
+def test_the_tablet_channel_walks_its_own_category(event_loop):
+    from app.features.runs.channels.rdveikals import TABLETS_CHANNEL
+
+    asked: list[str] = []
+    event_loop.run_until_complete(TABLETS_CHANNEL.discover(shop(asked=asked), job()))
+    assert asked and all("/categories/lv/149/sort/6/" in url for url in asked)
+    assert TABLETS_CHANNEL.slug == "rdveikals-tablets"
+
+
+TABLET_WORDS = Vocabulary(
+    attribute_names=MappingProxyType(
+        {
+            "cietais disks / iekšējās atmiņas apjoms": "storage_mb",
+            "bezvadu pieslēgumi / mobīlo datu pārraide": "connectivity",
+            "ekrāns / ekrāna izmērs": "screen_inch",
+        }
+    )
+)
+
+
+def tablet(name: str, **specs: str) -> dict:
+    return read(
+        {"id": "1", "name": name, "title": name, "brand": "Samsung", "specs": specs},
+        source_slug="rdveikals-tablets",
+        shop_slug="rdveikals",
+        category="tablets",
+        vocabulary=TABLET_WORDS,
+    )
+
+
+def test_a_tablet_s_model_is_cut_from_the_analytics_name():
+    """Titles as collected on 23.09.2026."""
+    assert tablet('Redmi Pad 2 11" 6GB 128GB Graphite Gray')["model"] == "Redmi Pad 2 11"
+    # The size with no unit, running straight into the configuration.
+    fields = tablet(
+        "Galaxy Tab A11 8.7 8GB 128GB 4G LTE SM-X135F Graphite",
+        **{"Ekrāns / Ekrāna izmērs": '8,7"'},
+    )
+    assert fields["model"] == "Galaxy Tab A11 9"
+
+
+def test_a_drive_with_no_unit_leaves_the_field_to_say_the_storage():
+    """`16GB 512SSD`: the title's only capacity is the working memory."""
+    fields = tablet(
+        'Surface Pro 11 Copilot+ PC 13" X1E-80-100 16GB 512SSD W11Pro Platinum',
+        **{"Cietais disks / Iekšējās atmiņas apjoms": "512 GB SSD"},
+    )
+    assert fields["identity"]["storage_mb"] == 512 * 1024
+
+
+def test_the_mobile_data_field_says_the_radio():
+    none = tablet(
+        'Redmi Pad 2 11" 6GB 128GB Gray', **{"Bezvadu pieslēgumi / Mobīlo datu pārraide": "Nav"}
+    )
+    assert none["identity"]["connectivity"] == "wifi"
+    five = tablet(
+        'Galaxy Tab S10 FE 10.9" 8GB 128GB Gray',
+        **{"Bezvadu pieslēgumi / Mobīlo datu pārraide": "5G"},
+    )
+    assert five["identity"]["connectivity"] == "cellular"
+    # The title says cellular and the field says none: neither is taken.
+    torn = tablet(
+        'Galaxy Tab S10 FE 10.9" 8GB 128GB 5G Gray',
+        **{"Bezvadu pieslēgumi / Mobīlo datu pārraide": "Nav"},
+    )
+    assert "connectivity" not in torn["identity"]

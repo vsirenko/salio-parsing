@@ -9,10 +9,11 @@ that the field the shop calls a model is not one.
 import re
 from typing import Any
 
+from app.features.offers.normalization.devices import STORAGE_KEY, megabytes
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "rdveikals-phones"
-VERSION = "rdveikals-5"
+VERSION = "rdveikals-6"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -116,6 +117,70 @@ RULESET = register(
                     " ambiguous pile out of a whole family."
                 ),
                 body=_line,
+            ),
+        ),
+    ),
+)
+
+
+# The tablets are the same pages under another category, and their analytics name has the
+# phones' shape: `Redmi Pad 2 11" 6GB 128GB Graphite Gray`, the brand already off the front.
+# Cutting at the first capacity gave a model on 581 of 584 collected on 23.09.2026, against
+# none without a rule of this channel's own; the size and the connectivity words are the
+# tablet category's to take off and put back.
+TABLETS_SLUG = "rdveikals-tablets"
+TABLETS_VERSION = "rdveikals-tablets-1"
+
+# `16GB 512SSD`, `32GB 1TBSSD`, `16GB 1SSD`: the drive of a tablet that is a computer, written
+# with no unit of its own, so the only size a title reader finds is the working memory.
+_DRIVE = re.compile(r"\b\d+\s?(?:TB|GB)?SSD\b", re.IGNORECASE)
+
+
+def _storage_beside_a_drive(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The stated capacity alone, where the name's only capacity is the working memory."""
+    if not _DRIVE.search(str(payload.get("name") or "")):
+        return {}
+    stated = {
+        size
+        for name, value in (fields.get("attributes") or {}).items()
+        if vocabulary.attribute_key(str(name)) == STORAGE_KEY
+        and (size := megabytes(str(value))) is not None
+    }
+    if len(stated) != 1:
+        return {}
+    return {"identity": {**fields.get("identity", {}), STORAGE_KEY: stated.pop()}}
+
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="rdveikals-tablets-model-from-name",
+                layer=SOURCE,
+                why=(
+                    "The phones' cut, on the same analytics name: the model, the"
+                    " configuration and the colour, in that order. 581 of 584 tablets carry"
+                    " a capacity to cut at; the three that do not are left without a model."
+                ),
+                body=_model,
+            ),
+            Rule(
+                id="rdveikals-tablets-storage-beside-a-drive",
+                layer=SOURCE,
+                why=(
+                    'The shop names a tablet that is a computer `Surface Pro 11 13" X1E-80-100'
+                    " 16GB 512SSD`: the drive has no unit, so the title's one capacity is the"
+                    " working memory, it disagrees with `Iekšējās atmiņas apjoms` and the"
+                    " category's rule rightly takes neither. 40 of 584 on 23.09.2026, 37 of"
+                    " them Surfaces, left without storage for it. With `SSD` in the name the"
+                    " field is the only statement of the drive, and it is taken."
+                ),
+                body=_storage_beside_a_drive,
             ),
         ),
     ),

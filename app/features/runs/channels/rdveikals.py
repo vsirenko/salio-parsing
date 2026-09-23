@@ -50,6 +50,11 @@ SITE = "https://www.rdveikals.lv"
 # what this channel knows: a different category is a different channel.
 CATEGORY_ID = 388
 CATEGORY_SLUG = "Mobilie-telefoni"
+# The same pages under another category id. The tablet leaf is the shop's own `Planšetdatori`;
+# drawing tablets and cases are leaves of their own beside it (1145, 793), not inside it.
+TABLETS_SLUG = "rdveikals-tablets"
+TABLET_CATEGORY_ID = 149
+TABLET_CATEGORY_SLUG = "Planšetdatori"
 # sort 6 is by price. The default, 5, is by popularity, and under it products move between
 # pages while the walk is in progress — the listing then yields about three quarters of the
 # category however many times it is walked.
@@ -68,7 +73,12 @@ _VIEW_ITEM = re.compile(r'dataLayer\.push\((\{"event":"view_item".*?\})\);', re.
 class Rdveikals:
     """One channel: this shop's phones, off its pages."""
 
-    slug = SLUG
+    def __init__(
+        self, slug: str = SLUG, category_id: int = CATEGORY_ID, category_slug: str = CATEGORY_SLUG
+    ) -> None:
+        self.slug = slug
+        self.category_id = category_id
+        self.category_slug = category_slug
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         """Both kinds walk the listing; only what happens afterwards differs.
@@ -110,7 +120,7 @@ class Rdveikals:
 
     async def _page(self, fetcher: Fetcher, page: int) -> Part:
         return await fetcher.get(
-            LISTING.format(category=CATEGORY_ID, page=page, slug=CATEGORY_SLUG),
+            LISTING.format(category=self.category_id, page=page, slug=self.category_slug),
             role="listing",
             headers={"Accept-Language": "lv"},
         )
@@ -298,3 +308,6 @@ def _id_from(url: str) -> str:
 
 
 CHANNEL = register(Rdveikals())
+TABLETS_CHANNEL = register(
+    Rdveikals(slug=TABLETS_SLUG, category_id=TABLET_CATEGORY_ID, category_slug=TABLET_CATEGORY_SLUG)
+)

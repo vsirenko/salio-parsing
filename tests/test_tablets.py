@@ -55,7 +55,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-2+tablets-3"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-2+tablets-4"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
@@ -114,3 +114,10 @@ def test_a_size_the_title_leaves_out_comes_from_the_shop_s_field():
         vocabulary=words,
     )
     assert fields["model"] == "iPad Mini (A17 Pro) 8"
+
+
+def test_cell_is_short_for_cellular():
+    """rdveikals writes `WiFi+Cell` on 9 of its 584 tablets."""
+    fields = reading('iPad Pro 13" M5 WiFi+Cell 256GB Silver', 'iPad Pro 13" M5 WiFi+Cell')
+    assert fields["identity"]["connectivity"] == "cellular"
+    assert fields["model"] == "iPad Pro M5 13"
