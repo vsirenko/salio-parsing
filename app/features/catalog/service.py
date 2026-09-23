@@ -26,6 +26,7 @@ from app.db.query import paginated
 from app.features.catalog.identity import (
     compose_title,
     compute_identity_key,
+    display_number,
     normalize_model,
     slugify,
 )
@@ -557,7 +558,10 @@ class CatalogService:
                     raw=enum_value.canonical, display=enum_value.canonical
                 )
             elif row.value_num is not None:
-                found[attribute.key] = _Value(raw=row.value_num, display=_plain(row.value_num))
+                found[attribute.key] = _Value(
+                    raw=row.value_num,
+                    display=display_number(row.value_num, attribute.unit_dimension),
+                )
             elif row.value_bool is not None:
                 found[attribute.key] = _Value(raw=row.value_bool, display="")
             else:

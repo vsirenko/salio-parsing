@@ -2,7 +2,12 @@
 
 from decimal import Decimal
 
-from app.features.catalog.identity import compute_identity_key, normalize_model, slugify
+from app.features.catalog.identity import (
+    compute_identity_key,
+    display_number,
+    normalize_model,
+    slugify,
+)
 from tests.test_auth import ADMIN, CUSTOMER, auth, tokens
 
 
@@ -70,6 +75,19 @@ def test_a_plus_is_part_of_the_model():
     assert len({normalize_model(f) for f in plus}) == 1
     # Spacing is still noise.
     assert normalize_model("Galaxy Fold 8") == normalize_model("Galaxy Fold8")
+
+
+def test_a_stored_number_is_written_in_the_attribute_s_unit():
+    """Megabytes are right for a key and wrong for a title: `OnePlus 10T 131072 black`."""
+    mb = lambda n: display_number(Decimal(n), "MB")  # noqa: E731
+    assert mb(131072) == "128 GB"
+    assert mb(1048576) == "1 TB"
+    assert mb(2097152) == "2 TB"
+    assert mb(129024) == "126 GB"
+    assert mb(64) == "64 MB"  # a feature phone
+    assert mb(1536) == "1.5 GB"
+    assert display_number(Decimal("6.780"), "inch") == '6.78"'
+    assert display_number(Decimal("5"), None) == "5"
 
 
 def test_a_slug_carries_its_id():
@@ -197,7 +215,8 @@ def test_the_key_appears_only_when_every_axis_is_filled(client):
     )
     full = client.get(f"/api/admin/variants/{variant['id']}", headers=auth(token)).json()
     assert full["identity_key"] is not None
-    assert full["title"] == "Apple iPhone 15 Pro 256 black"
+    # The unit the attribute declares is written out; the fixture declares bytes.
+    assert full["title"] == "Apple iPhone 15 Pro 256 bytes black"
 
 
 def test_clearing_an_axis_takes_the_key_away(client):

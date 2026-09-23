@@ -48,6 +48,32 @@ def slugify(text: str, *, entity_id: int) -> str:
     return f"{head}-{entity_id}" if head else str(entity_id)
 
 
+# Bytes are stored in megabytes and written in the largest unit that is at least one of
+# them, the binary way the reading converted them: `128GB` was read as 131072.
+_BYTE_UNITS = (("TB", 1024 * 1024), ("GB", 1024), ("MB", 1))
+
+
+def display_number(value: Decimal, unit: str | None) -> str:
+    """A stored number as a person reads it, in the unit the attribute declares.
+
+    The stored form is right for keys and filters and wrong for a title: `OnePlus 10T
+    131072 black` was the name of 2235 of 2400 entries, because this printed the megabytes
+    with no unit. The key is built from the stored value and is not touched by this.
+    """
+    if unit == "MB":
+        for name, size in _BYTE_UNITS:
+            if value >= size:
+                return f"{_plain(Decimal(value) / size)} {name}"
+    if unit == "inch":
+        return f'{_plain(value)}"'
+    return f"{_plain(value)} {unit}" if unit else _plain(value)
+
+
+def _plain(value: Decimal) -> str:
+    """At most two decimals, and none that say nothing: 126, 1.5, 6.78."""
+    return format(value.quantize(Decimal("0.01")).normalize(), "f")
+
+
 def compose_title(brand: str, model: str, attribute_values: list[str]) -> str:
     """Brand, model, then the identity-bearing values in the category's own order.
 

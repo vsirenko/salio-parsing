@@ -71,6 +71,11 @@ colour and storage would collide.
   S25 Plus` are one phone written two ways. Changing this function changes every stored
   form: `tools/replus.py` is how the last change was carried through, and the next one needs
   the same.
+- **A number is stored in its attribute's unit and written in a person's.** Storage is
+  megabytes, which is right for the key and the filters, and a title printed it that way:
+  `OnePlus 10T 131072 black` named 2235 of 2400 entries until 23.09.2026.
+  `identity.display_number` writes megabytes in the largest binary unit (`128 GB`, `1 TB`)
+  and inches with a `"`; the key is built from the stored value and does not see it.
 - **A value's type is checked in the service**, because `attributes.value_type` and the
   value columns are in different tables and no constraint spans them. A number stored as
   text would be invisible to every range filter and would silently drop out of the key.
