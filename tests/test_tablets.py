@@ -55,7 +55,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-2+tablets-2"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-2+tablets-3"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
@@ -78,3 +78,39 @@ def test_a_configuration_with_no_unit_still_ends_the_model():
         vocabulary=Vocabulary(brand_names=frozenset({"oppo"})),
     )
     assert fields["model"] == "Pad 5"
+
+
+def test_a_non_breaking_hyphen_is_still_wi_fi():
+    """1a and ksenukai write `Wi‑Fi` with U+2011."""
+    assert reading("Apple iPad Air M4 Wi\u2011Fi 128GB")["identity"]["connectivity"] == "wifi"
+
+
+def test_the_chip_stays_and_the_maker_goes_from_inside():
+    """`iPad Air M3` and `M4` are two generations; Apple writes its chip `Apple M3`."""
+    fields = read(
+        {
+            "title": 'Planšetdators Apple iPad Air 13" Apple M3 Wi-Fi + Cellular 1TB',
+            "brand": "Apple",
+        },
+        source_slug="bigbox-tablets",
+        shop_slug="bigbox",
+        category=TABLETS,
+        vocabulary=Vocabulary(
+            category_names=frozenset({"planšetdators"}), brand_names=frozenset({"apple"})
+        ),
+    )
+    assert fields["model"] == "iPad Air M3 13"
+
+
+def test_a_size_the_title_leaves_out_comes_from_the_shop_s_field():
+    words = Vocabulary(attribute_names={"ekrāna diagonāle": "screen_inch"})
+    fields = read(
+        {
+            "name": "Apple iPad Mini (A17 Pro) Wi-Fi 128GB",
+            "model": "iPad Mini (A17 Pro)",
+            "specs": {'Ekrāna diagonāle, "': "8.3"},
+        },
+        category=TABLETS,
+        vocabulary=words,
+    )
+    assert fields["model"] == "iPad Mini (A17 Pro) 8"

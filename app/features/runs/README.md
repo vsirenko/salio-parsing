@@ -186,8 +186,10 @@ lifecycle changes.
 |---|---|---|---|---|---|
 | `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 521 | 100% |
 | `bigbox-phones` | bigbox.lv | wholesale | private_api | 985 | 93.1% |
-| `bigbox-tablets` | bigbox.lv | wholesale | private_api | 580 | not yet run |
+| `bigbox-tablets` | bigbox.lv | wholesale | private_api | 537 | 98.5% placed |
+| `ksenukai-tablets` | ksenukai.lv | wholesale | private_api | 229 | not yet run |
 | `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
+| `onea-tablets` | 1a.lv | wholesale | private_api | 229 | not yet run |
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
@@ -195,6 +197,10 @@ lifecycle changes.
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
 | `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
 | `tet-phones` | tet.lv | retail | markup | 319 | not yet run |
+
+ksenukai and 1a share one lupasearch index; a category is one leaf name in it
+(`Planšetdatori` for tablets), so their tablet channels are the phone class with another
+leaf, not another module.
 
 **A tablet filed among a shop's phones is left out at discovery**, through one shared check,
 `channels/tablets.py`: the word in the feed's languages, `Wi-Fi + 4G`, and the makers'

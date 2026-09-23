@@ -36,6 +36,9 @@ INDEX = "https://api.lupasearch.com/v1/query/qwxb4ncf8r99"
 CATEGORY_FIELD = "categories_lv_last"
 # Its own name for the section. ksenukai calls the same shelf `Mobilie telefoni`.
 CATEGORIES = ("Mobilie telefoni, viedtālruņi",)
+TABLETS_SLUG = "onea-tablets"
+# The leaf the shop files its tablets under; the same name at both sister shops.
+TABLET_CATEGORIES = ("Planšetdatori",)
 PAGE = 250
 MAX_PAGES = 40
 
@@ -43,7 +46,9 @@ MAX_PAGES = 40
 class Onea:
     """One channel: this shop's phones, through its own index."""
 
-    slug = SLUG
+    def __init__(self, slug: str = SLUG, categories: tuple[str, ...] = CATEGORIES) -> None:
+        self.slug = slug
+        self.categories = categories
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         listings: list[Listing] = []
@@ -100,7 +105,7 @@ class Onea:
                 "searchText": "",
                 "limit": PAGE,
                 "offset": offset,
-                "filters": {CATEGORY_FIELD: list(CATEGORIES)},
+                "filters": {CATEGORY_FIELD: list(self.categories)},
                 "modifiers": {"facets": False, "refiners": False},
             },
             headers={"Origin": SITE, "Referer": SITE + "/"},
@@ -109,3 +114,4 @@ class Onea:
 
 
 CHANNEL = register(Onea())
+TABLETS_CHANNEL = register(Onea(slug=TABLETS_SLUG, categories=TABLET_CATEGORIES))

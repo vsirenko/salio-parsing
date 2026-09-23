@@ -19,7 +19,7 @@ from app.features.offers.normalization.shops.onea import _PART_NUMBER, _head
 from app.features.offers.normalization.sources.ksenukai import color_from_title
 
 SLUG = "onea-phones"
-VERSION = "onea-3"
+VERSION = "onea-4"
 
 _TRAILING = re.compile(r"[\s,/-]+$")
 
@@ -69,4 +69,45 @@ RULESET = register(
             ),
         ),
     ),
+)
+
+
+# Both sister shops title a tablet as they title a phone — `Planšetdators Apple iPad Air M4
+# Wi-Fi MH334HC/A, 11", 12GB/128GB, …` — and on 23.09.2026 this rule read a model for 225
+# of 1a's 229 tablets. ksenukai's own model rule reads its phones from a line field its
+# tablets do not carry, and left `11` and `M4 11`; so both shops' tablets run this one.
+TABLETS_SLUG = "onea-tablets"
+TABLETS_VERSION = "onea-tablets-1"
+KSENUKAI_TABLETS_SLUG = "ksenukai-tablets"
+KSENUKAI_TABLETS_VERSION = "ksenukai-tablets-1"
+
+
+def _tablet_rules(prefix: str) -> tuple[Rule, ...]:
+    return (
+        Rule(
+            id=f"{prefix}-tablets-model-from-title",
+            layer=SOURCE,
+            why=(
+                "The sister shops' title order, cut as for 1a's phones: the head before the"
+                " first comma, the maker's code off its end. The screen size after the comma"
+                " is put back by the tablet category's rule."
+            ),
+            body=_model,
+        ),
+        Rule(
+            id=f"{prefix}-tablets-color-from-title",
+            layer=SOURCE,
+            why="The group's fixed title end, `…, zila krās.`, as for its phones.",
+            body=color_from_title,
+        ),
+    )
+
+
+TABLETS_RULESET = register(
+    SOURCE, TABLETS_SLUG, Ruleset(version=TABLETS_VERSION, rules=_tablet_rules("onea"))
+)
+KSENUKAI_TABLETS_RULESET = register(
+    SOURCE,
+    KSENUKAI_TABLETS_SLUG,
+    Ruleset(version=KSENUKAI_TABLETS_VERSION, rules=_tablet_rules("ksenukai")),
 )

@@ -21,17 +21,22 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-2"
+VERSION = "tablets-3"
 
 CONNECTIVITY_KEY = "connectivity"
+SCREEN_KEY = "screen_inch"
 # The words are the standard's, not a language's: `LTE`, `4G` and `Wi-Fi` are written the
 # same in a Latvian, a Polish and a Finnish feed. `no 4G` is a tablet saying what it lacks.
 _CELLULAR = re.compile(r"(?<!no )(?<!bez )\b(?:LTE|4G|5G|Cellular)\b", re.IGNORECASE)
-_WIFI = re.compile(r"\bWi-?Fi\b", re.IGNORECASE)
+# Any hyphen: 1a and ksenukai write `Wi‑Fi` with a non-breaking one, U+2011, and the plain
+# `-` alone found 148 of their 229 tablets' connectivity where the titles stated it on more.
+_WIFI = re.compile(r"\bWi[-\u2010\u2011]?Fi\b", re.IGNORECASE)
 # The same words, as a model carries them. On a tablet they name the version, not the model:
 # `Galaxy Tab S10 FE 5G` is the cellular `Galaxy Tab S10 FE`. On a phone they do not, which
 # is why this is a tablet's rule — `Galaxy A16` and `Galaxy A16 5G` are two phones.
-_CONNECTIVITY_WORD = re.compile(r"\s*\b(?:Wi-?Fi|LTE|4G|5G|Cellular)\b", re.IGNORECASE)
+_CONNECTIVITY_WORD = re.compile(
+    r"\s*\b(?:Wi[-\u2010\u2011]?Fi|LTE|4G|5G|Cellular)\b", re.IGNORECASE
+)
 # What is left between two of them: `Wi-Fi + Cellular` loses both words and keeps its `+`.
 _DANGLING = re.compile(r"(?:^|\s)[+&/](?=\s|$)")
 
@@ -88,6 +93,18 @@ def _model_bare(
     return {"model": bare} if bare and bare != model else {}
 
 
+def _model_names_the_maker_once(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    model = fields.get("model") or ""
+    maker = (fields.get("brand_raw") or "").strip().casefold()
+    if not model or not maker:
+        return {}
+    words = [word for word in model.split() if word.casefold() != maker]
+    shorter = " ".join(words)
+    return {"model": shorter} if shorter and shorter != model else {}
+
+
 def _screen_inches(title: str) -> int | None:
     """The screen a title states, in whole inches, or nothing."""
     found = _INCHES.search(title)
@@ -102,11 +119,27 @@ def _screen_inches(title: str) -> int | None:
     return rounded if _SMALLEST_TABLET <= rounded <= _LARGEST_TABLET else None
 
 
+def _stated_inches(fields: dict[str, Any], vocabulary: Vocabulary) -> int | None:
+    """The screen a shop's own field gives, when its title gives none.
+
+    bigbox writes `iPad Mini (A17 Pro)` in the name and `8.3` in `Ekrāna diagonāle`, and 1a
+    writes `8.3"` in the name: without the field the two read as two models.
+    """
+    for name, value in (fields.get("attributes") or {}).items():
+        if vocabulary.attribute_key(str(name)) == SCREEN_KEY:
+            found = re.search(r"\d{1,2}(?:[.,]\d{1,2})?", str(value))
+            if found:
+                rounded = int(float(found.group().replace(",", ".")) + 0.5)
+                if _SMALLEST_TABLET <= rounded <= _LARGEST_TABLET:
+                    return rounded
+    return None
+
+
 def _model_with_its_size(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
     model = (fields.get("model") or "").strip()
-    inches = _screen_inches(str(fields.get("title") or ""))
+    inches = _screen_inches(str(fields.get("title") or "")) or _stated_inches(fields, vocabulary)
     if not model or inches is None:
         return {}
     bare = " ".join(_SIZE_ON_MODEL.sub(" ", model).split())
@@ -184,6 +217,17 @@ RULESET = register(
                 layer=FINISH,
                 why="As for a phone: the registry's spelling of a name found whole in the title.",
                 body=devices.from_the_registry,
+            ),
+            Rule(
+                id="tablets-model-names-the-maker-once",
+                layer=FINISH,
+                why=(
+                    '`iPad Air 13" Apple M3`: Apple names its chips `Apple M3`, and the maker'
+                    " is then left in the middle of the model, where the rule that takes it"
+                    " off the front never looks. bigbox writes it and m79 does not, so the"
+                    " same tablet read two ways."
+                ),
+                body=_model_names_the_maker_once,
             ),
             Rule(
                 id="tablets-model-without-a-trailing-colour",

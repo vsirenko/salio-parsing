@@ -32,6 +32,9 @@ CATEGORY_FIELD = "categories_lv_last"
 # Filterable attributes live in columns whose name is base64 in the key itself.
 COLUMN_PREFIX = "attributes_lv_"
 CATEGORIES = ("Mobilie telefoni",)
+TABLETS_SLUG = "ksenukai-tablets"
+# The leaf the shop files its tablets under; the same name at both sister shops.
+TABLET_CATEGORIES = ("Planšetdatori",)
 # Verified against the live index: 250 comes back, and more is not needed.
 PAGE = 250
 # A category that suddenly returns thousands of items is a filter that stopped filtering,
@@ -42,7 +45,9 @@ MAX_PAGES = 40
 class Ksenukai:
     """One channel: this shop's phones, through this index."""
 
-    slug = SLUG
+    def __init__(self, slug: str = SLUG, categories: tuple[str, ...] = CATEGORIES) -> None:
+        self.slug = slug
+        self.categories = categories
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         listings: list[Listing] = []
@@ -103,7 +108,7 @@ class Ksenukai:
                 "searchText": "",
                 "limit": PAGE,
                 "offset": offset,
-                "filters": {CATEGORY_FIELD: list(CATEGORIES)},
+                "filters": {CATEGORY_FIELD: list(self.categories)},
                 # Facets and refiners are the shop's filter sidebar. We do not draw one,
                 # and asking for them makes every page heavier for nothing.
                 "modifiers": {"facets": False, "refiners": False},
@@ -221,3 +226,4 @@ def _text(value: Any) -> str:
 
 
 register(Ksenukai())
+register(Ksenukai(slug=TABLETS_SLUG, categories=TABLET_CATEGORIES))

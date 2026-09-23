@@ -93,5 +93,5 @@ def test_a_marketing_colour_stays_unresolved():
 def test_the_version_says_what_was_applied():
     assert (
         parsed("Mobilais telefons Nokia 3210, 128 MB, melna krās.", "Nokia")["ruleset_version"]
-        == "generic-2+phones-13+onea-shop-1+onea-3"
+        == "generic-2+phones-13+onea-shop-1+onea-4"
     )

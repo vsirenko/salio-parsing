@@ -13,7 +13,7 @@ from app.features.offers.normalization import colours
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-8"
+VERSION = "bigbox-9"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -42,6 +42,7 @@ def _model(
     vocabulary: Vocabulary,
     *,
     also_cut_at: re.Pattern[str] | None = None,
+    keep_diagonal: bool = False,
 ) -> dict[str, Any]:
     """The model, cut out of a title whose word order this shop keeps.
 
@@ -74,7 +75,9 @@ def _model(
         # colours of one handset would become two products. Better a visible gap.
         return {}
 
-    head = _FROM_DIAGONAL.sub("", rest[: found.start()])
+    head = rest[: found.start()]
+    if not keep_diagonal:
+        head = _FROM_DIAGONAL.sub("", head)
     model = _TRAILING.sub("", _RAM_PREFIX.sub("", head)).strip()
     return {"model": model[:200]} if model else {}
 
@@ -185,7 +188,7 @@ RULESET = register(
 # left a model on 525 of its 580 tablets. The line rule stays behind: `Tālruņa modelis` is a
 # phone's field.
 TABLETS_SLUG = "bigbox-tablets"
-TABLETS_VERSION = "bigbox-tablets-2"
+TABLETS_VERSION = "bigbox-tablets-3"
 
 # `8+128`, `16/512`, `8/256` — memory and storage with no unit. A tablet's title states its
 # configuration that way as often as `128GB`, where a phone's that says none is a feature
@@ -197,7 +200,9 @@ def _tablet_model(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
     """The phone rule, cut at a unitless pair as well: `OPPO Pad 5 8+128 5G` read no model."""
-    return _model(payload, fields, vocabulary, also_cut_at=_PAIR)
+    # The diagonal is kept: on a tablet what follows it is the chip — `iPad Air 11" M4` — and
+    # `iPad Air M3` and `M4` are two generations. The category's rule moves the size itself.
+    return _model(payload, fields, vocabulary, also_cut_at=_PAIR, keep_diagonal=True)
 
 
 TABLETS_RULESET = register(
