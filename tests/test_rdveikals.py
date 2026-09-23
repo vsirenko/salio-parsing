@@ -449,13 +449,14 @@ def tablet(name: str, **specs: str) -> dict:
 
 def test_a_tablet_s_model_is_cut_from_the_analytics_name():
     """Titles as collected on 23.09.2026."""
-    assert tablet('Redmi Pad 2 11" 6GB 128GB Graphite Gray')["model"] == "Redmi Pad 2 11"
+    assert tablet('Redmi Pad 2 11" 6GB 128GB Graphite Gray')["model"] == "Redmi Pad 2"
     # The size with no unit, running straight into the configuration.
     fields = tablet(
         "Galaxy Tab A11 8.7 8GB 128GB 4G LTE SM-X135F Graphite",
         **{"Ekrāns / Ekrāna izmērs": '8,7"'},
     )
-    assert fields["model"] == "Galaxy Tab A11 9"
+    assert fields["model"] == "Galaxy Tab A11"
+    assert fields["identity"]["screen_inch"] == 9
 
 
 def test_a_drive_with_no_unit_leaves_the_field_to_say_the_storage():

@@ -142,7 +142,10 @@ renames it where no listing on it reads the name it has — two shops disagreein
 any reading beats a spec sheet — and then files it under the product the new name makes,
 because the family is exactly what the model string says: that is the rule that made it. A rename used to stop at the entry, and 366 entries sat named `Galaxy S26` under a
 family still headed `Galaxy S26 S942 5G Dual Sim`. A family left empty is hidden, never
-deleted — the trail points at it.
+deleted — the trail points at it — and **an entry filed into a hidden family shows it again**.
+Nothing else hides a family, so a hidden one with an entry in it is only this pass's leftover:
+on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the storefront that way,
+their names emptied by one reading and filled again by the next.
 
 ## Decisions worth knowing before changing it
 

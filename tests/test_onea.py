@@ -117,27 +117,25 @@ def tablet(title: str, brand: str) -> str | None:
 def test_a_tablet_s_head_loses_its_codes_wherever_they_sit():
     """Titles as the group wrote them on 23.09.2026; bigbox names each without the code."""
     assert tablet('Planšetdators Xiaomi Pad 8 71703, 11.2", 8GB/256GB, zaļa krās.', "Xiaomi") == (
-        "Pad 8 11"
+        "Pad 8"
     )
     assert tablet('Planšetdators Samsung Galaxy Tab S11 X730, 11", 12GB/128GB', "Samsung") == (
-        "Galaxy Tab S11 11"
+        "Galaxy Tab S11"
     )
     assert tablet(
         'Planšetdators Samsung Galaxy Tab A11 SM-X135FZAAEEE Enterprise Edition, 8.6"', "Samsung"
-    ) == ("Galaxy Tab A11 Enterprise Edition 9")
+    ) == ("Galaxy Tab A11 Enterprise Edition")
     assert tablet('Planšetdators Lenovo Yoga Tab Plus ZAEG0022PL TB520FU, 12.7"', "Lenovo") == (
-        "Yoga Tab Plus 13"
+        "Yoga Tab Plus"
     )
     assert tablet('Planšetdators Huawei MatePad 53013UJQ, 11.5", 8GB/128GB', "Huawei") == (
-        "MatePad 12"
+        "MatePad"
     )
 
 
 def test_a_number_that_is_the_name_stays():
     assert tablet('Planšetdators Kruger&Matz Fun 1008, 10", 4GB/64GB', "Kruger&Matz") == (
-        "Fun 1008 10"
+        "Fun 1008"
     )
-    assert tablet('Planšetdators Acer Iconia V11-21M, 11", 8GB/128GB', "Acer") == (
-        "Iconia V11-21M 11"
-    )
+    assert tablet('Planšetdators Acer Iconia V11-21M, 11", 8GB/128GB', "Acer") == ("Iconia V11-21M")
     assert tablet('Planšetdators XORO MegaPad 2404v7, 24", 4GB/64GB', "XORO") == "MegaPad 2404v7"

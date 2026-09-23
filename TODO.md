@@ -582,6 +582,14 @@ and the questions that have to be answered with real data first, are written dow
       `iPad 11th Gen A16`); ksenukai's and 1a's bare `iPad 11` is left alone, because an
       `iPad 10th gen` at 10.9" rounds to the same thing. bigbox's 48 `signals_unmatched` are
       its spec-sheet models (`Iconia Tab V11 (V11-21M-84N8) " WUXGA, IPS Touch, …`).
+- [ ] **Tablet entries holding two screens.** Once the screen became an axis (`tablets-5`,
+      `tools/rescreen.py`, 23.09.2026), some entries' listings voted for two screens:
+      `Galaxy Tab S10 FE+ 11` (11 and 13), `NxtPaper 14` (11 and 14), `Redmi Pad 2 11` (10 and
+      11), `HiPad Max 11`, `ACTIVE 5 8`, `LINK 1 KIDS 8`. The entry kept the screen its name
+      carried, and the listings of the other screen are still on it — filed under the wrong
+      tablet since before the axis could see it. 22 entries got no screen at all (their
+      listings name none). bigbox's `Tab K11 G2“ 11 collu` writes inches in Latvian, which no
+      rule reads.
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,

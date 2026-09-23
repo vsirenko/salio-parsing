@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-4"
+VERSION = "tablets-5"
 
 CONNECTIVITY_KEY = "connectivity"
 SCREEN_KEY = "screen_inch"
@@ -53,7 +53,7 @@ _SIZE_ON_MODEL = re.compile(
     r"(?:\(\s*)?(?<![\d.,])\d{1,2}(?:[.,]\d{1,2})?\s*(?:\"|''|”|″|-?\s?inch(?:es)?\b|\s?in\b|\s?cm\b)(?:\s*\))?",
     re.IGNORECASE,
 )
-_BARE_DECIMAL = re.compile(r"\d{1,2}[.,]\d{1,2}")
+_BARE_NUMBER = re.compile(r"\d{1,2}(?:[.,]\d{1,2})?")
 # A maker names a tablet by its screen in whole inches — `iPad Air 11`, `iPad Pro 13` — and
 # a shop writes the same screen as `10.9"`, `11"` or `27,59cm`. Within one line the sizes a
 # maker sells differ by an inch or more, so rounding cannot fold two of them into one.
@@ -163,29 +163,33 @@ def _stated_inches(fields: dict[str, Any], vocabulary: Vocabulary) -> int | None
     return None
 
 
-def _model_with_its_size(
+def _size_is_an_axis(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
+    """The screen off the model, wherever the shop wrote it, and onto the identity."""
     model = (fields.get("model") or "").strip()
     inches = _screen_inches(str(fields.get("title") or "")) or _stated_inches(fields, vocabulary)
-    if not model or inches is None:
-        return {}
-    bare = " ".join(_SIZE_ON_MODEL.sub(" ", model).split())
-    # The size with no unit, where the name runs straight on into the configuration:
-    # rdveikals' `Galaxy Tab A11 8.7 8GB`. Only a decimal that rounds to the screen stated,
-    # because a whole number at the end is as often the model's own (`Redmi Pad 2`).
-    last = bare.rsplit(" ", 1)
-    if (
-        len(last) == 2
-        and _BARE_DECIMAL.fullmatch(last[1])
-        and int(float(last[1].replace(",", ".")) + 0.5) == inches
-    ):
-        bare = last[0]
-    if not bare:
-        return {}
-    # Already named by it — `iPad Pro 13`, a registry name carrying its size.
-    canonical = bare if bare.split()[-1] == str(inches) else f"{bare} {inches}"
-    return {"model": canonical} if canonical != model else {}
+    found: dict[str, Any] = {}
+    if model:
+        bare = " ".join(_SIZE_ON_MODEL.sub(" ", model).split())
+        # The size with no unit: where the name runs straight on into the configuration,
+        # rdveikals' `Galaxy Tab A11 8.7 8GB`, and where an earlier rule took the inch mark
+        # off the end, its `Redmi Pad 2 11"`. Only a number that rounds to the screen stated
+        # — `Redmi Pad 2` at 11" keeps its 2. A maker's `MatePad 11` at 11" loses its 11 at
+        # every shop alike, and the axis still keeps it apart from the 12" `MatePad`.
+        last = bare.rsplit(" ", 1)
+        if (
+            inches is not None
+            and len(last) == 2
+            and _BARE_NUMBER.fullmatch(last[1])
+            and int(float(last[1].replace(",", ".")) + 0.5) == inches
+        ):
+            bare = last[0]
+        if bare and bare != model:
+            found["model"] = bare
+    if inches is not None:
+        found["identity"] = {**fields.get("identity", {}), SCREEN_KEY: inches}
+    return found
 
 
 RULESET = register(
@@ -287,21 +291,22 @@ RULESET = register(
                 body=_model_without_connectivity,
             ),
             Rule(
-                id="tablets-size-ends-the-model",
+                id="tablets-size-is-an-axis",
                 layer=FINISH,
                 why=(
-                    '`iPad Air 11"` and `iPad Air 13"` are two tablets at two prices, and'
-                    " bigbox's name rule cut both to `iPad Air`: 83 pairs of different"
-                    " barcodes over 580 of its tablets on 23.09.2026 that storage, colour and"
-                    " connectivity could not tell apart differed in the screen. A maker"
-                    " names a tablet by its screen in whole inches, so the size a title"
-                    ' states — `11"`, `11-inch`, `27,59cm (11")`, `10.9"` — is taken off'
-                    " the model wherever it stands and put back at the end, rounded:"
-                    ' `11-inch iPad Air` and `iPad Air 10.9"` both read `iPad Air 11`. A'
-                    " title stating no size leaves the model without one, which can split"
-                    " one tablet in two but never fold two into one."
+                    '`iPad Air 11"` and `iPad Air 13"` are two tablets at two prices: 83 pairs'
+                    " of different barcodes over bigbox's 580 tablets on 23.09.2026 that"
+                    " storage, colour and connectivity could not tell apart differed in the"
+                    " screen. So the screen tells a tablet apart, and it is an axis, like"
+                    " storage — not part of the name, where it had been at first and where"
+                    " the storefront read `Galaxy Tab A11+ 11`. A shop writes one screen as"
+                    ' `11"`, `11-inch`, `27,59cm (11")` or `10.9"`, and a maker names it in'
+                    " whole inches, so it is taken off the model wherever it stands and"
+                    " kept rounded: within one line the sizes a maker sells differ by an"
+                    " inch or more, and rounding cannot fold two of them into one. Last of"
+                    " all, after a colour has come off the end."
                 ),
-                body=_model_with_its_size,
+                body=_size_is_an_axis,
             ),
         ),
     ),

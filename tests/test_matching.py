@@ -2019,6 +2019,32 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
     assert (again["found"], again["rehomed"], again["hidden"]) == (0, 0, 0)
 
+    # And the way back: the reading returns to the old name, the entry to the old family,
+    # and the family is on the storefront again. It stayed hidden with its entry inside it
+    # once — `Apple iPhone 16 Pro` and 60 tablet families on 23.09.2026.
+    ingest(
+        client,
+        token,
+        source["id"],
+        {
+            "external_id": "S-1",
+            "market_code": "LV",
+            "payload": {
+                "name": "Apple iPhone 15 256 GB black",
+                "brand": "Apple",
+                "model": "iPhone 15 12",
+                "price": "799.00",
+                "attributes": {"storage": "256 GB", "color": "black"},
+            },
+        },
+    )
+    back = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert back["rehomed"] == 1, back
+    home = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    assert home["product_id"] == old_family
+    shown = client.get(f"/api/admin/products/{old_family}", headers=auth(token)).json()
+    assert shown["is_visible"] is True
+
 
 def test_a_name_nobody_reads_gives_way_even_where_the_readers_disagree(client):
     """`A57` and `Galaxy A57 5G` disagree about a suffix, and the entry stayed named

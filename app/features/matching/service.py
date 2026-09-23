@@ -1441,14 +1441,19 @@ class MatchingService:
         alternative is a catalogue where every variant is an orphan.
         """
         existing = await self.session.scalar(
-            select(Product.id).where(
+            select(Product).where(
                 Product.brand_id == brand_id,
                 Product.category_id == category_id,
                 func.lower(Product.model) == model.lower(),
             )
         )
         if existing is not None:
-            return existing
+            # Hidden because a pass once emptied it, and nothing else hides a family. An
+            # entry arriving is the family back: left hidden, `Apple iPhone 16 Pro` and 60
+            # tablet families sat off the storefront with their entries inside them.
+            if not existing.is_visible:
+                await catalog.update_product(existing.id, ProductUpdate(is_visible=True))
+            return existing.id
         product = await catalog.create_product(
             ProductCreate(brand_id=brand_id, category_id=category_id, model=model)
         )
