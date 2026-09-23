@@ -260,4 +260,24 @@ def test_the_colour_comes_out_of_the_specification_table(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-13+tet-shop-1+tet-3")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-13+tet-shop-1+tet-4")
+
+
+def test_the_tablet_channel_walks_its_own_leaf():
+    from app.features.runs.channels.tet import TABLET_CATEGORY_PATH, TABLETS_CHANNEL
+
+    assert TABLETS_CHANNEL.slug == "tet-tablets"
+    assert TABLETS_CHANNEL.category_path == TABLET_CATEGORY_PATH
+    assert TABLET_CATEGORY_PATH.endswith("/plansetdatori.html")
+
+
+def test_a_tablet_reads_as_the_phones_do():
+    from app.features.offers.normalization import read
+
+    fields = read(
+        {"name": "Samsung Galaxy Tab S10 FE+ 8+128GB 5G Gray", "brand": "SAMSUNG"},
+        source_slug="tet-tablets",
+        shop_slug="tet",
+        category="tablets",
+    )
+    assert fields["model"] == "Galaxy Tab S10 FE+"

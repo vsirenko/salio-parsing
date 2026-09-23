@@ -6,6 +6,7 @@ arrive without help. One thing is missing and one thing is missing for good: the
 which this module supplies, and the barcode, which the shop does not have.
 """
 
+import re
 from typing import Any
 
 from app.features.offers.normalization.rules import (
@@ -17,7 +18,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "cec-phones"
-VERSION = "cec-1"
+VERSION = "cec-2"
 
 # What this channel collects, as the shop names the category it was resolved from.
 CATEGORY = "iPhone"
@@ -56,6 +57,48 @@ RULESET = register(
                     " inherit this answer."
                 ),
                 body=_brand,
+            ),
+        ),
+    ),
+)
+
+
+# The iPads come through the same GraphQL, and the stated model is right for most — `iPad
+# Air 13" M4` — and for the minis is the whole name: `iPad mini (A17 Pro) WiFi 256GB
+# Purple`, which carries the capacity and the colour into the model and splits one iPad into
+# one product per configuration.
+TABLETS_SLUG = "cec-tablets"
+TABLETS_VERSION = "cec-tablets-1"
+
+_CAPACITY = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB)\b", re.IGNORECASE)
+
+
+def _model_before_the_capacity(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    model = str(fields.get("model") or "")
+    found = _CAPACITY.search(model)
+    if not found:
+        return {}
+    cut = model[: found.start()].strip(" ,-")
+    return {"model": cut} if cut and cut != model else {}
+
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="cec-tablets-model-before-the-capacity",
+                layer=SOURCE,
+                why=(
+                    "The stated model of 18 of 160 iPad variants on 23.09.2026 is the whole"
+                    " name, `iPad mini (A17 Pro) WiFi 256GB Purple`; cut at the capacity it"
+                    " is the model the other 142 already state."
+                ),
+                body=_model_before_the_capacity,
             ),
         ),
     ),

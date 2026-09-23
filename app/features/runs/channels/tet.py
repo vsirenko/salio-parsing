@@ -43,6 +43,9 @@ from app.features.runs.schemas import Job
 SLUG = "tet-phones"
 SITE = "https://www.tet.lv"
 CATEGORY_PATH = "/veikals/telefoni/telefoni-un-aksesuari/viedtalruni.html"
+# The tablets' own leaf; e-readers and covers are leaves beside it.
+TABLETS_SLUG = "tet-tablets"
+TABLET_CATEGORY_PATH = "/veikals/datortehnika/plansetdatori-un-aksesuari/plansetdatori.html"
 # Sixty to a page, six pages of them when this was written. The bound is against a listing
 # that stopped paging rather than against a shop that grew.
 MAX_PAGES = 40
@@ -59,7 +62,9 @@ SOON = "Drīzumā"
 class Tet:
     """One channel: this shop's phones, off its pages."""
 
-    slug = SLUG
+    def __init__(self, slug: str = SLUG, category_path: str = CATEGORY_PATH) -> None:
+        self.slug = slug
+        self.category_path = category_path
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         """Walk until a page brings nothing new, which is not the same as until it repeats.
@@ -81,7 +86,7 @@ class Tet:
                 seen[card.external_id] = card
 
         if not seen:
-            raise ValueError(f"no products on {CATEGORY_PATH}")
+            raise ValueError(f"no products on {self.category_path}")
         return list(seen.values())
 
     async def fetch(self, fetcher: Fetcher, listing: Listing) -> Snapshot:
@@ -93,7 +98,7 @@ class Tet:
                 page,
                 Part(
                     role="card",
-                    url=SITE + CATEGORY_PATH,
+                    url=SITE + self.category_path,
                     status=200,
                     body=json.dumps(listing.card, ensure_ascii=False),
                 ),
@@ -119,7 +124,7 @@ class Tet:
     async def _page(self, fetcher: Fetcher, page: int) -> Part:
         suffix = "" if page == 1 else f"?page={page}"
         return await fetcher.get(
-            f"{SITE}{CATEGORY_PATH}{suffix}",
+            f"{SITE}{self.category_path}{suffix}",
             role="listing",
             headers={"Accept-Language": "lv"},
         )
@@ -243,3 +248,4 @@ def _text(element: Any) -> str:
 
 
 register(Tet())
+TABLETS_CHANNEL = register(Tet(slug=TABLETS_SLUG, category_path=TABLET_CATEGORY_PATH))

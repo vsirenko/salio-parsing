@@ -512,7 +512,8 @@ FINGERPRINTS = {
     "bm-4": "6117d7e812a9",
     "bm-shop-1": "3d09a6688700",
     "bm-tablets-1": "24d34a1063df",
-    "cec-1": "e0252dfe4696",
+    "cec-2": "8c39c9641138",
+    "cec-tablets-1": "f995a929cd19",
     "dateks-5": "0acd87a6666d",
     "dateks-shop-1": "76bf8766fb11",
     "dateks-tablets-1": "abe9d2e77bfe",
@@ -528,8 +529,9 @@ FINGERPRINTS = {
     "m79-8": "43b109729576",
     "m79-shop-1": "ad962ef2618c",
     "m79-tablets-1": "ca0ff57d51a2",
-    "mdata-3": "f9fdde9ae356",
+    "mdata-4": "20e66ad0a69c",
     "mdata-shop-1": "c0edf1b90896",
+    "mdata-tablets-1": "1f92eb67fc2a",
     "onea-5": "b5c2de2bad0c",
     "onea-shop-1": "24e6184df567",
     "onea-tablets-2": "b700b4c0cd8b",
@@ -540,8 +542,9 @@ FINGERPRINTS = {
     "rdveikals-tablets-1": "1ae570d9626a",
     "samsung-phones-2": "9653d4e6a46a",
     "tablets-7": "f5adf534b922",
-    "tet-3": "bd343fa22553",
+    "tet-4": "751b4c587085",
     "tet-shop-1": "3129e8453377",
+    "tet-tablets-1": "7aabd390e9ed",
 }
 
 

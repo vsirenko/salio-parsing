@@ -182,4 +182,20 @@ def test_the_identity_axes_come_from_the_options(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-13+cec-1")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-13+cec-2")
+
+
+def test_an_ipad_s_stated_model_is_cut_at_its_capacity():
+    """For the minis the stated model is the whole name."""
+    from app.features.offers.normalization import read
+
+    fields = read(
+        {
+            "name": "iPad mini (A17 Pro) WiFi 256GB Purple",
+            "model": "iPad mini (A17 Pro) WiFi 256GB Purple",
+        },
+        source_slug="cec-tablets",
+        shop_slug="cec",
+        category="tablets",
+    )
+    assert fields["model"] == "iPad mini (A17 Pro)"

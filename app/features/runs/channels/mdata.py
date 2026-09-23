@@ -55,14 +55,17 @@ SLUG = "mdata-phones"
 SITE = "https://mdata.lv"
 # The category id is part of what this channel knows: 475 is `Mobilie telefoni`.
 CATEGORY = 475
-LISTING = (
-    f"{SITE}/categories/lv/{CATEGORY}/sort/5/filter/0_0_0_0/page/{{page}}/Mobilie-telefoni.html"
-)
+LISTING = f"{SITE}/categories/lv/{{category}}/sort/5/filter/0_0_0_0/page/{{page}}/{{slug}}.html"
+CATEGORY_SLUG = "Mobilie-telefoni"
+# The tablets' own category, `Planšetdatori`.
+TABLETS_SLUG = "mdata-tablets"
+TABLET_CATEGORY = 556
+TABLET_CATEGORY_SLUG = "Planšetdatori"
 # 8 pages held 332 products at 48 a page when this was written.
 MAX_PAGES = 60
 
 _PAGE_LINK = re.compile(r"/page/(\d+)/")
-_PRODUCT = re.compile(rf"products/lv/{CATEGORY}/(\d+)/")
+_PRODUCT = re.compile(r"products/lv/\d+/(\d+)/")
 # Second-hand, in the words this shop and the others use for it.
 SECOND_HAND = re.compile(
     r"(?i)\b(demo|renew|renewd|refurb\w*|pre-owned|used|lietot\w*|mazlietot\w*|atjaunot\w*"
@@ -76,7 +79,12 @@ SHIPS_IN = {"v": "VEIKALĀ", "vv": "1-2 days", "vvv": "3-5 days"}
 class MData:
     """One channel: this shop's phones, off its pages."""
 
-    slug = SLUG
+    def __init__(
+        self, slug: str = SLUG, category: int = CATEGORY, category_slug: str = CATEGORY_SLUG
+    ) -> None:
+        self.slug = slug
+        self.category = category
+        self.category_slug = category_slug
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         first = await self._page(fetcher, 1)
@@ -84,15 +92,15 @@ class MData:
         # 23.09.2026 all 48 cards on the first page were demo and second-hand stock, the
         # filter rightly dropped every one, and the run failed as if the category were gone
         # — with seven more pages of new phones behind it.
-        if not _has_products(first.body):
-            raise ValueError(f"no products on the first page of category {CATEGORY}")
+        if not _has_products(first.body, self.category):
+            raise ValueError(f"no products on the first page of category {self.category}")
 
         last = min(_last_page(first.body), MAX_PAGES)
         rest = await asyncio.gather(*(self._page(fetcher, page) for page in range(2, last + 1)))
 
         seen: dict[str, Listing] = {}
         for part in (first, *rest):
-            for card in _cards(part.body):
+            for card in _cards(part.body, self.category):
                 seen.setdefault(card.external_id, card)
         return list(seen.values())
 
@@ -130,7 +138,9 @@ class MData:
 
     async def _page(self, fetcher: Fetcher, page: int) -> Part:
         return await fetcher.get(
-            LISTING.format(page=page), role="listing", headers={"Accept-Language": "lv"}
+            LISTING.format(category=self.category, page=page, slug=self.category_slug),
+            role="listing",
+            headers={"Accept-Language": "lv"},
         )
 
 
@@ -139,18 +149,18 @@ def _last_page(body: str) -> int:
     return max((int(n) for n in _PAGE_LINK.findall(body)), default=1)
 
 
-def _has_products(body: str) -> bool:
+def _has_products(body: str, category: int = CATEGORY) -> bool:
     """Whether a listing page carries any product card, whatever it is."""
     doc = lxml.html.fromstring(body)
-    return bool(doc.cssselect(f'div.product_box_listing a[href*="products/lv/{CATEGORY}/"]'))
+    return bool(doc.cssselect(f'div.product_box_listing a[href*="products/lv/{category}/"]'))
 
 
-def _cards(body: str) -> list[Listing]:
+def _cards(body: str, category: int = CATEGORY) -> list[Listing]:
     """What each card says, in the shop's own words and with nothing decided."""
     doc = lxml.html.fromstring(body)
     cards: list[Listing] = []
     for box in doc.cssselect("div.product_box_listing"):
-        link = _one(box, f'a[href*="products/lv/{CATEGORY}/"]')
+        link = _one(box, f'a[href*="products/lv/{category}/"]')
         if link is None:
             continue
         href = link.get("href") or ""
@@ -288,3 +298,6 @@ def _text(element: Any) -> str:
 
 
 register(MData())
+TABLETS_CHANNEL = register(
+    MData(slug=TABLETS_SLUG, category=TABLET_CATEGORY, category_slug=TABLET_CATEGORY_SLUG)
+)

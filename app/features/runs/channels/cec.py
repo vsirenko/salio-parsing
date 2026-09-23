@@ -44,6 +44,9 @@ GRAPHQL = f"{SITE}/graphql"
 # The shop's path for the category this channel collects. A different category is a
 # different channel; `refurbished` is deliberately not one — see the module docstring.
 CATEGORY_PATH = "iphone"
+# The iPads, the same configurable products under their own route.
+TABLETS_SLUG = "cec-tablets"
+TABLET_CATEGORY_PATH = "ipad"
 # Magento answers up to 100 items per request, and twelve configurables is the whole
 # category.
 PAGE = 100
@@ -94,13 +97,15 @@ query Phones($uid: String!, $page: Int!, $size: Int!) {
 class Cec:
     """One channel: this shop's iPhones, through its GraphQL."""
 
-    slug = SLUG
+    def __init__(self, slug: str = SLUG, category_path: str = CATEGORY_PATH) -> None:
+        self.slug = slug
+        self.category_path = category_path
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         category = await self._category(fetcher)
         uid = category.get("uid")
         if not uid:
-            raise ValueError(f"no category at /{CATEGORY_PATH}")
+            raise ValueError(f"no category at /{self.category_path}")
 
         listings: list[Listing] = []
         for page in range(1, MAX_PAGES + 1):
@@ -114,7 +119,7 @@ class Cec:
                 break
 
         if not listings:
-            raise ValueError(f"/{CATEGORY_PATH} holds no buyable phones")
+            raise ValueError(f"/{self.category_path} holds nothing buyable")
         return listings
 
     async def fetch(self, fetcher: Fetcher, listing: Listing) -> Snapshot:
@@ -144,7 +149,7 @@ class Cec:
         part = await fetcher.post(
             GRAPHQL,
             role="category",
-            json={"query": ROUTE, "variables": {"url": CATEGORY_PATH}},
+            json={"query": ROUTE, "variables": {"url": self.category_path}},
             headers={"content-type": "application/json"},
         )
         return _data(part.body).get("route") or {}
@@ -253,3 +258,4 @@ def _cents(value: Any) -> str:
 
 
 register(Cec())
+TABLETS_CHANNEL = register(Cec(slug=TABLETS_SLUG, category_path=TABLET_CATEGORY_PATH))

@@ -199,9 +199,11 @@ lifecycle changes.
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |
 | `euronics-tablets` | euronics.lv | retail | json_ld | 122 | 100% placed |
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
+| `cec-tablets` | shop.cec.lv | wholesale | graphql | 160 | not yet run |
 | `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
 | `discover-tablets` | discover.lv | wholesale | xml | 222 | not yet run |
 | `tet-phones` | tet.lv | retail | markup | 319 | not yet run |
+| `tet-tablets` | tet.lv | retail | markup | 210 | not yet run |
 
 ksenukai and 1a share one lupasearch index; a category is one leaf name in it
 (`Planšetdatori` for tablets), so their tablet channels are the phone class with another

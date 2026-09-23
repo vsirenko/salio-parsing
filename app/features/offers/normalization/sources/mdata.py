@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "mdata-phones"
-VERSION = "mdata-3"
+VERSION = "mdata-4"
 
 
 # `128GB`, `4/ 64GB`, `6/ 256GB` — the configuration, written with the working memory in
@@ -73,6 +73,31 @@ RULESET = register(
                     " half of a pair has to look like a capacity for the pair to count:"
                     " `ARMOR MINI 20/ 6/ 256GB` otherwise cuts at `20/ 6`, which is the"
                     " model number meeting the memory, and the 20 is thrown away."
+                ),
+                body=_model,
+            ),
+        ),
+    ),
+)
+
+
+# The tablets are the same pages under category 556, named as the phones are and closed with
+# the shop's own `Planšetdatori Latvijā`, which the cut at the capacity leaves behind.
+TABLETS_SLUG = "mdata-tablets"
+TABLETS_VERSION = "mdata-tablets-1"
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="mdata-tablets-model",
+                layer=SOURCE,
+                why=(
+                    "The phones' cut at the first capacity, on the same names: 20 tablets on"
+                    " 23.09.2026, `Galaxy Tab S8 128GB 5G X706 Graphite Planšetdatori Latvijā`."
                 ),
                 body=_model,
             ),
