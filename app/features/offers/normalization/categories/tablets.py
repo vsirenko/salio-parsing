@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-6"
+VERSION = "tablets-7"
 
 CONNECTIVITY_KEY = "connectivity"
 SCREEN_KEY = "screen_inch"
@@ -31,6 +31,8 @@ SCREEN_KEY = "screen_inch"
 _CELLULAR = re.compile(r"(?<!no )(?<!bez )\b(?:LTE|4G|5G|Cell(?:ular)?)\b", re.IGNORECASE)
 # Any hyphen: 1a and ksenukai write `Wi‑Fi` with a non-breaking one, U+2011, and the plain
 # `-` alone found 148 of their 229 tablets' connectivity where the titles stated it on more.
+# The standard a field is named after, `4G savienojums`.
+_STANDARD = re.compile(r"\b[345]G\b", re.IGNORECASE)
 _WIFI = re.compile(r"\bWi[-\u2010\u2011]?Fi\b", re.IGNORECASE)
 # The same words, as a model carries them. On a tablet they name the version, not the model:
 # `Galaxy Tab S10 FE 5G` is the cellular `Galaxy Tab S10 FE`. On a phone they do not, which
@@ -82,20 +84,39 @@ def _said_in_title(title: str) -> str | None:
 
 
 def _said_in_a_field(fields: dict[str, Any], vocabulary: Vocabulary) -> str | None:
-    """A field the registry knows as connectivity: a cellular standard in it, or none.
+    """What the shop's fields for connectivity say, read through the registry.
 
-    rdveikals' `Mobīlo datu pārraide` holds `5G`, `4G` or `3G + 4G` for a tablet with a
-    modem and the Latvian word for none for one without — 580 of its 584 fill it. The field
-    exists to name the standard, so naming none is the tablet having none, and no word of
-    the shop's language is needed to read it.
+    Four shops answer the question in fields: rdveikals names the standard, `5G`; the rest
+    answer yes or no — ksenukai's and 1a's `4G savienojums: Nē`, bigbox's `Mobilie sakari:
+    Ir`, dateks' `4G: Nav`. A standard is a cellular tablet in any language; a yes or a no is
+    a word, and the registry says what it means. A tablet answering for several standards is
+    cellular if any answer is yes — `3G: Nē` beside `4G: Jā` is a 4G tablet. A word the
+    registry does not know says nothing: reading every answer that is not a standard as
+    `none` once read `Jā` as a Wi-Fi tablet.
     """
+    said: set[str] = set()
+    denied: set[str] = set()
     for name, value in (fields.get("attributes") or {}).items():
         if vocabulary.attribute_key(str(name)) != CONNECTIVITY_KEY:
             continue
         text = str(value or "").strip()
         if not text:
             continue
-        return "cellular" if _CELLULAR.search(text) else "wifi"
+        meant = (
+            "cellular" if _CELLULAR.search(text) else vocabulary.value_of(CONNECTIVITY_KEY, text)
+        )
+        standard = _STANDARD.search(str(name))
+        if meant == "wifi" and standard:
+            # `4G savienojums: Nē` denies 4G, not a modem: ksenukai's index answers for 3G
+            # and 4G and never for 5G, and nine of its 5G tablets read as Wi-Fi from it.
+            denied.add(standard.group().upper())
+        elif meant:
+            said.add(meant)
+    if "cellular" in said:
+        return "cellular"
+    # A denial of every standard up to the newest is a denial of the modem.
+    if "wifi" in said or "5G" in denied:
+        return "wifi"
     return None
 
 

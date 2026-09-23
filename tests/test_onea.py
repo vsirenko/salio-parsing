@@ -139,3 +139,33 @@ def test_a_number_that_is_the_name_stays():
     )
     assert tablet('Planšetdators Acer Iconia V11-21M, 11", 8GB/128GB', "Acer") == ("Iconia V11-21M")
     assert tablet('Planšetdators XORO MegaPad 2404v7, 24", 4GB/64GB', "XORO") == "MegaPad 2404v7"
+
+
+# --- the product page beside the index ---
+
+
+def test_the_page_carries_what_the_index_leaves_out():
+    """A tablet's index record on 23.09.2026 held five attributes; its page held 52."""
+    import gzip
+    import pathlib
+
+    from app.features.runs.channels.onea import parameters
+
+    page = gzip.decompress(
+        (pathlib.Path(__file__).parent / "fixtures" / "onea_tablet.html.gz").read_bytes()
+    ).decode()
+    table = parameters(page)
+    assert table["Modelis"] == "Tab A6 Kids"
+    assert table["4G savienojums"] == "Nē"
+    assert table["5G savienojums"] == "Nē"
+    # The tooltip beside a name is a sentence about 3G, not part of the name.
+    assert "3G savienojums" in table
+    assert not any("SIM" in name for name in table)
+    # A dash is the page saying nothing.
+    assert "Kolekcija" not in table
+
+
+def test_a_challenge_instead_of_a_page_reads_as_nothing():
+    from app.features.runs.channels.onea import parameters
+
+    assert parameters("<html><body>Just a moment...</body></html>") == {}

@@ -433,7 +433,9 @@ TABLET_WORDS = Vocabulary(
             "bezvadu pieslēgumi / mobīlo datu pārraide": "connectivity",
             "ekrāns / ekrāna izmērs": "screen_inch",
         }
-    )
+    ),
+    # `Nav` is the Latvian for none, and it is the registry that says so.
+    values=MappingProxyType({"connectivity": MappingProxyType({"nav": "wifi"})}),
 )
 
 

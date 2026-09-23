@@ -164,7 +164,15 @@ LISTINGS = """
                select 1 from offer_matches m
                where m.offer_id = o.id and m.superseded_at is null
            ) as placed,
-           exists (select 1 from match_queue q where q.offer_id = o.id) as queued
+           exists (select 1 from match_queue q where q.offer_id = o.id) as queued,
+           -- Still listed: seen by the newest full pass of the channel that last read it.
+           -- A card the shop took down, or one a channel's filter now leaves out, stays in
+           -- the table with its history and stops counting — bigbox's mouse mats were 41 of
+           -- the tablets "not placed" after its tablet filter already left them out.
+           coalesce(o.last_seen_at >= (
+               select max(ru.started_at) from runs ru
+               where ru.source_id = raw.source_id and ru.kind = 'full' and ru.status = 'ok'
+           ), true) as listed
     from offers o
     join sellers s on s.id = o.seller_id
     join shops sh on sh.id = s.shop_id
@@ -294,6 +302,10 @@ async def collect() -> dict:
         catalogue.append(product)
     catalogue.sort(key=lambda p: (-len(p["shops"]), -p["offer_count"], p["title"]))
 
+    # The queue keeps a row for a card that is no longer listed; the page is about what the
+    # shops publish now, so it shows what the header counts.
+    delisted = {row["id"] for row in listings if not row["listed"]}
+    queued = [row for row in queued if row["offer_id"] not in delisted]
     for row in queued:
         row["missing"] = _refusal(row, brands)
     queued.sort(
@@ -324,8 +336,12 @@ async def collect() -> dict:
             # placed. A channel that contributes nothing is the interesting case, and
             # counting only the ones that worked would hide it.
             "shops": len({row["shop"] for row in listings}),
-            "listings": len(listings),
-            "share": (100 * len(offers) / len(listings)) if listings else 0.0,
+            "listings": sum(row["listed"] for row in listings),
+            "share": (
+                100
+                * sum(row["placed"] and row["listed"] for row in listings)
+                / max(1, sum(row["listed"] for row in listings))
+            ),
         },
     }
 
@@ -343,7 +359,7 @@ def _tabs(
     names = {row["tab"]: row.get("category") or NO_CATEGORY[1] for row in listings}
     tabs = []
     for slug in sorted(names, key=lambda t: (t == NO_CATEGORY[0], t)):
-        mine = [row for row in listings if row["tab"] == slug]
+        mine = [row for row in listings if row["tab"] == slug and row["listed"]]
         by_shop: dict[str, list[dict]] = defaultdict(list)
         for row in mine:
             by_shop[row["shop"]].append(row)

@@ -63,6 +63,10 @@
   known to be storage. A field name is resolved **exactly**, never by a fragment of it:
   `ram` inside `paRAMetri` once threw rdveikals' storage away as working memory. A name no
   row covers is not read — a new shop's field names are rows to enter, not a tuple to grow.
+- **A value's words are rows too.** `Nē`, `Nav`, `Jā`, `Ir` are how four shops answer
+  "has it a modem?", and they sit in `attribute_value_aliases` under connectivity, handed in
+  as `Vocabulary.values`. A rule that treated every answer it could not parse as "no" read
+  `Jā` as a Wi-Fi tablet. A word the registry does not know says nothing.
 - **Where two sources disagree about an axis, the reading takes neither.** Title and field
   named different capacities 38 times in 5188, and the market sided with each about as
   often; ranking one over the other was wrong fifteen times or more. An empty axis sends a

@@ -1,6 +1,8 @@
 """What a tablet listing means: the phone's axes, plus connectivity, and a model that carries
 its screen size."""
 
+from types import MappingProxyType
+
 from app.features.offers.normalization import read
 from app.features.offers.normalization.rules import Vocabulary
 
@@ -64,7 +66,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-6"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-7"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
@@ -130,3 +132,46 @@ def test_cell_is_short_for_cellular():
     fields = reading('iPad Pro 13" M5 WiFi+Cell 256GB Silver', 'iPad Pro 13" M5 WiFi+Cell')
     assert fields["identity"]["connectivity"] == "cellular"
     assert fields["model"] == "iPad Pro M5"
+
+
+def radio(**fields: str) -> str | None:
+    words = Vocabulary(
+        attribute_names=MappingProxyType(
+            {
+                "mobilie sakari": "connectivity",
+                "3g savienojums": "connectivity",
+                "4g savienojums": "connectivity",
+                "5g savienojums": "connectivity",
+                "bezvadu pieslēgumi / mobīlo datu pārraide": "connectivity",
+            }
+        ),
+        values=MappingProxyType(
+            {
+                "connectivity": MappingProxyType(
+                    {"nē": "wifi", "nav": "wifi", "jā": "cellular", "ir": "cellular"}
+                )
+            }
+        ),
+    )
+    return read({"name": "Tablet", "specs": fields}, category=TABLETS, vocabulary=words)[
+        "identity"
+    ].get("connectivity")
+
+
+def test_a_yes_or_a_no_is_read_through_the_registry():
+    """Four shops answer "has it a modem?" in fields, three of them with a word."""
+    assert radio(**{"Mobilie sakari": "Nav"}) == "wifi"
+    assert radio(**{"Mobilie sakari": "Ir"}) == "cellular"
+    assert radio(**{"Bezvadu pieslēgumi / Mobīlo datu pārraide": "5G"}) == "cellular"
+    # A word the registry does not know says nothing.
+    assert radio(**{"Mobilie sakari": "Varbūt"}) is None
+
+
+def test_a_no_for_one_standard_is_not_a_no_for_the_modem():
+    """ksenukai answers for 3G and 4G and never for 5G: nine of its 5G tablets read as
+    Wi-Fi when a no for 4G was taken as a no for everything."""
+    assert radio(**{"3G savienojums": "Nē", "4G savienojums": "Nē"}) is None
+    assert (
+        radio(**{"3G savienojums": "Nē", "4G savienojums": "Nē", "5G savienojums": "Nē"}) == "wifi"
+    )
+    assert radio(**{"3G savienojums": "Nē", "4G savienojums": "Jā"}) == "cellular"

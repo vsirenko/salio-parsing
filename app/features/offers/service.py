@@ -539,6 +539,22 @@ class OfferService:
             keys: dict[str, set[str]] = {}
             for alias, key in named.all():
                 keys.setdefault(alias, set()).add(key)
+            # The words for this category's attribute values, colour aside — colour has its
+            # own global map above. `nē` under connectivity is `wifi`.
+            worded = await self.session.execute(
+                select(
+                    Attribute.key, AttributeValueAlias.alias_normalized, AttributeValue.canonical
+                )
+                .join(AttributeValue, AttributeValue.id == AttributeValueAlias.attribute_value_id)
+                .join(Attribute, Attribute.id == AttributeValue.attribute_id)
+                .join(CategoryAttribute, CategoryAttribute.attribute_id == Attribute.id)
+                .where(
+                    CategoryAttribute.category_id == source.category_id, Attribute.key != COLOR_KEY
+                )
+            )
+            values: dict[str, dict[str, str]] = {}
+            for key, alias, value in worded.all():
+                values.setdefault(key, {})[alias] = value
             self._vocabularies[source.category_id] = Vocabulary(
                 category_names=frozenset(names),
                 brand_names=frozenset(name.casefold() for name in makers if name),
@@ -548,6 +564,9 @@ class OfferService:
                 ),
                 attribute_names=MappingProxyType(
                     {alias: next(iter(found)) for alias, found in keys.items() if len(found) == 1}
+                ),
+                values=MappingProxyType(
+                    {key: MappingProxyType(words) for key, words in values.items()}
                 ),
             )
         return self._vocabularies[source.category_id]

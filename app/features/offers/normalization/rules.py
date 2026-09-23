@@ -88,11 +88,23 @@ class Vocabulary:
     # two categories, and a name that is two attributes in one is left out rather than
     # guessed. Exact, not a fragment: `ram` inside `paRAMetri` once hid rdveikals' storage.
     attribute_names: Mapping[str, str] = MappingProxyType({})
+    # What a shop writes as the value of one of this category's attributes, to the value it
+    # means, by the attribute's key: `{"connectivity": {"nē": "wifi", "ir": "cellular"}}`.
+    # The words for yes and no are Latvian facts, and four shops answer "has it a modem?"
+    # with them — `4G savienojums: Nē`, `Mobilie sakari: Ir` — so they are rows, not code.
+    values: Mapping[str, Mapping[str, str]] = MappingProxyType({})
 
     def attribute_key(self, name: str) -> str | None:
         """Which of our attributes a shop's name for one is, or nothing."""
         try:
             return self.attribute_names.get(normalize_attribute_name(name))
+        except ValueError:
+            return None
+
+    def value_of(self, key: str, text: str) -> str | None:
+        """The value a shop's word for one of an attribute's values means, or nothing."""
+        try:
+            return self.values.get(key, {}).get(normalize_attribute_name(text))
         except ValueError:
             return None
 
