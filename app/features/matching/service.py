@@ -1251,7 +1251,10 @@ class MatchingService:
                 OfferMatch,
                 (OfferMatch.offer_id == RawOffer.offer_id) & (OfferMatch.superseded_at.is_(None)),
             )
-            .where(NormalizedOffer.model.is_not(None))
+            # A reading that found no model is no name to give an entry: an iPad listing
+            # naming no generation reads with none on purpose, and renaming its entry to
+            # nothing failed the whole pass.
+            .where(NormalizedOffer.model.is_not(None), NormalizedOffer.model != "")
             .subquery()
         )
         rows = await self.session.execute(
