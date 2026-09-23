@@ -556,6 +556,20 @@ and the questions that have to be answered with real data first, are written dow
       six of 9096 and no phone. The two that were matched were unlinked and their entries
       hidden; the third was on the real `Ulefone RugKing` phone through the tablet's barcode,
       which came off the phone. Three were already queued and stay there.
+- [ ] **One barcode written two ways is two barcodes.** `0840493610849` at dateks and
+      `840493610849` at rdveikals are one Motorola: the same code as an EAN-13 with its
+      leading zero and as a UPC-A without it. 229 of 2736 distinct codes in the readings on
+      23.09.2026 appear in both forms, and 223 in `variant_gtins`, so the barcode rung misses
+      between exactly the shops that write them differently. `barcodes.pick` checks the digit
+      and keeps the shop's length; one canonical form (GTIN-14, zero-padded) is the fix, and
+      it moves every stored code, so it wants a migration and a reparse.
+- [ ] **Working memory tells some phones apart, and the key does not carry it.** Measured on
+      23.09.2026 over 11995 pairs of barcodes that share a model: storage or colour tells
+      91.5% of them apart; 56 pairs differ only in RAM — `Moto G17 4/128` and `8/128`, `Moto
+      G77 8/256` and `12/256`, the same colour — and the catalogue files each pair as one
+      phone. Making `ram_mb` identity-bearing is not free: a key needs every axis, so every
+      listing that states no RAM would lose its key. Screen size, phone type and OS are not
+      axes — one barcode's own listings agree on them 13%, 0% and 66% of the time.
 - [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
       Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
       not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals
