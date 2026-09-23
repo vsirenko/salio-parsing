@@ -113,11 +113,11 @@ def test_the_version_names_what_was_applied():
     assert version_for(KSENUKAI, shop_slug="ksenukai") == "generic-2+ksenukai-shop-1+ksenukai-7"
     assert (
         version_for(KSENUKAI, shop_slug="ksenukai", category=PHONES)
-        == "generic-2+phones-12+ksenukai-shop-1+ksenukai-7"
+        == "generic-2+phones-13+ksenukai-shop-1+ksenukai-7"
     )
     assert (
         read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)["ruleset_version"]
-        == "generic-2+phones-12+ksenukai-shop-1+ksenukai-7"
+        == "generic-2+phones-13+ksenukai-shop-1+ksenukai-7"
     )
 
 
@@ -287,7 +287,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-2+phones-12+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-2+phones-13+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -525,7 +525,7 @@ FINGERPRINTS = {
     "onea-3": "819a4890c469",
     "onea-shop-1": "24e6184df567",
     "oneplus-phones-1": "29eaabd5e1ad",
-    "phones-12": "e44fa34c0a51",
+    "phones-13": "8a8607df0554",
     "rdveikals-5": "6ba57027ffed",
     "rdveikals-shop-1": "e0b3a42600f7",
     "samsung-phones-2": "9653d4e6a46a",

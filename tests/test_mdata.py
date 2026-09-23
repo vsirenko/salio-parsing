@@ -227,4 +227,4 @@ def test_a_record_the_shop_never_described_is_cut_at_the_configuration():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"].startswith("generic-2+phones-12+mdata-shop-1+mdata-3")
+    assert reading()["ruleset_version"].startswith("generic-2+phones-13+mdata-shop-1+mdata-3")

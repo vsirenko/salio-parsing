@@ -167,7 +167,7 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     full = read(fields, source_slug="bigbox-phones", shop_slug="bigbox", category="phones")
     assert full["gtin"] == "06941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-2+phones-12+bigbox-shop-1+bigbox-6"
+    assert full["ruleset_version"] == "generic-2+phones-13+bigbox-shop-1+bigbox-6"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):
@@ -250,7 +250,7 @@ def test_a_pair_sharing_one_unit_is_two_sizes(event_loop):
     """`128/4 GB` is capacity then memory with a single unit at the end, and only the `4`
     is spelled as a size. Reading the spelled half filed a 128 GB phone as having four —
     found because another shop sold the same barcode and said 128."""
-    from app.features.offers.normalization.categories.phones import _megabytes
+    from app.features.offers.normalization.devices import megabytes as _megabytes
 
     assert _megabytes("Oukitel G1S tālrunis, 128/4 GB, melns") == 128 * 1024
     assert _megabytes("Samsung Galaxy S25+ 5G tālrunis, 512/12 GB, zils") == 512 * 1024
