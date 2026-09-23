@@ -43,6 +43,10 @@ GRAPHQL = f"{SITE}/graphql"
 # configuration: a different category is a different channel. See the module docstring on
 # why it is not the bigger one of the two that carry the word for telephone.
 CATEGORY_UID = "MTIy"
+# The tablets' leaf, `Planšetdatori` under the section of the same name: graphics tablets,
+# e-readers, accessories and covers are leaves beside it.
+TABLETS_SLUG = "bm-tablets"
+TABLET_CATEGORY_UID = "MTIx"
 # Verified against the live endpoint: 200 comes back whole, with every attribute, in 15
 # seconds. Asking for more is where a generous endpoint stops being generous.
 PAGE = 200
@@ -120,7 +124,9 @@ COLOUR = "color"
 class Bm:
     """One channel: this shop's phones, through its GraphQL."""
 
-    slug = SLUG
+    def __init__(self, slug: str = SLUG, category_uid: str = CATEGORY_UID) -> None:
+        self.slug = slug
+        self.category_uid = category_uid
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         listings: list[Listing] = []
@@ -175,7 +181,10 @@ class Bm:
         part = await fetcher.post(
             GRAPHQL,
             role="graphql",
-            json={"query": QUERY, "variables": {"uid": CATEGORY_UID, "size": PAGE, "page": page}},
+            json={
+                "query": QUERY,
+                "variables": {"uid": self.category_uid, "size": PAGE, "page": page},
+            },
             headers={"content-type": "application/json"},
         )
         body = json.loads(part.body)
@@ -259,3 +268,4 @@ def _text(value: Any) -> str:
 
 
 register(Bm())
+TABLETS_CHANNEL = register(Bm(slug=TABLETS_SLUG, category_uid=TABLET_CATEGORY_UID))

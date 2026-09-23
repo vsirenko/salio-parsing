@@ -265,4 +265,38 @@ def test_a_marketing_name_resolves_to_nothing():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-3+phones-13+bm-shop-1+bm-3"
+    assert reading()["ruleset_version"] == "generic-3+phones-13+bm-shop-1+bm-4"
+
+
+# --- tablets: the same GraphQL under their own leaf ---
+
+
+def tablet(name: str, brand: str) -> str | None:
+    from app.features.offers.normalization import read
+    from app.features.offers.normalization.rules import Vocabulary
+
+    return read(
+        {"name": name, "brand": brand},
+        source_slug="bm-tablets",
+        shop_slug="bm",
+        category="tablets",
+        vocabulary=Vocabulary(category_names=frozenset({"tablet"})),
+    ).get("model")
+
+
+def test_a_tablet_s_name_loses_the_word_for_it_and_samsung_s_code():
+    """`Tablet` in front of the maker, and the code even between `Galaxy` and `Tab`."""
+    assert tablet(
+        "Tablet Samsung Galaxy Tab S10+ X826B 5G 12.4 12GB RAM 256GB - Grey", "Samsung"
+    ) == ("Galaxy Tab S10+ 12.4")
+    assert tablet(
+        "Tablet Samsung Galaxy SM-X936B Tab S11 Ultra 12GB RAM 256GB - Gray", "Samsung"
+    ) == ("Galaxy Tab S11 Ultra")
+    assert tablet("Tablet OnePlus Pad Go 2 8GB RAM 128GB WiFi - Black", "OnePlus") == "Pad Go 2"
+
+
+def test_the_tablet_channel_asks_for_its_own_leaf():
+    from app.features.runs.channels.bm import TABLET_CATEGORY_UID, TABLETS_CHANNEL
+
+    assert TABLETS_CHANNEL.slug == "bm-tablets"
+    assert TABLETS_CHANNEL.category_uid == TABLET_CATEGORY_UID == "MTIx"

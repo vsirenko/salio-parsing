@@ -600,6 +600,12 @@ and the questions that have to be answered with real data first, are written dow
       only the pages whose record lacks an axis, or a slow pass of its own — before turning
       it back on. ksenukai's pages answer a challenge outright; its index already carries
       the fields, bar 5G.
+- [ ] **iPad Air M4 part numbers on `iPad Air M3` entries.** Checked through the part
+      numbers in shop names on 23.09.2026: 11 of bm's `iPad Air M4` codes and two of
+      euronics' `iPad Air M4 13` barcodes sit on entries named `iPad Air M3`. The entries are
+      wrong, not the shops; find how they were filed and move the identifiers. `iPad Pro M5`
+      is also four spellings (`With Standard Glass`, `with nano-texture glass`, …) — the
+      glass is a real difference, the spelling is not.
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,

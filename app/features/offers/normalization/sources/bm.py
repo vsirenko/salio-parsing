@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 from app.features.offers.normalization.shops.bm import APPLE_CODE
 
 SLUG = "bm-phones"
-VERSION = "bm-3"
+VERSION = "bm-4"
 
 
 # `256GB`, `1 TB`, `128 MB`. The name runs the configuration together with everything else
@@ -114,6 +114,60 @@ RULESET = register(
                     " which the shop pasted a whole specification sheet, and both are better"
                     " left visible than guessed at."
                 ),
+                body=_color,
+            ),
+        ),
+    ),
+)
+
+
+# The tablets come out of the same GraphQL under their own leaf, named
+# `Tablet Samsung Galaxy Tab S10+ X826B 5G 12.4 12GB RAM 256GB - Grey`: the word for the
+# thing in front of the maker, Samsung's short code and the screen inside the name.
+TABLETS_SLUG = "bm-tablets"
+TABLETS_VERSION = "bm-tablets-1"
+
+# `X826B`, `T636`, `SM-X700`: Samsung's model code, short or full, which this shop writes
+# into the name — even between `Galaxy` and `Tab`: `Galaxy SM-X936B Tab S11 Ultra`.
+_SHORT_CODE = re.compile(r"(?<!\S)(?:SM-)?[A-Z]\d{3}[A-Z]{0,2}(?!\S)")
+
+
+def _tablet_model(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The phones' cut, after the word for the thing, and less Samsung's short code."""
+    words = (payload.get("name") or "").split()
+    while words and words[0].casefold() in vocabulary.category_names:
+        words = words[1:]
+    head = naming.without_brand(" ".join(words), payload.get("brand") or "")
+    found = SIZE.search(head)
+    if found:
+        head = head[: found.start()]
+    model = _EDGES.sub("", " ".join(_SHORT_CODE.sub(" ", head).split()))
+    return {"model": model[:200]} if model else {}
+
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="bm-tablets-model",
+                layer=SOURCE,
+                why=(
+                    "No model is stated, and the name is the phones' shape with `Tablet` in"
+                    " front of the maker and Samsung's short code — `X826B` — inside it."
+                    " The word comes off through the category registry, the code by its"
+                    " shape; the screen and the radio words are the tablet category's."
+                ),
+                body=_tablet_model,
+            ),
+            Rule(
+                id="bm-tablets-colour",
+                layer=SOURCE,
+                why="The name ends in the colour after the capacity, as for the phones.",
                 body=_color,
             ),
         ),
