@@ -548,6 +548,19 @@ and the questions that have to be answered with real data first, are written dow
       match not yet asked about, `GET /api/admin/matching/doubts` lists the ones given under
       `JUDGE_DOUBT_BELOW` (0.1) chance of naming the entry's model. It moves nothing.
       Measured before it was built, over all 8982 matches — see the judge README.
+- [ ] **A catalogue title prints storage in raw megabytes.** `OnePlus 10T 131072 black`,
+      `Galaxy S26 Ultra 1048576 purple`: 2206 of 2400 entry titles on 23.09.2026.
+      `CatalogService._attribute_values` renders a numeric axis with `_plain(value_num)` and
+      no unit, and storage is stored in MB as it should be. The title needs the attribute's
+      unit and a human scale (`128 GB`, `1 TB`); the slug is derived from the title, so the
+      fix regenerates both.
+- [ ] **Tablets in the phone catalogue.** Six on 23.09.2026: m79's `Blackview Active 7
+      Wi-Fi + 4G 11` (no tablet word, only `Wi-Fi + 4G`), m79's `Samsung SM-X400… tablet`
+      (the filter's `Tablet` is case-sensitive), m79's `Lenovo Tab K11` (collected before the
+      filter), and bigbox's `HONOR Pad 10`, `Ulefone Rugking Pad 2 Pro` and `Armor Pad 5
+      Ultra` (`planšetdators`; bigbox has no tablet filter). m79's `[A-Za-z]*Pad` would also
+      take `Motorola Edge 70 … Lily Pad`, which is a colour. Filters are for what is
+      collected next; the six already collected need hiding or unlinking, which is a call.
 - [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
       Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
       not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals

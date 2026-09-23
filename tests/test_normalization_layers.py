@@ -58,6 +58,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         # Last of all: the model is what every layer before it worked out.
         "phones-model-does-not-repeat-the-maker",
         "phones-model-from-the-registry",
+        "phones-model-without-a-trailing-colour",
     ]
     # General to specific: the category before the shop, canonicalisation last.
     assert [rule.layer for rule in rules] == [
@@ -67,6 +68,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         SOURCE,
         SOURCE,
         SOURCE,
+        FINISH,
         FINISH,
         FINISH,
         FINISH,
@@ -107,10 +109,10 @@ def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
     assert version_for(KSENUKAI) == "generic-1+ksenukai-5"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-10+ksenukai-5"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-11+ksenukai-5"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-10+ksenukai-5"
+        == "generic-1+phones-11+ksenukai-5"
     )
 
 
@@ -258,7 +260,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-10+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-1+phones-11+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -488,7 +490,7 @@ FINGERPRINTS = {
     "mdata-1": "474fbb01bcb9",
     "onea-1": "958859debd73",
     "euronics-1": "e61bf95a7a78",
-    "phones-10": "94466890c645",
+    "phones-11": "cea822be0cec",
     "rdveikals-4": "f5078e0afc82",
     "samsung-phones-2": "9653d4e6a46a",
     "tet-2": "0e2bb4bd31c5",
@@ -756,6 +758,27 @@ def test_a_stated_maker_with_no_page_is_not_read_through_another_maker_s():
         vocabulary=Vocabulary(models=REGISTRY, brand_names=frozenset({"samsung"})),
     )
     assert unknown["model"] == "Galaxy S26"
+
+
+def test_a_colour_left_on_the_end_of_a_model_comes_off():
+    """bm has no model field and `Cat S31 Black` no capacity to cut at, so the colour stayed
+    on the model and named the entry."""
+    words = Vocabulary(colours={"black": "black", "grey": "grey"})
+    for name, model in (
+        ("Cat S31 Black", "S31"),
+        ("Samsung Galaxy S10 Lite Grey", "Galaxy S10 Lite"),
+    ):
+        fields = read(
+            {"name": name, "model": name.split(" ", 1)[1]}, category=PHONES, vocabulary=words
+        )
+        assert fields["model"] == model, name
+    # Never the last word, and never one the registry was not given.
+    alone = read({"name": "Black", "model": "Black"}, category=PHONES, vocabulary=words)
+    assert alone["model"] == "Black"
+    kept = read(
+        {"name": "Ulefone Armor Mini", "model": "Armor Mini"}, category=PHONES, vocabulary=words
+    )
+    assert kept["model"] == "Armor Mini"
 
 
 def test_with_no_registry_the_shop_s_reading_stands():

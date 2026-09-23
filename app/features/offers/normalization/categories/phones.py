@@ -24,7 +24,7 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-10"
+VERSION = "phones-11"
 
 # ---------------------------------------------------------------------------------------
 # STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
@@ -207,6 +207,25 @@ def _without_the_maker(
             shorter = naming.without_brand(model, maker)
             return {"model": shorter} if shorter != model else {}
     return {}
+
+
+def _without_a_trailing_colour(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """Drop a colour the registry knows off the end of the model.
+
+    Only off the end, only a word the registry was given, and never the last word left: a
+    colour in the middle of a name is part of it, a word nobody entered is not a colour,
+    and a model that is nothing but a colour word is a shop's mistake to be seen.
+    """
+    model = (fields.get("model") or "").strip()
+    if not model or not vocabulary.colours:
+        return {}
+    words = model.split()
+    while len(words) > 1 and words[-1].strip(",.").casefold() in vocabulary.colours:
+        words = words[:-1]
+    shorter = " ".join(words)
+    return {"model": shorter} if shorter != model else {}
 
 
 def _from_the_registry(
@@ -422,6 +441,23 @@ RULESET = register(
                     " boundary: `CAT` against `Caterpillar CAT S75` once cut mid-word."
                 ),
                 body=_without_the_maker,
+            ),
+            Rule(
+                id="phones-model-without-a-trailing-colour",
+                layer=FINISH,
+                why=(
+                    "`Cat S31 Black`, `Nokia 106 Black`, `Galaxy S10 Lite Grey`: a title with no"
+                    " capacity in it gives a shop's subtraction nothing to cut at, and the"
+                    " colour stays on the model — one catalogue entry per colour, named after"
+                    " one of them. Five listings on 22.09.2026, four at bm and one at"
+                    " rdveikals, and the colour itself had already been read correctly off the"
+                    " same title. m79 does this in its own rules; it belongs to every shop."
+                    "\n\n"
+                    "The words are the registry's colours, handed in, so no shop's or"
+                    " language's words live here. Only off the end and never the last word:"
+                    " a colour in the middle of a name is part of the name."
+                ),
+                body=_without_a_trailing_colour,
             ),
             Rule(
                 id="phones-model-from-the-registry",
