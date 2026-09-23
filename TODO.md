@@ -557,17 +557,21 @@ and the questions that have to be answered with real data first, are written dow
       hidden; the third was on the real `Ulefone RugKing` phone through the tablet's barcode,
       which came off the phone. Three were already queued and stay there.
 - [ ] **ksenukai's and 1a's tablets, what is left of them.** First run 23.09.2026: 229
-      each, 83.8% and 83.0% placed; 153 of ksenukai's 168 entries and 160 of 1a's 171 are
-      shared with another shop. The rest, by cause:
-      - colour words the registry lacks: `astromelna` 20, `astropelēka` 20, `zvaigžņu` 14,
-        `granīta` 4, `platīna` 2 — every unplaced iPad is one of them (`axis_unpublished`);
-      - brands the registry lacks: Amazon, Blow, Huion, Umax, XORO — `brand_unknown` on 1a,
-        and promotion refuses them everywhere;
+      each, 83.8% and 83.0% placed. The registry then took the colours (`astropelēka`,
+      `astromelna`, `zvaigžņu`, `granīta`, `platīna`, `platinum`) and the brands (Amazon,
+      Blow, Huion, Umax, XORO, each with its spelling alias — a brand with no alias resolves
+      nothing), and the same day it was 94.3% and 88.2%, every iPad placed. One phone moved
+      with it: Lagenio Panther 1 `Platinum` now reads silver. What is left:
       - 1a leaves the article code in the model where ksenukai does not: `MatePad 53013UJQ`,
-        `Galaxy Tab S11 X730`, `Pad 8 71703`, `Yoga Tab Plus ZAEG0022PL` — 17 unmatched;
-      - Denver's model is only its code (`TAQ-10463`) and the reading leaves it empty;
-      - no connectivity on 152 of 458: a tablet that names no radio is almost always Wi-Fi
-        only, but that is a guess until measured against a shop that states it.
+        `Galaxy Tab S11 X730`, `Pad 8 71703`, `Yoga Tab Plus ZAEG0022PL` — most of 1a's 17
+        `signals_unmatched`;
+      - `axis_unpublished` 7 + 8: a listing naming no radio (`Idea Tab 11`, `Galaxy Tab S11`)
+        against an entry that has one. A tablet that names none is almost always Wi-Fi only,
+        but that is a guess until measured against a shop that states it; 152 of 458 name
+        none;
+      - Denver's model is only its code (`TAQ-10463`) and the reading leaves it empty — 4 at
+        each shop;
+      - `Surface Pro 10 13` and `Galaxy Tab A11 9` find two entries each (`ambiguous`).
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,
