@@ -1,9 +1,9 @@
 """1a.lv phones, through the same search index the sister shop uses.
 
 The second shop of the Kesko Senukai group, on the same LupaSearch engine as ksenukai. Its
-product pages were behind a challenge when this was written; on 23.09.2026 they answered —
-ksenukai's still do not — and they carry far more than the index, so the channel reads both,
-the page as an addition (see `fetch`). The reading of the index is ksenukai's, unchanged —
+product pages carry far more than the index (see `fetch`), and the channel can read them
+beside it, but they are rate-limited or challenged at any pace a run can afford, so it does
+not (`read_pages`). The reading of the index is ksenukai's, unchanged —
 same field names, same shapes.
 
 What is different is what is **missing**, measured against the sister index on 22.09.2026:
@@ -50,11 +50,11 @@ MAX_PAGES = 40
 class Onea:
     """One channel: this shop's phones, through its own index."""
 
-    # The product pages are rate-limited where the index is not: at the default eight a
-    # second, 145 of 229 tablet pages were refused on 23.09.2026 and every one of them read
-    # as the index alone. Two at a time, two a second, reads the tablets in two minutes.
-    rate = 2.0
-    concurrency = 2
+    # Whether to open each product page beside its index record. Off: the pages sit behind
+    # a rate limiter or a challenge — at eight a second 145 of 229 tablet pages were refused
+    # on 23.09.2026, and at two a second the tablets had not finished in five minutes. The
+    # page carries far more than the index (see `fetch`), so this is a gap, in TODO.md.
+    read_pages = False
 
     def __init__(self, slug: str = SLUG, categories: tuple[str, ...] = CATEGORIES) -> None:
         self.slug = slug
@@ -100,8 +100,9 @@ class Onea:
                 body=json.dumps(listing.card, ensure_ascii=False),
             )
         ]
-        with contextlib.suppress(FetchError):
-            parts.append(await fetcher.get(listing.url, role="detail"))
+        if self.read_pages:
+            with contextlib.suppress(FetchError):
+                parts.append(await fetcher.get(listing.url, role="detail"))
         return Snapshot(external_id=listing.external_id, parts=parts)
 
     def parse(self, snapshot: Snapshot) -> dict[str, Any]:

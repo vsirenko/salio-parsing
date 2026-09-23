@@ -590,6 +590,16 @@ and the questions that have to be answered with real data first, are written dow
       tablet since before the axis could see it. 22 entries got no screen at all (their
       listings name none). bigbox's `Tab K11 G2“ 11 collu` writes inches in Latvian, which no
       rule reads.
+- [ ] **1a's product pages, read in a way the shop allows.** The index is a subset of the
+      page: one tablet on 23.09.2026 had 5 attributes in the index and 52 on its page —
+      `Modelis`, `Krāsa` and the `3G`/`4G`/`5G` answers among them, which would give 1a's 76
+      unread tablets their connectivity. The channel can read the page (`parameters`, tested
+      against `tests/fixtures/onea_tablet.html.gz`), and `read_pages` is off: at eight
+      requests a second 145 of 229 pages were refused, at two a second the tablets had not
+      finished in five minutes. Measure what the limiter allows — a cheap pass that opens
+      only the pages whose record lacks an axis, or a slow pass of its own — before turning
+      it back on. ksenukai's pages answer a challenge outright; its index already carries
+      the fields, bar 5G.
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,
