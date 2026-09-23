@@ -10,6 +10,11 @@ and running it twice is the whole refresh story.
 `index.html` is the storefront: products, their variants, and every shop's price for each.
 `unmatched.html` is the other half of the truth — the listings the matcher could not place,
 grouped by what is missing, because "386 did not match" is a number nobody can act on.
+
+Both pages have a tab per category collected, and the header counts that category alone —
+listings placed and not, and each shop's placed out of what it listed — so a phone week and a
+tablet week cannot hide inside one average. The tab is kept in the address, `#tablets`, and
+the link between the pages carries it.
 """
 
 import asyncio
@@ -71,7 +76,7 @@ WHY = {
 }
 
 PRODUCTS = """
-    select p.id, p.title, b.canonical_name as brand, c.name as category
+    select p.id, p.title, b.canonical_name as brand, c.name as category, c.slug as tab
     from products p
     join brands b on b.id = p.brand_id
     join categories c on c.id = p.category_id
@@ -81,8 +86,9 @@ PRODUCTS = """
 """
 
 VARIANTS = """
-    select v.id, v.product_id, v.model, v.title, v.image_url
+    select v.id, v.product_id, v.model, v.title, v.image_url, c.slug as tab
     from variants v
+    left join categories c on c.id = v.category_id
 """
 
 OFFERS = """
@@ -113,7 +119,8 @@ QUEUED = """
            n.title, n.brand_raw, n.gtin, n.mpn, n.model, n.identity,
            -- What the matcher settled on, which is not always what the shop said and is
            -- often the only answer there is: m79's German feed states no maker at all.
-           nb.canonical_name as brand_read
+           nb.canonical_name as brand_read,
+           qc.slug as tab
     from match_queue q
     join offers o on o.id = q.offer_id
     join sellers s on s.id = o.seller_id
@@ -139,18 +146,43 @@ QUEUED = """
         limit 1
     ) n on true
     left join brands nb on nb.id = n.brand_id
+    left join categories qc on qc.id = src.category_id
     order by sh.name, n.title
 """
 
 ALIASES = "select alias_normalized, brand_id from brand_aliases"
 
-# How far the thing reaches: every listing collected and every channel collected from. The
-# share these two make is the one number that says whether an evening's work moved anything,
-# and reading it off a page beats running a query to find out.
-REACH = """
-select (select count(*) from offers) as listings,
-       (select count(*) from sources) as shops
+# Every listing collected, with the category and the shop it was collected for and whether
+# it is placed. The share these make is the one number that says whether an evening's work
+# moved anything, and it is counted per category because a phone and a tablet are two
+# catalogues: one number for both would let a good week on one hide a bad one on the other.
+# The category is the channel's, from the listing's newest full pass — the same rule the
+# queue uses above.
+LISTINGS = """
+    select o.id, sh.name as shop, c.slug as tab, c.name as category,
+           exists (
+               select 1 from offer_matches m
+               where m.offer_id = o.id and m.superseded_at is null
+           ) as placed,
+           exists (select 1 from match_queue q where q.offer_id = o.id) as queued
+    from offers o
+    join sellers s on s.id = o.seller_id
+    join shops sh on sh.id = s.shop_id
+    left join lateral (
+        select r.source_id
+        from raw_offers r
+        left join runs ru on ru.id = r.run_id
+        where r.offer_id = o.id and (ru.kind is null or ru.kind <> 'quick')
+        order by r.fetched_at desc, r.id desc
+        limit 1
+    ) raw on true
+    left join sources src on src.id = raw.source_id
+    left join categories c on c.id = src.category_id
 """
+
+# A listing whose channel names no category still counts; it gets a tab of its own rather
+# than disappearing from every total.
+NO_CATEGORY = ("none", "No category")
 
 
 def _plain(value: Any) -> Any:
@@ -222,7 +254,7 @@ async def collect() -> dict:
         axes = _rows(await session.execute(text(AXES)))
         queued = _rows(await session.execute(text(QUEUED)))
         aliases = _rows(await session.execute(text(ALIASES)))
-        reach = _rows(await session.execute(text(REACH)))[0]
+        listings = _rows(await session.execute(text(LISTINGS)))
 
     brands: dict[str, set[int]] = defaultdict(set)
     for row in aliases:
@@ -278,6 +310,7 @@ async def collect() -> dict:
 
     return {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "tabs": _tabs(listings, catalogue, variants, queued),
         "products": catalogue,
         "orphans": orphans,
         "queued": queued,
@@ -290,11 +323,53 @@ async def collect() -> dict:
             # Every shop that has been collected from, not every shop that got a listing
             # placed. A channel that contributes nothing is the interesting case, and
             # counting only the ones that worked would hide it.
-            "shops": reach["shops"],
-            "listings": reach["listings"],
-            "share": (100 * len(offers) / reach["listings"]) if reach["listings"] else 0.0,
+            "shops": len({row["shop"] for row in listings}),
+            "listings": len(listings),
+            "share": (100 * len(offers) / len(listings)) if listings else 0.0,
         },
     }
+
+
+def _tabs(
+    listings: list[dict], catalogue: list[dict], variants: list[dict], queued: list[dict]
+) -> list[dict]:
+    """One tab per category collected, with the exact counts its header shows.
+
+    Counted from the listings rather than from the catalogue, so a shop that placed nothing
+    still appears, with its zero — that is the case worth seeing.
+    """
+    for row in listings + queued:
+        row["tab"] = row.get("tab") or NO_CATEGORY[0]
+    names = {row["tab"]: row.get("category") or NO_CATEGORY[1] for row in listings}
+    tabs = []
+    for slug in sorted(names, key=lambda t: (t == NO_CATEGORY[0], t)):
+        mine = [row for row in listings if row["tab"] == slug]
+        by_shop: dict[str, list[dict]] = defaultdict(list)
+        for row in mine:
+            by_shop[row["shop"]].append(row)
+        tabs.append(
+            {
+                "slug": slug,
+                "name": names[slug],
+                "listings": len(mine),
+                "placed": sum(row["placed"] for row in mine),
+                "queued": sum(row["queued"] for row in mine),
+                # A queue row left behind by a listing that was placed since: counted apart,
+                # so placed and not placed add up to the listings exactly.
+                "stale": sum(row["queued"] and row["placed"] for row in mine),
+                "products": sum(1 for p in catalogue if p["tab"] == slug),
+                "variants": sum(1 for v in variants if v["tab"] == slug),
+                "shops": [
+                    {
+                        "shop": shop,
+                        "listings": len(rows),
+                        "placed": sum(row["placed"] for row in rows),
+                    }
+                    for shop, rows in sorted(by_shop.items(), key=lambda kv: -len(kv[1]))
+                ],
+            }
+        )
+    return tabs
 
 
 # --- the pages ---
@@ -357,6 +432,17 @@ a:hover { text-decoration: underline; }
 section { margin-bottom: 30px; }
 section h2 { font-size: 15px; margin: 0 0 2px; }
 .empty { color: var(--muted); padding: 30px 0; }
+.tabs { display: flex; gap: 4px; margin: 4px 0 10px; }
+.tabs a {
+  padding: 5px 12px; border: 1px solid var(--line); border-radius: 20px;
+  color: var(--muted); font-size: 13px;
+}
+.tabs a.on { color: var(--fg); border-color: var(--accent); font-weight: 600; }
+.tabs a:hover { text-decoration: none; }
+.tabs .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.shops { margin-top: 8px; }
+.shops .tag { font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+.shops b { color: var(--fg); font-weight: 600; }
 """
 
 SHELL = """<!doctype html>
@@ -367,7 +453,9 @@ SHELL = """<!doctype html>
 <body>
 <header>
   <h1>__TITLE__</h1>
-  <div class="sub">__SUB__</div>
+  <nav class="tabs" id="tabs"></nav>
+  <div class="sub" id="sub">__SUB__</div>
+  <div class="shops" id="shops"></div>
 </header>
 <main id="main"></main>
 <script id="data" type="application/json">__DATA__</script>
@@ -405,7 +493,37 @@ function brandOptions(select, names) {
     .map(([key, [label, n]]) => `<option value="${esc(key)}">${esc(label)} (${n})</option>`)
     .join("");
 }
+// The category shown, kept in the address so the link to the other page keeps it too.
+const TABS = DATA.tabs || [];
+let TAB = decodeURIComponent(location.hash.slice(1)) || (TABS[0] && TABS[0].slug) || "";
+if (!TABS.some(t => t.slug === TAB) && TABS[0]) TAB = TABS[0].slug;
+const inTab = row => !TABS.length || row.tab === TAB;
+const pct = (n, d) => d ? (100 * n / d).toFixed(1) + "%" : "—";
+function header() {
+  document.getElementById("tabs").innerHTML = TABS.map(t =>
+    `<a href="#${esc(t.slug)}" class="${t.slug === TAB ? "on" : ""}" data-tab="${esc(t.slug)}">` +
+    `${esc(t.name)} <span class="n">${t.listings}</span></a>`).join("");
+  const t = TABS.find(t => t.slug === TAB);
+  if (!t) return;
+  document.getElementById("sub").innerHTML = SUB(t);
+  document.getElementById("shops").innerHTML = t.shops.map(s =>
+    `<span class="tag">${esc(s.shop)} <b>${s.placed}</b> / ${s.listings}` +
+    ` · ${pct(s.placed, s.listings)}</span>`).join("");
+  for (const a of document.querySelectorAll("a[data-other]"))
+    a.href = a.dataset.other + "#" + encodeURIComponent(TAB);
+}
+document.getElementById("tabs").addEventListener("click", e => {
+  const a = e.target.closest("a[data-tab]");
+  if (!a) return;
+  e.preventDefault();
+  TAB = a.dataset.tab;
+  history.replaceState(null, "", "#" + encodeURIComponent(TAB));
+  header();
+  draw();
+});
 __SCRIPT__
+header();
+draw();
 </script>
 </body></html>
 """
@@ -476,7 +594,7 @@ function draw() {
   const q = document.getElementById("q").value.trim().toLowerCase();
   const by = document.getElementById("sort").value;
   const maker = document.getElementById("brand").value;
-  let rows = DATA.products.filter(p => (!maker || brandKey(p.brand) === maker) && (!q ||
+  let rows = DATA.products.filter(p => inTab(p) && (!maker || brandKey(p.brand) === maker) && (!q ||
     (p.title + " " + p.brand + " " + p.category).toLowerCase().includes(q)));
   const order = {
     shops: (a, b) => b.shops.length - a.shops.length || b.offer_count - a.offer_count,
@@ -493,7 +611,11 @@ brandOptions(document.getElementById("brand"), DATA.products.map(p => p.brand));
 document.getElementById("q").addEventListener("input", draw);
 document.getElementById("brand").addEventListener("change", draw);
 document.getElementById("sort").addEventListener("change", draw);
-draw();
+const SUB = t =>
+  `<b>${t.placed} of ${t.listings} listings placed</b> · ${pct(t.placed, t.listings)} ·` +
+  ` ${t.listings - t.placed} not placed · ${t.shops.length} shops · ${t.products} products ·` +
+  ` ${t.variants} variants · ${esc(DATA.generated_at)} ·` +
+  ` <a data-other="unmatched.html" href="unmatched.html">what did not match</a>`;
 """
 
 UNMATCHED_JS = """
@@ -536,7 +658,8 @@ function brand(r) {
 function draw() {
   const q = document.getElementById("q").value.trim().toLowerCase();
   const maker = document.getElementById("brand").value;
-  const rows = DATA.queued.filter(r => (!maker || brandKey(makerOf(r)) === maker) && (!q ||
+  const rows = DATA.queued.filter(r => inTab(r) &&
+    (!maker || brandKey(makerOf(r)) === maker) && (!q ||
     ((r.title || "") + " " + (r.brand_raw || "") + " " + (r.brand_read || "") + " " + r.shop)
       .toLowerCase().includes(q)));
   const buckets = new Map();
@@ -553,7 +676,12 @@ function makerOf(r) { return r.brand_raw || r.brand_read || ""; }
 brandOptions(document.getElementById("brand"), DATA.queued.map(makerOf));
 document.getElementById("q").addEventListener("input", draw);
 document.getElementById("brand").addEventListener("change", draw);
-draw();
+const SUB = t =>
+  `<b>${t.listings - t.placed} of ${t.listings} listings not placed</b> ·` +
+  ` ${pct(t.listings - t.placed, t.listings)} of what ${t.shops.length} shops published ·` +
+  (t.stale ? ` ${t.queued} queue rows, ${t.stale} of them for a listing placed since ·` : "") +
+  ` ${esc(DATA.generated_at)} ·` +
+  ` <a data-other="index.html" href="index.html">back to the storefront</a>`;
 """
 
 
@@ -569,7 +697,7 @@ async def main() -> None:
         f" {totals['listings']} listings from {totals['shops']} shops ·"
         f" {totals['products']} products · {totals['variants']} variants ·"
         f" {data['generated_at']} · <a href='unmatched.html'>what did not match</a>",
-        {"products": data["products"]},
+        {"products": data["products"], "tabs": data["tabs"], "generated_at": data["generated_at"]},
         STOREFRONT_JS,
     )
     page(
@@ -579,7 +707,12 @@ async def main() -> None:
         f" {100 - totals['share']:.1f}% of what {totals['shops']} shops published ·"
         f" {counts} · {data['generated_at']} ·"
         f" <a href='index.html'>back to the storefront</a>",
-        {"queued": data["queued"], "why": WHY},
+        {
+            "queued": data["queued"],
+            "why": WHY,
+            "tabs": data["tabs"],
+            "generated_at": data["generated_at"],
+        },
         UNMATCHED_JS,
     )
     print(f"{OUT / 'index.html'}\n{OUT / 'unmatched.html'}")
@@ -587,6 +720,9 @@ async def main() -> None:
         f"placed {totals['matched']} of {totals['listings']} ({totals['share']:.2f}%)"
         f" from {totals['shops']} shops, queued {totals['queued']} ({counts})"
     )
+    for tab in data["tabs"]:
+        shops = ", ".join(f"{s['shop']} {s['placed']}/{s['listings']}" for s in tab["shops"])
+        print(f"  {tab['name']}: {tab['placed']} of {tab['listings']} placed · {shops}")
     if data["orphans"]:
         print(f"variants with no product: {len(data['orphans'])}")
 
