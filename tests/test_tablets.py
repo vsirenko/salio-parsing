@@ -1,0 +1,58 @@
+"""What a tablet listing means: the phone's axes, plus connectivity, and a model that carries
+its screen size."""
+
+from app.features.offers.normalization import read
+from app.features.offers.normalization.rules import Vocabulary
+
+TABLETS = "tablets"
+WORDS = Vocabulary(
+    category_names=frozenset({"planšetdators"}),
+    colours={"blue": "blue", "grey": "grey"},
+)
+
+
+def reading(title: str, model: str | None = None) -> dict:
+    payload = {"name": title, "brand": "Apple"}
+    if model is not None:
+        payload["model"] = model
+    return read(payload, category=TABLETS, vocabulary=WORDS)
+
+
+def test_a_cellular_standard_in_the_name_is_the_cellular_tablet():
+    assert (
+        reading("Apple iPad Air 11 M4 Wi-Fi + Cellular 128GB Blue")["identity"]["connectivity"]
+        == "cellular"
+    )
+    assert reading("Apple iPad Air 11 M4 Wi-Fi 128GB Blue")["identity"]["connectivity"] == "wifi"
+    # A tablet saying what it lacks is not saying what it has.
+    assert "connectivity" not in reading("Lenovo Idea Tab Pro 12.7 8/128 no 4G")["identity"]
+    assert "connectivity" not in reading("TCL NXTPAPER 3.0 14.3 256 GB Grey")["identity"]
+
+
+def test_the_screen_size_is_part_of_the_model_in_whole_inches():
+    """`iPad Air 11"` and `iPad Air 13"` are two tablets, and a shop's `10.9"`, `11-inch` or
+    `27,59cm (11")` are one screen."""
+    assert reading('Apple iPad Air 11" M4 Wi-Fi 128GB', "iPad Air")["model"] == "iPad Air 11"
+    assert reading('Apple iPad Air 13" M4 Wi-Fi 128GB', "iPad Air")["model"] == "iPad Air 13"
+    assert reading("11-inch iPad Air Wi-Fi 128GB", "11-inch iPad Air")["model"] == "iPad Air 11"
+    assert reading('Apple iPad Air 27,59cm (11"") 128GB', "iPad Air")["model"] == "iPad Air 11"
+    assert reading('Apple iPad Air 10.9" 64GB', "iPad Air")["model"] == "iPad Air 11"
+    # No size stated: the model is left as it is, which can split one tablet but never fold two.
+    assert reading("Apple iPad Air M4 Wi-Fi 128GB", "iPad Air")["model"] == "iPad Air"
+
+
+def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
+    assert (
+        reading(
+            'Apple iPad mini (A17 Pro) 8.3" Wi-Fi + Cellular 128GB',
+            "iPad mini (A17 Pro) Wi-Fi + Cellular",
+        )["model"]
+        == "iPad mini (A17 Pro) 8"
+    )
+    assert reading("Samsung Galaxy Tab S10 FE 5G 128GB", "Galaxy Tab S10 FE 5G")["model"] == (
+        "Galaxy Tab S10 FE"
+    )
+
+
+def test_the_version_says_what_was_applied():
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-2+tablets-1"

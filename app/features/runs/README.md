@@ -186,6 +186,7 @@ lifecycle changes.
 |---|---|---|---|---|---|
 | `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 521 | 100% |
 | `bigbox-phones` | bigbox.lv | wholesale | private_api | 985 | 93.1% |
+| `bigbox-tablets` | bigbox.lv | wholesale | private_api | 580 | not yet run |
 | `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |

@@ -104,6 +104,24 @@ def test_a_tablet_in_the_phones_category_is_not_collected(event_loop):
     assert [x.external_id for x in listings] == ["999002"]
 
 
+def test_the_tablet_channel_asks_for_its_own_category_and_keeps_tablets(event_loop):
+    """One index, two channels: the tablet one asks for /1652 and does not leave out what the
+    phone channel does."""
+    from app.features.runs import channel as registry
+
+    tablets = registry.get("bigbox-tablets")
+    tablet = {**FIXTURE["items"][0], "id": 999001, "title": "Planšetdators Apple iPad Air 11 128GB"}
+    sent: list[dict] = []
+
+    async def run():
+        async with index([{**FIXTURE, "items": [tablet], "total": 1}], sent) as fetcher:
+            return await tablets.discover(fetcher, JOB)
+
+    listings = event_loop.run_until_complete(run())
+    assert [x.external_id for x in listings] == ["999001"]
+    assert sent[1]["filters"]["categories_ids"] == [1652]
+
+
 # --- reading the shop's shape ---
 
 
@@ -167,7 +185,7 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     full = read(fields, source_slug="bigbox-phones", shop_slug="bigbox", category="phones")
     assert full["gtin"] == "06941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-2+phones-13+bigbox-shop-1+bigbox-6"
+    assert full["ruleset_version"] == "generic-2+phones-13+bigbox-shop-1+bigbox-7"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):

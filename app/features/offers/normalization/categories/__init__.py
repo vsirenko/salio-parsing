@@ -6,6 +6,6 @@ identity axis for a phone and a footnote for a television. Keeping their rules i
 means applying the wrong one eventually.
 """
 
-from app.features.offers.normalization.categories import phones
+from app.features.offers.normalization.categories import phones, tablets
 
-__all__ = ("phones",)
+__all__ = ("phones", "tablets")

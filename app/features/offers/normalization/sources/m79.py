@@ -32,7 +32,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "m79-phones"
-VERSION = "m79-7"
+VERSION = "m79-8"
 
 
 # `256GB`, `512 GB`, `16 Gt`. The plain way to write the configuration.
@@ -180,6 +180,36 @@ RULESET = register(
                     " `Halo 3 Black` kept theirs and became one entry per colour. Only off"
                     " the end and only a word the registry was given: a colour in the middle"
                     " of a name is part of the name."
+                ),
+                body=_model,
+            ),
+        ),
+    ),
+)
+
+
+# The same shop writes its tablets' names exactly as it writes its phones': a supplier's
+# kind word in front, `Planšetdators` behind where `Mobilais Telefons` was, the configuration
+# after the name. Measured on 23.09.2026, the phone model rule read a model for 1081 of 1089
+# tablets. So the tablet channel runs the same body, under a ruleset of its own — which of
+# a shop's rules a category needs is the category's question, and the answer may part ways.
+TABLETS_SLUG = "m79-tablets"
+TABLETS_VERSION = "m79-tablets-1"
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="m79-tablets-model",
+                layer=SOURCE,
+                why=(
+                    "m79's model rule, the one its phones use: the kind words through the"
+                    " registry at both ends, the brackets, the cut at the configuration and"
+                    " at the four separators its suppliers use. It left a model on 1081 of"
+                    " 1089 tablets without a line changed."
                 ),
                 body=_model,
             ),

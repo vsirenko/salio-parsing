@@ -13,7 +13,7 @@ from app.features.offers.normalization import colours
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-6"
+VERSION = "bigbox-7"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -169,6 +169,40 @@ RULESET = register(
                     " is what the layer below the brand selects on, so that is where it goes."
                 ),
                 body=_line,
+            ),
+        ),
+    ),
+)
+
+
+# The shop titles its tablets as it titles its phones — `Planšetdators` in front where
+# `Telefons` was, then brand, name and configuration — and on 23.09.2026 the phone rules
+# left a model on 525 of its 580 tablets. The line rule stays behind: `Tālruņa modelis` is a
+# phone's field.
+TABLETS_SLUG = "bigbox-tablets"
+TABLETS_VERSION = "bigbox-tablets-1"
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="bigbox-tablets-model-from-title",
+                layer=SOURCE,
+                why=(
+                    "bigbox's phone model rule: the kind word off the front, the cut at the"
+                    " configuration. 525 of 580 tablets read a model with it unchanged; the"
+                    " screen size it cuts away is put back by the tablet category's rule."
+                ),
+                body=_model,
+            ),
+            Rule(
+                id="bigbox-tablets-color-from-title",
+                layer=SOURCE,
+                why="bigbox's colour, read the way its phones' is.",
+                body=_color,
             ),
         ),
     ),

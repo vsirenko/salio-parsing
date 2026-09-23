@@ -17,6 +17,7 @@ be readable would not be a snapshot.
 """
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from app.features.runs.channel import Listing, Part, Snapshot, register
@@ -25,12 +26,15 @@ from app.features.runs.fetching import Fetcher
 from app.features.runs.schemas import Job
 
 SLUG = "bigbox-phones"
+TABLETS_SLUG = "bigbox-tablets"
 SITE = "https://bigbox.lv"
 # Taken from the shop's own front end, as with every index key. A different key is a
 # different shop.
 INDEX = "https://api.lupasearch.com/v1/query/gd3mh4qy0fin"
 # The number in the catalogue URL, /1549-telefoni.
 CATEGORY_IDS = (1549,)
+# /1652-plansetdatori.
+TABLET_CATEGORY_IDS = (1652,)
 # Verified against the live index: 150 comes back, 200 does not.
 PAGE = 150
 MAX_PAGES = 40
@@ -38,7 +42,21 @@ ATTRIBUTE_PREFIX = "attribute_"
 
 
 class Bigbox:
-    slug = SLUG
+    """One channel into one of the shop's categories.
+
+    The shop is one index with one set of facet names for every category, so a category is
+    a constructor argument and not a module: its index id, and what to leave out of it.
+    """
+
+    def __init__(
+        self,
+        slug: str = SLUG,
+        category_ids: tuple[int, ...] = CATEGORY_IDS,
+        leaves_out: Callable[[str], bool] = is_a_tablet,
+    ) -> None:
+        self.slug = slug
+        self.category_ids = category_ids
+        self.leaves_out = leaves_out
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         # Asked for once. The names are the same for every product in the category, and
@@ -63,7 +81,7 @@ class Bigbox:
                 # The phones category holds three tablets, `planšetdators` in their names,
                 # and nothing else here says a card is one: a tablet collected as a phone
                 # becomes a phone entry nobody can tell from a real one.
-                if item.get("id") is not None and not is_a_tablet(_text(item.get("title")))
+                if item.get("id") is not None and not self.leaves_out(_text(item.get("title")))
             ]
             offset += len(items)
             if offset >= int(page.get("total") or 0):
@@ -137,7 +155,7 @@ class Bigbox:
                 # different order between pages, and paging by offset then skips some and
                 # repeats others.
                 "sort": [{"id": "asc"}],
-                "filters": {"categories_ids": list(CATEGORY_IDS)},
+                "filters": {"categories_ids": list(self.category_ids)},
                 "modifiers": {"facets": facets, "refiners": False},
             },
             headers={"Origin": SITE, "Referer": SITE + "/"},
@@ -191,3 +209,6 @@ def _text(value: Any) -> str:
 
 
 register(Bigbox())
+# The tablet category keeps everything it is given. What else the shop files there is
+# measured on the first run rather than guessed at in advance.
+register(Bigbox(slug=TABLETS_SLUG, category_ids=TABLET_CATEGORY_IDS, leaves_out=lambda name: False))
