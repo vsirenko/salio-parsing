@@ -550,9 +550,9 @@ and the questions that have to be answered with real data first, are written dow
       Measured before it was built, over all 8982 matches — see the judge README.
 - [x] **A catalogue title printed storage in raw megabytes.** `OnePlus 10T 131072 black`
       named 2235 of 2400 entries. Titles and slugs regenerated on 23.09.2026 with no identity
-      key moving. Two entries could not be: `Motorola Edge 70 Fusion 5G` v24120 and `Realme
-      14` v25198 have no key because they duplicate v23902 and v23626 exactly, and merging
-      them is a decision.
+      key moving. Two entries could not be, because they duplicated v23902 and v23626
+      exactly (`Motorola Edge 70 Fusion 5G`, `Realme 14`); merged into them by hand the same
+      day, and no raw megabytes are left in any title.
 - [x] **Tablets in the phone catalogue.** Six on 23.09.2026 (`Blackview Active 7 Wi-Fi + 4G
       11`, a lowercase `tablet`, `Lenovo Tab K11`, bigbox's three `planšetdators`). m79 and
       bigbox now leave them out through one check, `runs/channels/tablets.py`, which took all
