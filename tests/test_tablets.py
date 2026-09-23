@@ -39,17 +39,17 @@ def test_the_screen_is_an_axis_in_whole_inches_and_not_part_of_the_name():
     """`iPad Air 11"` and `iPad Air 13"` are two tablets, and a shop's `10.9"`, `11-inch` or
     `27,59cm (11")` are one screen. The name is `iPad Air` for all of them."""
     for title, model, inches in (
-        ('Apple iPad Air 11" M4 Wi-Fi 128GB', "iPad Air", 11),
-        ('Apple iPad Air 13" M4 Wi-Fi 128GB', "iPad Air", 13),
-        ("11-inch iPad Air Wi-Fi 128GB", "11-inch iPad Air", 11),
-        ('Apple iPad Air 27,59cm (11"") 128GB', "iPad Air", 11),
-        ('Apple iPad Air 10.9" 64GB', 'iPad Air 10.9"', 11),
+        ('Apple iPad Air 11" M4 Wi-Fi 128GB', "iPad Air M4", 11),
+        ('Apple iPad Air 13" M4 Wi-Fi 128GB', "iPad Air M4", 13),
+        ("11-inch iPad Air M4 Wi-Fi 128GB", "11-inch iPad Air M4", 11),
+        ('Apple iPad Air M4 27,59cm (11"") 128GB', "iPad Air M4", 11),
+        ('Apple iPad Air M4 10.9" 64GB', 'iPad Air M4 10.9"', 11),
     ):
         fields = reading(title, model)
-        assert fields["model"] == "iPad Air", title
+        assert fields["model"] == "iPad Air M4", title
         assert screen(fields) == inches, title
     # No size stated: no axis, and nothing is guessed.
-    assert screen(reading("Apple iPad Air M4 Wi-Fi 128GB", "iPad Air")) is None
+    assert screen(reading("Apple iPad Air M4 Wi-Fi 128GB", "iPad Air M4")) is None
 
 
 def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
@@ -175,3 +175,22 @@ def test_a_no_for_one_standard_is_not_a_no_for_the_modem():
         radio(**{"3G savienojums": "Nē", "4G savienojums": "Nē", "5G savienojums": "Nē"}) == "wifi"
     )
     assert radio(**{"3G savienojums": "Nē", "4G savienojums": "Jā"}) == "cellular"
+
+
+def ipad(title: str, model: str) -> str | None:
+    return read(
+        {"name": title, "brand": "Apple", "model": model}, category=TABLETS, vocabulary=WORDS
+    ).get("model")
+
+
+def test_an_ipad_s_model_names_its_generation():
+    """`iPad Pro` is five machines: 60 entries were made from models naming the line only."""
+    # bm writes the year after the capacity, where the cut took it off.
+    assert ipad("Apple iPad Pro 12.9 Wi-Fi 2TB Silver (2022) MP273HC/A", "iPad Pro") == (
+        "iPad Pro (2022)"
+    )
+    assert ipad("Apple iPad 10.9 Wi-Fi 64GB 10th Gen Silver (2022)", "iPad") == "iPad 10th Gen"
+    # A model that already names it is left alone.
+    assert ipad("Apple iPad Air 11 M3 128GB Blue", "iPad Air M3") == "iPad Air M3"
+    # A title naming none: no model, rather than one that is five machines.
+    assert not ipad("Apple iPad Pro 9.7 32GB Gold", "iPad Pro")
