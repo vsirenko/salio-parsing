@@ -193,6 +193,7 @@ lifecycle changes.
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
 | `rdveikals-tablets` | rdveikals.lv | retail | markup | 584 | 99.0% placed |
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
+| `dateks-tablets` | dateks.lv | retail | markup | 402 | not yet run |
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |

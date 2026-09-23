@@ -40,8 +40,8 @@ def test_a_key_with_no_rules_is_read_by_what_is_more_general():
     """Not a failure: it is how a sample gets loaded and measured before rules exist."""
     assert rules_for() == ()
     assert rules_for("nobody-has-written-this-one") == ()
-    assert version_for("nobody-has-written-this-one") == "generic-2"
-    assert version_for(category="televisions") == "generic-2"
+    assert version_for("nobody-has-written-this-one") == "generic-3"
+    assert version_for(category="televisions") == "generic-3"
 
 
 def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
@@ -109,15 +109,15 @@ def test_a_rule_can_be_declared_and_not_written():
 
 def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
-    assert version_for() == "generic-2"
-    assert version_for(KSENUKAI, shop_slug="ksenukai") == "generic-2+ksenukai-shop-1+ksenukai-7"
+    assert version_for() == "generic-3"
+    assert version_for(KSENUKAI, shop_slug="ksenukai") == "generic-3+ksenukai-shop-1+ksenukai-7"
     assert (
         version_for(KSENUKAI, shop_slug="ksenukai", category=PHONES)
-        == "generic-2+phones-13+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-13+ksenukai-shop-1+ksenukai-7"
     )
     assert (
         read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)["ruleset_version"]
-        == "generic-2+phones-13+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-13+ksenukai-shop-1+ksenukai-7"
     )
 
 
@@ -287,7 +287,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-2+phones-13+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-3+phones-13+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -511,8 +511,9 @@ FINGERPRINTS = {
     "bm-3": "3361a10390bd",
     "bm-shop-1": "3d09a6688700",
     "cec-1": "e0252dfe4696",
-    "dateks-4": "cfa03a1c3a01",
+    "dateks-5": "0acd87a6666d",
     "dateks-shop-1": "76bf8766fb11",
+    "dateks-tablets-1": "abe9d2e77bfe",
     "discover-3": "b9c94e3c76fa",
     "discover-shop-1": "6065096d8d22",
     "euronics-shop-1": "07e9d1415e04",
@@ -534,7 +535,7 @@ FINGERPRINTS = {
     "rdveikals-shop-1": "e0b3a42600f7",
     "rdveikals-tablets-1": "1ae570d9626a",
     "samsung-phones-2": "9653d4e6a46a",
-    "tablets-5": "f5adf534b922",
+    "tablets-6": "f5adf534b922",
     "tet-3": "bd343fa22553",
     "tet-shop-1": "3129e8453377",
 }

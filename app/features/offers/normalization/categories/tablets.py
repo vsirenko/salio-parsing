@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-5"
+VERSION = "tablets-6"
 
 CONNECTIVITY_KEY = "connectivity"
 SCREEN_KEY = "screen_inch"
@@ -154,12 +154,18 @@ def _stated_inches(fields: dict[str, Any], vocabulary: Vocabulary) -> int | None
     writes `8.3"` in the name: without the field the two read as two models.
     """
     for name, value in (fields.get("attributes") or {}).items():
-        if vocabulary.attribute_key(str(name)) == SCREEN_KEY:
-            found = re.search(r"\d{1,2}(?:[.,]\d{1,2})?", str(value))
-            if found:
-                rounded = int(float(found.group().replace(",", ".")) + 0.5)
-                if _SMALLEST_TABLET <= rounded <= _LARGEST_TABLET:
-                    return rounded
+        if vocabulary.attribute_key(str(name)) != SCREEN_KEY:
+            continue
+        # Inches first where the value states them beside centimetres: dateks and
+        # rdveikals write `27,9 cm (11")`, and the first number there is not the screen.
+        stated = _screen_inches(str(value))
+        if stated is not None:
+            return stated
+        found = re.search(r"\d{1,2}(?:[.,]\d{1,2})?", str(value))
+        if found:
+            rounded = int(float(found.group().replace(",", ".")) + 0.5)
+            if _SMALLEST_TABLET <= rounded <= _LARGEST_TABLET:
+                return rounded
     return None
 
 

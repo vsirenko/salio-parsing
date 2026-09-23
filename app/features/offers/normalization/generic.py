@@ -17,7 +17,7 @@ from app.features.offers.normalization import barcodes
 
 # Bumped whenever the reading below changes. Stored on every row it produces, so two
 # readings of the same bytes can be told apart and compared.
-RULESET_VERSION = "generic-2"
+RULESET_VERSION = "generic-3"
 
 # A generic reading of a flat object. Real sources get their own rulesets; this one exists
 # so that a sample can be loaded by hand and measured before any of them are written.
@@ -202,6 +202,17 @@ def _attributes(payload: dict[str, Any]) -> dict[str, Any]:
     path rather than lost data.
     """
     value = payload.get("attributes") or payload.get("params") or payload.get("specs")
+    found = _as_pairs(value)
+    # A shop's own table beside its suppliers': dateks carries `parameters`, the same names
+    # on every product, where `specs` is whatever the supplier sent and holds no diagonal on
+    # 127 of its 402 tablets. The shop's table fills what the supplier's leaves out and
+    # overrides nothing, so a name both carry reads as it did before the table was read.
+    for name, stated in _as_pairs(payload.get("parameters")).items():
+        found.setdefault(name, stated)
+    return found
+
+
+def _as_pairs(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return {str(k): v for k, v in value.items()}
     if isinstance(value, list):

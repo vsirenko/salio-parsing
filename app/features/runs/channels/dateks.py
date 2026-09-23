@@ -52,6 +52,9 @@ SITE = "https://www.dateks.lv"
 # The shop's word for smartphones. `mobilie-telefoni` is the section above it and holds no
 # products — see the module docstring; a different category is a different channel.
 CATEGORY_SLUG = "viedtalruni"
+# The same pages under the shop's word for tablets.
+TABLETS_SLUG = "dateks-tablets"
+TABLET_CATEGORY_SLUG = "plansetdatori"
 # Zero-based: page N is `/pg/N-1`, and page 1 is `/pg/0`.
 LISTING = f"{SITE}/cenas/{{slug}}/pg/{{page}}"
 # A category that suddenly claims hundreds of pages is a site that changed, not a shop that
@@ -71,7 +74,9 @@ _BARCODE = re.compile(r"^(?:Eans?|EAN|GTIN)$", re.IGNORECASE)
 class Dateks:
     """One channel: this shop's phones, off its pages."""
 
-    slug = SLUG
+    def __init__(self, slug: str = SLUG, category_slug: str = CATEGORY_SLUG) -> None:
+        self.slug = slug
+        self.category_slug = category_slug
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         """Both kinds walk the listing, and the cheap pass stops there.
@@ -85,7 +90,7 @@ class Dateks:
         if not cards:
             # Not an empty shop. The address stopped being a category — which is how this
             # shop announces a move, with a 200 and a page full of navigation.
-            raise ValueError(f"no products on the first page of /cenas/{CATEGORY_SLUG}")
+            raise ValueError(f"no products on the first page of /cenas/{self.category_slug}")
 
         last = min(_last_page(first.body), MAX_PAGES)
         rest = await asyncio.gather(*(self._page(fetcher, page) for page in range(1, last + 1)))
@@ -113,7 +118,7 @@ class Dateks:
 
     async def _page(self, fetcher: Fetcher, page: int) -> Part:
         return await fetcher.get(
-            LISTING.format(slug=CATEGORY_SLUG, page=page),
+            LISTING.format(slug=self.category_slug, page=page),
             role="listing",
             headers={"Accept-Language": "lv"},
         )
@@ -214,6 +219,11 @@ def _from_page(html: str, *, url: str) -> dict[str, Any]:
         # because it is what a language-neutral attribute registry would key on, while the
         # category rules still read the Latvian one.
         "specs_original": original,
+        # The shop's own table, `Visi parametri`: the same names on every product whoever
+        # supplied it, where the two blocks above are each supplier's own and differ card to
+        # card — nine names for a tablet's diagonal among them, and on 127 of 402 tablets no
+        # diagonal at all, while this one stated it on every page looked at.
+        "parameters": _parameters(doc),
         "images": _images(doc),
     }
 
@@ -233,6 +243,27 @@ def _schema_product(doc: Any) -> dict[str, Any]:
         if isinstance(data, dict) and data.get("@type") == "Product":
             return data
     return {}
+
+
+def _parameters(doc: Any) -> dict[str, str]:
+    """The shop's own parameter table, as name -> value.
+
+    Groups of `span.k` / `span.v` pairs under `#params`. Each name can carry a help text in
+    `div.descr` beside it, which is prose about the parameter and not its value, so only the
+    two spans are read.
+    """
+    table = _one(doc, "#params")
+    if table is None:
+        return {}
+    found: dict[str, str] = {}
+    for row in table.cssselect("div.fv"):
+        name, value = row.cssselect("span.k"), row.cssselect("span.v")
+        if not name or not value:
+            continue
+        key, text = _text(name[0]), _text(value[0])
+        if key and text:
+            found.setdefault(key, text)
+    return found
 
 
 def _specs(doc: Any, which: str) -> dict[str, str]:
@@ -360,3 +391,4 @@ def _id_from(url: str) -> str:
 
 
 CHANNEL = register(Dateks())
+TABLETS_CHANNEL = register(Dateks(slug=TABLETS_SLUG, category_slug=TABLET_CATEGORY_SLUG))

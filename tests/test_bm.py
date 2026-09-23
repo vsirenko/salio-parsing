@@ -265,4 +265,4 @@ def test_a_marketing_name_resolves_to_nothing():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-2+phones-13+bm-shop-1+bm-3"
+    assert reading()["ruleset_version"] == "generic-3+phones-13+bm-shop-1+bm-3"

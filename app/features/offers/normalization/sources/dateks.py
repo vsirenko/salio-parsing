@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "dateks-phones"
-VERSION = "dateks-4"
+VERSION = "dateks-5"
 
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins, for the
@@ -127,6 +127,40 @@ RULESET = register(
                     " they are left visible rather than guessed at: a colour mapped wrongly"
                     " splits one product into several, confidently."
                 ),
+                body=_color,
+            ),
+        ),
+    ),
+)
+
+
+# The tablets are the same pages under `/cenas/plansetdatori`, and the name keeps the phones'
+# shape — `Samsung Galaxy Tab S10 FE, 8GB/128GB, Blue` — so both of its rules read them as
+# they are. Measured on the 402 collected on 23.09.2026: a model for 402 and a colour, with
+# the category's own, for 380.
+TABLETS_SLUG = "dateks-tablets"
+TABLETS_VERSION = "dateks-tablets-1"
+
+TABLETS_RULESET = register(
+    SOURCE,
+    TABLETS_SLUG,
+    Ruleset(
+        version=TABLETS_VERSION,
+        rules=(
+            Rule(
+                id="dateks-tablets-model",
+                layer=SOURCE,
+                why=(
+                    "The phones' cut at the first comma, on the same name. 402 of 402 tablets"
+                    " read a model with it; the connectivity words and the screen that some"
+                    " heads carry are the tablet category's to take off."
+                ),
+                body=_model,
+            ),
+            Rule(
+                id="dateks-tablets-colour",
+                layer=SOURCE,
+                why="The name ends in the colour, as for the phones: `…, Luna Grey`.",
                 body=_color,
             ),
         ),

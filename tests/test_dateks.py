@@ -318,4 +318,74 @@ def test_without_the_registry_the_gap_stays_visible():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-2+phones-13+dateks-shop-1+dateks-4"
+    assert reading()["ruleset_version"] == "generic-3+phones-13+dateks-shop-1+dateks-5"
+
+
+# --- tablets: the same pages under the shop's word for them ---
+
+
+def test_the_tablet_channel_walks_its_own_category(event_loop):
+    from app.features.runs.channels.dateks import TABLETS_CHANNEL
+
+    asked: list[str] = []
+    event_loop.run_until_complete(TABLETS_CHANNEL.discover(shop(asked=asked), job()))
+    assert asked and all("/cenas/plansetdatori/pg/" in url for url in asked)
+    assert TABLETS_CHANNEL.slug == "dateks-tablets"
+
+
+def test_a_tablet_reads_as_the_phones_do():
+    from app.features.offers.normalization import read
+    from app.features.offers.normalization.rules import Vocabulary
+
+    fields = read(
+        {
+            "id": "1",
+            "name": "Samsung Galaxy Tab S10 FE, 8GB/128GB, Blue",
+            "title": "Samsung Galaxy Tab S10 FE, 8GB/128GB, Blue",
+            "brand": "Samsung",
+            "specs": {"Displejs - Displeja diagonāle": '27,7 cm (10,9")'},
+        },
+        source_slug="dateks-tablets",
+        shop_slug="dateks",
+        category="tablets",
+        vocabulary=Vocabulary(
+            colours={"blue": "blue"},
+            attribute_names={"displejs - displeja diagonāle": "screen_inch"},
+        ),
+    )
+    assert fields["model"] == "Galaxy Tab S10 FE"
+    assert fields["identity"]["color"] == "blue"
+    # The inches in the bracket, not the centimetres before them.
+    assert fields["identity"]["screen_inch"] == 11
+
+
+def test_the_shop_s_own_table_fills_what_the_supplier_s_leaves_out():
+    """`Visi parametri` names the diagonal on every page; the supplier's block did on 275 of
+    402 tablets. A name both carry keeps the supplier's value, as before the table was read."""
+    from app.features.offers.normalization import read
+
+    fields = read(
+        {
+            "name": "Acer Iconia Tab A8, 4GB/64GB, Beige",
+            "specs": {"Krāsa": "Melna"},
+            "parameters": {"Ekrāna izmērs": '8.7"', "Krāsa": "Bēša"},
+        },
+        source_slug="dateks-tablets",
+        shop_slug="dateks",
+        category="tablets",
+    )
+    assert fields["attributes"] == {"Krāsa": "Melna", "Ekrāna izmērs": '8.7"'}
+
+
+def test_the_page_carries_the_shop_s_own_table():
+    """A tablet page captured on 23.09.2026, whose supplier block is empty: the shop's own
+    table is all the page says about it."""
+    tablet = gzip.decompress((FIXTURES / "dateks_tablet.html.gz").read_bytes()).decode()
+    table = product(tablet)["parameters"]
+    assert table["Ekrāna izmērs"] == '8.7"'
+    assert table["Iebūvētā atmiņa"] == "64GB"
+    assert table["Krāsa"] == "Bēša"
+    # The help text beside a name is prose about the parameter, not its value.
+    assert not any("Planšetdatora" in value for value in table.values())
+    # The phone captured on 22.09.2026 carries the block empty, and that reads as nothing.
+    assert product()["parameters"] == {}
