@@ -26,6 +26,10 @@ ALLOWED_CROSS_FEATURE = {
     # and belongs where it can be seen.
     ("matching", "brands"): "a brand string has to be normalized as brand aliases were",
     ("offers", "brands"): "a brand ruleset is keyed by the brand as the alias table spells it",
+    ("offers", "attributes"): (
+        "a shop's name for an attribute has to be normalized as attribute aliases were, or the"
+        " lookup misses and the field reads as one the shop never gave"
+    ),
     ("matching", "offers"): (
         "a brand has to come off the front of a model string the same way the reading takes"
         " it off, boundary and all — `CAT` against `Caterpillar CAT S75` once cut mid-word"

@@ -209,7 +209,10 @@ def reading(event_loop, payload: dict | None = None):
         payload or product(event_loop),
         source_slug="tet-phones",
         category="phones",
-        vocabulary=Vocabulary(colours={"burgundijas sarkana": "red"}),
+        vocabulary=Vocabulary(
+            colours={"burgundijas sarkana": "red"},
+            attribute_names={"krāsa": "color", "iebūvētā atmiņa (rom)": "storage_mb"},
+        ),
     )
 
 
@@ -255,4 +258,4 @@ def test_the_colour_comes_out_of_the_specification_table(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-11+tet-2")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-12+tet-2")

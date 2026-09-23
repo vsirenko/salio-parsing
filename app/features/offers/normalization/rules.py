@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
+from app.features.attributes.normalization import normalize_attribute_name
+
 GENERIC, CATEGORY, SOURCE, BRAND, PRODUCT, FINISH = 10, 20, 30, 40, 50, 90
 
 
@@ -75,6 +77,19 @@ class Vocabulary:
     # at one name — and it is data, because which words are a model is the same kind of
     # fact as which words are a colour, and a rule that carried them would carry a shop's.
     models: Mapping[str, Mapping[str, str]] = MappingProxyType({})
+    # What each shop calls an attribute of this category, as `normalize_attribute_name`
+    # spells it, to the attribute's key: `iekšējā atmiņa gb` and `storage_capacity` both to
+    # `storage_mb`. Scoped to the category, because the same name can be two attributes in
+    # two categories, and a name that is two attributes in one is left out rather than
+    # guessed. Exact, not a fragment: `ram` inside `paRAMetri` once hid rdveikals' storage.
+    attribute_names: Mapping[str, str] = MappingProxyType({})
+
+    def attribute_key(self, name: str) -> str | None:
+        """Which of our attributes a shop's name for one is, or nothing."""
+        try:
+            return self.attribute_names.get(normalize_attribute_name(name))
+        except ValueError:
+            return None
 
 
 # What a rule is handed: the raw payload, the reading so far, and the words it was given.

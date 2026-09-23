@@ -24,32 +24,13 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-11"
+VERSION = "phones-12"
 
-# ---------------------------------------------------------------------------------------
-# STOPGAP. These two tuples are vocabulary, and vocabulary does not belong in code.
-#
-# That `Iekšējā atmiņa` means built-in storage is a Latvian fact about a word. It belongs in
-# `attribute_aliases`, which has a `language` column for exactly this, and which nothing
-# resolves through yet. What belongs here is the structure: that built-in storage tells two
-# phones apart and working memory does not, which is true in every language.
-#
-# **Do not add a second language beside these.** A Lithuanian `talpa` and an Estonian `mälu`
-# written here turn a category into a dictionary, and the dictionary we already built stays
-# empty. Add the resolution step instead — see TODO.md.
-# ---------------------------------------------------------------------------------------
-
-# Fragments of the names the Baltic shops give the built-in capacity. Matched as a
-# substring rather than whole, because a shop writes the unit into the name itself:
-# ksenukai says `Atmiņas ietilpība` and bigbox says `Iekšējā atmiņa, GB`.
-STORAGE_NAMES = ("atmiņas ietilpība", "iekšējā atmiņa", "storage", "internal memory", "capacity")
-# And the one thing that reliably tells the other kind of memory apart. Both shops name it
-# the same way, and reading it as capacity is the mistake this guards against: a phone
-# listed `12GB/512GB` is twelve of working memory and five hundred and twelve of storage.
-RAM_NAMES = ("ram", "operatīvā")
-# Same stopgap, same reason: nothing resolves an attribute *name* through the registry
-# yet. The values behind it do resolve now, which is the half that mattered.
-COLOR_NAMES = ("krāsa", "color", "colour")
+# The two identity axes, by the keys the registry files them under. Which of a shop's field
+# names mean them is vocabulary and lives in `attribute_aliases`; that these two tell phones
+# apart is structure and lives here.
+STORAGE_KEY = "storage_mb"
+COLOR_KEY = "color"
 # Everything converts to megabytes exactly, and nothing has to be a fraction.
 SCALE = {"MB": 1, "GB": 1024, "TB": 1024 * 1024}
 # The largest capacity a phone has ever shipped with. Not a limit on what may be
@@ -67,20 +48,45 @@ _SHARED_UNIT = re.compile(
 def _storage(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
-    """Capacity as an exact number of megabytes, from the attributes or from the title."""
-    for name, value in (fields.get("attributes") or {}).items():
-        lowered = str(name).strip().lower()
-        if any(ram in lowered for ram in RAM_NAMES):
-            continue
-        if any(storage in lowered for storage in STORAGE_NAMES):
-            megabytes = _megabytes(str(value))
-            if megabytes is not None:
-                return {"identity": {**fields.get("identity", {}), "storage_mb": megabytes}}
+    """Capacity as an exact number of megabytes, from the attributes or from the title.
 
-    megabytes = _megabytes(fields.get("title") or "")
+    Which of a shop's fields is the built-in storage is looked up, not guessed: the name is
+    resolved through the registry the caller handed in, exactly, so working memory — a name
+    that resolves to `ram_mb` — can never be read as storage however its words overlap.
+    """
+    stated = {
+        megabytes
+        for name, value in (fields.get("attributes") or {}).items()
+        if vocabulary.attribute_key(str(name)) == STORAGE_KEY
+        and (megabytes := _megabytes(str(value))) is not None
+    }
+    titled = _megabytes(fields.get("title") or "")
+    megabytes = _agreed(stated, titled)
     if megabytes is None:
         return {}
     return {"identity": {**fields.get("identity", {}), "storage_mb": megabytes}}
+
+
+def _agreed(stated: set[int], titled: int | None) -> int | None:
+    """The one capacity every source agrees on, or nothing.
+
+    Measured over every shop on 23.09.2026: title and field named the same capacity 5150
+    times and different ones 38, and neither was the one to trust — the rest of the market
+    sided with the title 23 times (rdveikals writes `1 GB` for a 1 TB iPhone Air) and with
+    the field 15 (bm's titles carry a size that is not the phone's). Any rule that ranked one
+    over the other was wrong fifteen times or more, so a disagreement reads as nothing: an
+    empty axis sends the listing the slow way round, a wrong one files it under another
+    phone at confidence.
+
+    One exception, because dateks lists the same capacity under several names from several
+    datasheets and they disagree among themselves: where the title settles which of them is
+    right, it is taken.
+    """
+    if titled is None:
+        return next(iter(stated)) if len(stated) == 1 else None
+    if not stated or stated == {titled} or titled in stated and len(stated) > 1:
+        return titled
+    return None
 
 
 def _color(
@@ -100,13 +106,18 @@ def _color(
     """
     if not vocabulary.colours:
         return {}
-    for name, value in (fields.get("attributes") or {}).items():
-        if not any(word in name.lower() for word in COLOR_NAMES):
-            continue
-        canonical = _canonical(str(value).strip(), vocabulary)
-        if canonical:
-            return {"identity": {**fields.get("identity", {}), "color": canonical}}
-    return {}
+    stated = {
+        canonical
+        for name, value in (fields.get("attributes") or {}).items()
+        if vocabulary.attribute_key(str(name)) == COLOR_KEY
+        and (canonical := _canonical(str(value).strip(), vocabulary))
+    }
+    # A shop that states two colours for one product has not stated one. dateks carries
+    # `melns`, `zils` and `Tumši zils` on a single black phone, from three datasheets; the
+    # title rule below reads what the shop put in the name instead.
+    if len(stated) != 1:
+        return {}
+    return {"identity": {**fields.get("identity", {}), "color": stated.pop()}}
 
 
 def _canonical(value: str, vocabulary: Vocabulary) -> str | None:

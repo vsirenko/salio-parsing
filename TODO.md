@@ -123,16 +123,13 @@ and the questions that have to be answered with real data first, are written dow
       `Vocabulary` carries them into `read()` so that reading stays a pure function of what
       it was handed. Nine Latvian words entered for phones. The same table is what the
       unbuilt source-category mapping needs.
-- [ ] **Nothing resolves an *attribute* name to the registry, so that vocabulary sits in code.**
-      `attribute_aliases` and `attribute_value_aliases` exist for exactly this and both carry
-      a `language` column; nothing calls either, so `categories/phones.py` holds Latvian
-      strings as a marked stopgap. Category names took this route already, and attribute
-      names are the same journey: a Lithuanian shop needs rows, not another tuple in a
-      category module. The resolution
-      cannot live in `read()`, which is pure — it is a second step over a stored reading,
-      taking the offer's market for the language order (`markets.languages`, first is
-      default) and falling back to aliases that belong to no language at all, which is what
-      a maker's marketing names are.
+- [x] **Attribute names resolve through the registry.** `attribute_aliases`, loaded per
+      category into the `Vocabulary` as colours already were, looked up exactly; the
+      Latvian tuples in `categories/phones.py` are gone. Not the second step over a stored
+      reading this item first proposed: handing the words in keeps `read()` pure the way
+      colours do, and no name in these feeds means two things in two languages. Measured on
+      23.09.2026 over 9096 readings: storage gained on 256 (rdveikals 183, tet 52), 53 where
+      title and field disagree now read none, and no value moved from one size to another.
 - [x] The brand registry, seeded from what the two shops actually wrote: 62 spellings into
       52 brands and 54 aliases. `brand_unknown` went from 55 listings to none.
 - [ ] **`Hammer` and `MyPhone` may be one brand.** 30 listings call Hammer a brand of its
@@ -579,6 +576,11 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **The colour registry exists only in this database.** 235 rows, of which 31 were
       entered today, and `cad9caa29396` creates the table without seeding it. A fresh
       database starts with no colours at all and every reading loses its colour.
+      Since 23.09.2026 the same is true of the attribute registry as a whole: the attributes,
+      which of them a category carries, and the 40 names shops give them now that the
+      reading looks field names up there instead of in code. A fresh database reads no
+      storage or colour from any field. All of it wants the same answer — a seed that can
+      be re-run, or a migration that carries the rows.
 - [x] **`ambiguous` was two buckets wearing one name.** It promises a choice a person or a
       judge can make; for 51 of its 58 rows nobody could, because the candidates differ in
       an axis the shop never publishes — m79's German feed states the model, the memory, the

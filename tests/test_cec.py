@@ -135,7 +135,10 @@ def reading(event_loop, sku: str = "MK2D4HX/A"):
         one(discover(event_loop), sku),
         source_slug="cec-phones",
         category="phones",
-        vocabulary=Vocabulary(colours={"star white": "white"}),
+        vocabulary=Vocabulary(
+            colours={"star white": "white"},
+            attribute_names={"color": "color", "erply_storage": "storage_mb"},
+        ),
     )
 
 
@@ -174,4 +177,4 @@ def test_the_identity_axes_come_from_the_options(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-11+cec-1")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-12+cec-1")

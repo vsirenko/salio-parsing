@@ -57,11 +57,16 @@
   a pure function of a payload and the rules that apply to it — that purity is what lets a
   stored payload be read again and the two readings compared. A rule given no words does
   nothing, which is declining to guess, not a failure.
-- Category names go this way already: `category_aliases`, loaded once per category by
-  `OfferService`, which is how a shop's `Telefons` is cut off the front of a title.
-  Attribute names do not yet, so `categories/phones.py` still holds Latvian strings **as a
-  stopgap, marked as one**. Do not add a second language beside them; add the resolution
-  step instead.
+- Category names go this way, and so do attribute names: `category_aliases` and
+  `attribute_aliases`, loaded once per category by `OfferService` and scoped to it, which is
+  how a shop's `Telefons` is cut off the front of a title and its `Iekšējā atmiņa, GB` is
+  known to be storage. A field name is resolved **exactly**, never by a fragment of it:
+  `ram` inside `paRAMetri` once threw rdveikals' storage away as working memory. A name no
+  row covers is not read — a new shop's field names are rows to enter, not a tuple to grow.
+- **Where two sources disagree about an axis, the reading takes neither.** Title and field
+  named different capacities 38 times in 5188, and the market sided with each about as
+  often; ranking one over the other was wrong fifteen times or more. An empty axis sends a
+  listing the slow way round, a wrong one files it under another product at confidence.
 - Matching leans on the language-neutral signals on purpose — barcode, part number, model
   designation — so language is a question about attributes and the storefront, not about
   identifying a product.

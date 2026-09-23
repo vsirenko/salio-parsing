@@ -109,10 +109,10 @@ def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
     assert version_for() == "generic-1"
     assert version_for(KSENUKAI) == "generic-1+ksenukai-5"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-11+ksenukai-5"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-12+ksenukai-5"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-11+ksenukai-5"
+        == "generic-1+phones-12+ksenukai-5"
     )
 
 
@@ -260,7 +260,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-11+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-1+phones-12+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -362,7 +362,7 @@ def test_a_colour_the_shop_stated_itself_wins():
             "specs": {"Krāsa": "melna"},
         },
         category=PHONES,
-        vocabulary=Vocabulary(colours={"melna": "black"}),
+        vocabulary=Vocabulary(colours={"melna": "black"}, attribute_names={"krāsa": "color"}),
     )
     assert fields["identity"]["color"] == "black"
 
@@ -490,7 +490,7 @@ FINGERPRINTS = {
     "mdata-1": "474fbb01bcb9",
     "onea-1": "958859debd73",
     "euronics-1": "e61bf95a7a78",
-    "phones-11": "cea822be0cec",
+    "phones-12": "e44fa34c0a51",
     "rdveikals-4": "f5078e0afc82",
     "samsung-phones-2": "9653d4e6a46a",
     "tet-2": "0e2bb4bd31c5",
@@ -779,6 +779,54 @@ def test_a_colour_left_on_the_end_of_a_model_comes_off():
         {"name": "Ulefone Armor Mini", "model": "Armor Mini"}, category=PHONES, vocabulary=words
     )
     assert kept["model"] == "Armor Mini"
+
+
+def test_a_field_is_the_attribute_the_registry_says_it_is():
+    """Resolved exactly, not by fragment. rdveikals files storage under a section called
+    `Procesors un operatīvā atmiņa (RAM)`, and the fragment `ram` threw its storage away as
+    working memory; `ram` also sits inside `paRAMetri` and `PRogRAMmatūra`."""
+    words = Vocabulary(
+        attribute_names={
+            "procesors un operatīvā atmiņa (ram) / telefona iebūvēta atmiņa": "storage_mb",
+            "procesors un operatīvā atmiņa (ram) / operatīvā atmiņa (ram)": "ram_mb",
+        }
+    )
+    fields = read(
+        {
+            "name": "Phone X",
+            "specs": {
+                "Procesors un operatīvā atmiņa (RAM) / Operatīvā atmiņa (RAM)": "12 GB",
+                "Procesors un operatīvā atmiņa (RAM) / Telefona iebūvēta atmiņa": "512 GB",
+            },
+        },
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert fields["identity"]["storage_mb"] == 512 * 1024
+    # A name the registry was not given is not read at all, however storage-like it sounds.
+    unknown = read({"name": "Phone X", "specs": {"Internal memory": "256 GB"}}, category=PHONES)
+    assert "storage_mb" not in unknown["identity"]
+
+
+def test_a_capacity_the_sources_disagree_on_is_not_read():
+    """Title and field disagreed 38 times in 5188 and the market sided with each about as
+    often, so neither is ranked: a disagreement reads as nothing."""
+    words = Vocabulary(attribute_names={"atmiņa": "storage_mb", "krātuve": "storage_mb"})
+
+    def storage(name, specs):
+        return read({"name": name, "specs": specs}, category=PHONES, vocabulary=words)[
+            "identity"
+        ].get("storage_mb")
+
+    # rdveikals: the field says 1 GB for a 1 TB phone.
+    assert storage("Apple iPhone Air 1TB Space Black", {"Atmiņa": "1 GB"}) is None
+    # Agreeing sources are taken; a field alone and a title alone are each enough.
+    assert storage("Phone 256GB", {"Atmiņa": "256 GB"}) == 256 * 1024
+    assert storage("Phone", {"Atmiņa": "128 GB"}) == 128 * 1024
+    assert storage("Phone 64GB", {}) == 64 * 1024
+    # dateks: two datasheets disagree, and the title settles which one is right.
+    assert storage("Galaxy A37 8GB/256GB", {"Atmiņa": "128 GB", "Krātuve": "256 GB"}) == 256 * 1024
+    assert storage("MyPhone FLIP LTE", {"Atmiņa": "48 MB", "Krātuve": "128 MB"}) is None
 
 
 def test_with_no_registry_the_shop_s_reading_stands():

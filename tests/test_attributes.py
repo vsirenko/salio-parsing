@@ -135,7 +135,7 @@ def test_a_unit_written_into_the_name_is_not_part_of_it(client):
 
 def test_a_bracket_is_part_of_the_name_and_survives(client):
     """`(RAM)` names the thing; `®` decorates it."""
-    from app.features.attributes.schemas import _normalize
+    from app.features.attributes.normalization import normalize_attribute_name as _normalize
 
     assert _normalize("Operatīvā atmiņa (RAM)").endswith("(ram)")
     assert _normalize("Colour®") == "colour"

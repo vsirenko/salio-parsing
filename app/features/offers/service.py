@@ -13,11 +13,13 @@ from app.core.config import settings
 from app.core.exceptions import AppError, NotFoundError, ValidationError
 from app.db.models import (
     Attribute,
+    AttributeAlias,
     AttributeValue,
     AttributeValueAlias,
     Brand,
     Category,
     CategoryAlias,
+    CategoryAttribute,
     Market,
     ModelAlias,
     NormalizedOffer,
@@ -519,12 +521,26 @@ class OfferService:
             pages: dict[str, dict[str, str]] = {}
             for maker, alias, model in spellings.all():
                 pages.setdefault(normalize_brand(maker), {})[alias] = model
+            # What shops call this category's attributes. A name that leads to two of them
+            # in one category is dropped: which one a shop meant is not something to guess.
+            named = await self.session.execute(
+                select(AttributeAlias.alias_normalized, Attribute.key)
+                .join(Attribute, Attribute.id == AttributeAlias.attribute_id)
+                .join(CategoryAttribute, CategoryAttribute.attribute_id == Attribute.id)
+                .where(CategoryAttribute.category_id == source.category_id)
+            )
+            keys: dict[str, set[str]] = {}
+            for alias, key in named.all():
+                keys.setdefault(alias, set()).add(key)
             self._vocabularies[source.category_id] = Vocabulary(
                 category_names=frozenset(names),
                 brand_names=frozenset(name.casefold() for name in makers if name),
                 colours=MappingProxyType({alias: value for alias, value in colours.all()}),
                 models=MappingProxyType(
                     {maker: MappingProxyType(page) for maker, page in pages.items()}
+                ),
+                attribute_names=MappingProxyType(
+                    {alias: next(iter(found)) for alias, found in keys.items() if len(found) == 1}
                 ),
             )
         return self._vocabularies[source.category_id]

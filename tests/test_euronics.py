@@ -218,7 +218,10 @@ def reading(event_loop, payload: dict | None = None):
         payload or product(event_loop),
         source_slug="euronics-phones",
         category="phones",
-        vocabulary=Vocabulary(colours={"light blue": "blue", "blue": "blue"}),
+        vocabulary=Vocabulary(
+            colours={"light blue": "blue", "blue": "blue"},
+            attribute_names={"colour": "color", "internal memory": "storage_mb"},
+        ),
     )
 
 
@@ -248,5 +251,5 @@ def test_the_ruleset_version_says_what_was_applied(event_loop):
     # The Samsung the fixture holds also selects the brand layer, which is the point of
     # the composed version: it names every ruleset that touched the reading.
     assert reading(event_loop)["ruleset_version"] == (
-        "generic-1+phones-11+euronics-1+samsung-phones-2"
+        "generic-1+phones-12+euronics-1+samsung-phones-2"
     )

@@ -187,4 +187,4 @@ def test_the_colour_is_what_follows_the_capacity(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-11+discover-2")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-12+discover-2")
