@@ -135,11 +135,15 @@ async def remove_alias(brand_id: int, alias_id: int, service: BrandServiceDep) -
     response_model=list[ModelAliasRead],
     summary="List a brand's model names",
 )
-async def list_models(brand_id: int, service: BrandServiceDep) -> list[ModelAliasRead]:
+async def list_models(
+    brand_id: int,
+    service: BrandServiceDep,
+    category_id: Annotated[int | None, Query(description="One kind of product")] = None,
+) -> list[ModelAliasRead]:
     """Every spelling of every model this maker is known to make, and the name the
-    catalogue gives each. The reader finds these whole in a title; a title holding none
-    of them keeps whatever the shop's own rule cut out."""
-    return await service.list_models(brand_id)
+    catalogue gives each, per category. The reader finds these whole in a title — only the
+    listing's own category's — and a title holding none keeps what the shop's rule cut out."""
+    return await service.list_models(brand_id, category_id=category_id)
 
 
 @router.post(
@@ -147,7 +151,10 @@ async def list_models(brand_id: int, service: BrandServiceDep) -> list[ModelAlia
     response_model=ModelAliasRead,
     status_code=status.HTTP_201_CREATED,
     summary="Add a model name",
-    responses={409: {"model": ErrorResponse, "description": "Already names a model here"}},
+    responses={
+        404: {"model": ErrorResponse, "description": "Brand or category not found"},
+        409: {"model": ErrorResponse, "description": "Already names a model here"},
+    },
 )
 async def add_model(
     brand_id: int, payload: ModelAliasCreate, service: BrandServiceDep

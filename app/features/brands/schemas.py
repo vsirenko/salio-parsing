@@ -111,6 +111,9 @@ class ModelAliasCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Which kind of product the name is for. A maker names its phones and its tablets
+    # differently, and a name entered for one must not be read into the other.
+    category_id: int
     alias: str = Field(min_length=1, max_length=200)
     model: str = Field(min_length=1, max_length=200)
     origin: Origin = Origin.HUMAN
@@ -139,6 +142,7 @@ class ModelAliasRead(BaseModel):
 
     id: int
     brand_id: int
+    category_id: int
     alias_normalized: str
     model: str
     origin: Origin

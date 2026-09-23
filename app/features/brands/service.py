@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.exceptions import ConflictError, NotFoundError
-from app.db.models import Brand, BrandAlias, ModelAlias
+from app.db.models import Brand, BrandAlias, Category, ModelAlias
 from app.db.query import paginated
 from app.features.brands.normalization import normalize_brand, normalize_model_name
 from app.features.brands.schemas import (
@@ -122,27 +122,34 @@ class BrandService:
 
     # --- the model registry: what this maker calls what it makes ---
 
-    async def list_models(self, brand_id: int) -> list[ModelAliasRead]:
+    async def list_models(
+        self, brand_id: int, *, category_id: int | None = None
+    ) -> list[ModelAliasRead]:
         await self._brand(brand_id)
+        stmt = select(ModelAlias).where(ModelAlias.brand_id == brand_id)
+        if category_id is not None:
+            stmt = stmt.where(ModelAlias.category_id == category_id)
         rows = await self.session.scalars(
-            select(ModelAlias)
-            .where(ModelAlias.brand_id == brand_id)
-            .order_by(ModelAlias.model, ModelAlias.alias_normalized)
+            stmt.order_by(ModelAlias.category_id, ModelAlias.model, ModelAlias.alias_normalized)
         )
         return [ModelAliasRead.model_validate(row) for row in rows]
 
     async def add_model(self, brand_id: int, payload: ModelAliasCreate) -> ModelAliasRead:
         """One spelling a shop uses, and the name the catalogue gives it.
 
-        Unique per brand on the normalized alias: one spelling must not read as two models.
-        The reverse is the point — several spellings read as one model.
+        Unique per category and brand on the normalized alias: one spelling must not read
+        as two models of one kind. The reverse is the point — several spellings read as one
+        model. The same spelling may name a phone and a tablet; each category reads its own.
         """
         await self._brand(brand_id)
         audit.set_target("brand", brand_id)
+        if await self.session.get(Category, payload.category_id) is None:
+            raise NotFoundError(f"Category {payload.category_id} not found")
 
         normalized = normalize_model_name(payload.alias)
         alias = ModelAlias(
             brand_id=brand_id,
+            category_id=payload.category_id,
             alias_normalized=normalized,
             model=payload.model,
             origin=payload.origin.value,
@@ -152,10 +159,14 @@ class BrandService:
             await self.session.flush()
         except IntegrityError as exc:
             await self.session.rollback()
-            raise ConflictError(f"'{normalized}' already names a model of this brand") from exc
+            raise ConflictError(
+                f"'{normalized}' already names a model of this brand in this category"
+            ) from exc
 
         await self.session.refresh(alias)
-        audit.record_changes(added_model_alias=normalized, model=payload.model)
+        audit.record_changes(
+            added_model_alias=normalized, model=payload.model, category_id=payload.category_id
+        )
         return ModelAliasRead.model_validate(alias)
 
     async def remove_model(self, brand_id: int, alias_id: int) -> None:

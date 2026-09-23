@@ -55,10 +55,10 @@ CLEAN = (
 # newest *reading* of that pass, not any: a raw row keeps one reading per ruleset version,
 # and the one from before a shop had a model rule reads none.
 READINGS = """
-    select n.brand_raw, n.model
+    select n.brand_raw, n.model, n.category_id
     from offers o
     join lateral (
-        select n.brand_raw, n.model
+        select n.brand_raw, n.model, src.category_id
         from raw_offers r
         join normalized_offers n on n.raw_offer_id = r.id
         left join runs ru on ru.id = r.run_id
@@ -112,12 +112,13 @@ async def main(*, dry_run: bool, sources: tuple[str, ...]) -> None:
         colours = set((await session.scalars(text(COLOURS))).all())
         rows = (await session.execute(text(READINGS), {"sources": list(sources)})).all()
 
-        # (maker, spelling as looked up) -> how often each raw spelling was read.
-        spellings: dict[tuple[int, str], Counter[str]] = defaultdict(Counter)
+        # (category, maker, spelling as looked up) -> how often each raw spelling was read.
+        # By category because a maker's phone names are not its tablet names.
+        spellings: dict[tuple[int, int, str], Counter[str]] = defaultdict(Counter)
         skipped: Counter[str] = Counter()
         repaired: Counter[str] = Counter()
         left_out: dict[str, set[str]] = defaultdict(set)
-        for brand_raw, model in rows:
+        for brand_raw, model, category_id in rows:
             try:
                 found = makers.get(normalize_brand(brand_raw), set())
             except ValueError:
@@ -138,11 +139,11 @@ async def main(*, dry_run: bool, sources: tuple[str, ...]) -> None:
                 skipped[reason] += 1
                 left_out[reason].add(f"{names[next(iter(found))]} {model.strip()}")
                 continue
-            spellings[(next(iter(found)), " ".join(words))][spelling] += 1
+            spellings[(category_id, next(iter(found)), " ".join(words))][spelling] += 1
 
         written = 0
         per_maker: Counter[str] = Counter()
-        for (brand_id, key), seen in sorted(spellings.items()):
+        for (category_id, brand_id, key), seen in sorted(spellings.items()):
             # The most-read spelling is the catalogue's; ties go to the shorter, then
             # alphabetical, so the choice is the same on every run.
             by_use = sorted(seen.items(), key=lambda item: (-item[1], len(item[0]), item[0]))
@@ -153,8 +154,14 @@ async def main(*, dry_run: bool, sources: tuple[str, ...]) -> None:
                 continue
             result = await session.execute(
                 insert(ModelAlias)
-                .values(brand_id=brand_id, alias_normalized=key, model=canonical, origin="rule")
-                .on_conflict_do_nothing(constraint="uq_model_alias_per_brand")
+                .values(
+                    category_id=category_id,
+                    brand_id=brand_id,
+                    alias_normalized=key,
+                    model=canonical,
+                    origin="rule",
+                )
+                .on_conflict_do_nothing(constraint="uq_model_alias_per_category")
             )
             written += result.rowcount
         if not dry_run:

@@ -234,11 +234,27 @@ def test_adding_an_alias_is_recorded(client):
 # --- the model registry: what a maker calls what it makes ---
 
 
-def add_model(client, token, brand_id, alias, model, **extra):
+def a_category(client, token, slug="phones", name="Phones") -> int:
+    made = client.post(
+        "/api/admin/categories", headers=auth(token), json={"slug": slug, "name": name}
+    )
+    if made.status_code == 201:
+        return made.json()["id"]
+    listed = client.get("/api/admin/categories", headers=auth(token)).json()
+    rows = listed["items"] if isinstance(listed, dict) else listed
+    return next(row["id"] for row in rows if row["slug"] == slug)
+
+
+def add_model(client, token, brand_id, alias, model, category_id=None, **extra):
     return client.post(
         f"/api/admin/brands/{brand_id}/models",
         headers=auth(token),
-        json={"alias": alias, "model": model, **extra},
+        json={
+            "alias": alias,
+            "model": model,
+            "category_id": category_id or a_category(client, token),
+            **extra,
+        },
     )
 
 
@@ -310,4 +326,67 @@ def test_adding_a_model_name_is_recorded(client):
     entry = next(e for e in entries if e["status_code"] == 201)
     assert entry["target_type"] == "brand"
     assert entry["target_id"] == str(brand["id"])
-    assert entry["changes"] == {"added_model_alias": "s26", "model": "Galaxy S26"}
+    assert entry["changes"] == {
+        "added_model_alias": "s26",
+        "model": "Galaxy S26",
+        "category_id": a_category(client, token),
+    }
+
+
+def test_a_model_name_belongs_to_one_kind_of_product(client):
+    """Nubia's phone `Air` was found whole in `Apple iPad Air`: a maker's names for its
+    phones are not its names for its tablets, and each category reads its own."""
+    token = admin_token(client)
+    brand = add_brand(client, token, "apple", "Apple")
+    phones = a_category(client, token)
+    tablets = a_category(client, token, "tablets", "Tablets")
+
+    assert add_model(client, token, brand["id"], "Air", "iPhone Air", phones).status_code == 201
+    # The same spelling is another model in another category, not a conflict.
+    assert add_model(client, token, brand["id"], "Air", "iPad Air", tablets).status_code == 201
+    assert add_model(client, token, brand["id"], "air", "iPad Air", tablets).status_code == 409
+
+    only = client.get(
+        f"/api/admin/brands/{brand['id']}/models",
+        headers=auth(token),
+        params={"category_id": tablets},
+    ).json()
+    assert [(row["model"], row["category_id"]) for row in only] == [("iPad Air", tablets)]
+    assert add_model(client, token, brand["id"], "X", "X", 999999).status_code == 404
+
+
+def test_a_listing_reads_only_its_own_category_s_names(client):
+    """The registry read a phone's name into a tablet's title when it was keyed by brand
+    alone. A phones channel reads the phones page, and a name entered for tablets is not on
+    it."""
+    from tests.test_matching import a_shop_we_can_build_from
+    from tests.test_offers import ingest
+
+    token = admin_token(client)
+    _, source, phones, apple = a_shop_we_can_build_from(client, token)
+    tablets = a_category(client, token, "tablets", "Tablets")
+    add_model(client, token, apple["id"], "Pixel Air", "Pixel Air", tablets)
+
+    def model() -> str:
+        result = ingest(
+            client,
+            token,
+            source["id"],
+            {
+                "external_id": "X-1",
+                "market_code": "LV",
+                "payload": {
+                    "name": "Apple Pixel Air 128GB black",
+                    "brand": "Apple",
+                    "model": "as read",
+                },
+            },
+        )
+        reading = client.post(
+            f"/api/admin/raw-offers/{result['raw_offer_id']}/renormalize", headers=auth(token)
+        )
+        return reading.json()["model"]
+
+    assert model() == "as read", "a tablet's name was read into a phone"
+    add_model(client, token, apple["id"], "Pixel Air", "Pixel Air", phones["id"])
+    assert model() == "Pixel Air"

@@ -47,7 +47,10 @@ than devices, so that is the main flow of errors rather than an edge case. `reso
 ## The model registry
 
 `model_aliases` is what a maker calls what it makes: every spelling a shop writes, to the
-name the catalogue uses, per brand. `galaxy s26`, `s26` and `galaxy s26 5g` are three rows
+name the catalogue uses, per brand **and per category**. A maker's names for its phones are
+not its names for its tablets: keyed by brand alone, Nubia's phone `Air` was found whole in
+`Apple iPad Air`, and 130 of m79's tablets would have read as it. A listing reads its own
+category's page only, and the same spelling may be a model in two categories. `galaxy s26`, `s26` and `galaxy s26 5g` are three rows
 and one model. The reader finds the longest of them whole in a title and takes the name —
 see [offers](../offers/README.md), "the model is the registry's spelling".
 

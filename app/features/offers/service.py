@@ -519,9 +519,11 @@ class OfferService:
             # — `normalize_brand` on both sides, so the page a listing's `brand_raw` opens
             # is the page its maker's names were filed under.
             spellings = await self.session.execute(
-                select(Brand.canonical_name, ModelAlias.alias_normalized, ModelAlias.model).join(
-                    ModelAlias, ModelAlias.brand_id == Brand.id
-                )
+                select(Brand.canonical_name, ModelAlias.alias_normalized, ModelAlias.model)
+                .join(ModelAlias, ModelAlias.brand_id == Brand.id)
+                # Only this category's names. A phone's `Air` read into a tablet's title is
+                # how 130 iPads were about to become a Nubia.
+                .where(ModelAlias.category_id == source.category_id)
             )
             pages: dict[str, dict[str, str]] = {}
             for maker, alias, model in spellings.all():

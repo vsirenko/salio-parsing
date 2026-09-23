@@ -478,7 +478,10 @@ class ModelAlias(Base):
     stops a shop with no model field naming a product after its spec sheet.
 
     Per brand, because a model name only means something beside its maker: `Note 17` is a
-    Xiaomi and, one day, somebody else's too. The canonical spelling is a string rather
+    Xiaomi and, one day, somebody else's too. And per category, because a maker's names for
+    its phones are not its names for its tablets: with the registry keyed by brand alone,
+    Nubia's phone `Air` was found whole in `Apple iPad Air` and 130 tablets would have read
+    as it. A category reads only its own page of names. The canonical spelling is a string rather
     than a row of its own, the way `category_aliases` does it: the registry is consulted
     by the reader and never joined to the catalogue, and a canonical that was a foreign
     key would tie a reading to a product row that may not exist yet.
@@ -488,6 +491,7 @@ class ModelAlias(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     brand_id: Mapped[int] = mapped_column(ForeignKey("brands.id", ondelete="CASCADE"))
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"))
     # Words, casefolded, separated by single spaces, and nothing else kept but `+`: it is
     # the one mark that tells two models apart — `Galaxy S26+` is not `Galaxy S26`.
     alias_normalized: Mapped[str] = mapped_column(String(200))
@@ -497,7 +501,9 @@ class ModelAlias(Base):
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint("brand_id", "alias_normalized", name="uq_model_alias_per_brand"),
+        UniqueConstraint(
+            "category_id", "brand_id", "alias_normalized", name="uq_model_alias_per_category"
+        ),
         CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
         Index("ix_model_aliases_normalized", "alias_normalized"),
     )
