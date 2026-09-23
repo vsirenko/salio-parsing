@@ -541,7 +541,7 @@ FINGERPRINTS = {
     "rdveikals-shop-1": "e0b3a42600f7",
     "rdveikals-tablets-1": "1ae570d9626a",
     "samsung-phones-2": "9653d4e6a46a",
-    "tablets-7": "f5adf534b922",
+    "tablets-8": "c69948baa73c",
     "tet-4": "751b4c587085",
     "tet-shop-1": "3129e8453377",
     "tet-tablets-1": "7aabd390e9ed",

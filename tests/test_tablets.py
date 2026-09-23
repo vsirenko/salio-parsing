@@ -66,7 +66,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-7"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-8"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
@@ -194,3 +194,26 @@ def test_an_ipad_s_model_names_its_generation():
     assert ipad("Apple iPad Air 11 M3 128GB Blue", "iPad Air M3") == "iPad Air M3"
     # A title naming none: no model, rather than one that is five machines.
     assert not ipad("Apple iPad Pro 9.7 32GB Gold", "iPad Pro")
+
+
+def test_the_glass_is_part_of_an_ipad_pro_s_model():
+    """Standard and nano-texture glass are two tablets; the catalogue held the standard one
+    under two names and filed rdveikals' nano one, glass written after the capacity, under
+    the standard."""
+    assert ipad(
+        'Apple iPad Pro 13" M5 256GB WiFi w/Standard Glass', "iPad Pro M5 With Standard Glass"
+    ) == ("iPad Pro M5")
+    assert ipad('Apple iPad Pro 11" M5 WiFi+Cell 2TB Nano-texture glass Silver', "iPad Pro M5") == (
+        "iPad Pro M5 Nano-texture"
+    )
+    # `standard` alone is not about the glass.
+    assert (
+        read(
+            {
+                "name": "Samsung Galaxy Tab S9 FE Standard Edition 128GB",
+                "model": "Galaxy Tab S9 FE Standard Edition",
+            },
+            category=TABLETS,
+        )["model"]
+        == "Galaxy Tab S9 FE Standard Edition"
+    )
