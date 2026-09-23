@@ -560,11 +560,14 @@ and the questions that have to be answered with real data first, are written dow
       each, 83.8% and 83.0% placed. The registry then took the colours (`astropelēka`,
       `astromelna`, `zvaigžņu`, `granīta`, `platīna`, `platinum`) and the brands (Amazon,
       Blow, Huion, Umax, XORO, each with its spelling alias — a brand with no alias resolves
-      nothing), and the same day it was 94.3% and 88.2%, every iPad placed. One phone moved
+      nothing), and the same day it was 94.3% and 88.2%, every iPad placed; 90.0% for 1a once the codes
+      came off. One phone moved
       with it: Lagenio Panther 1 `Platinum` now reads silver. What is left:
-      - 1a leaves the article code in the model where ksenukai does not: `MatePad 53013UJQ`,
-        `Galaxy Tab S11 X730`, `Pad 8 71703`, `Yoga Tab Plus ZAEG0022PL` — most of 1a's 17
-        `signals_unmatched`;
+      - ~~codes in the model~~: both shops left them in, ksenukai's barcodes only hid it.
+        The tablet channels cut them by shape since `onea-tablets-2` (38 of 458 models
+        moved, no phone), and 1a went to 90.0%. What 1a has left unmatched (11) is mostly a
+        model no shop with a barcode has brought in yet (`MatePad 12`, `Galaxy Tab S10+ 12`)
+        — with no barcode 1a cannot start an entry, only join one;
       - `axis_unpublished` 7 + 8: a listing naming no radio (`Idea Tab 11`, `Galaxy Tab S11`)
         against an entry that has one. A tablet that names none is almost always Wi-Fi only,
         but that is a guess until measured against a shop that states it; 152 of 458 name

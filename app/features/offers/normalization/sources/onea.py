@@ -19,7 +19,7 @@ from app.features.offers.normalization.shops.onea import _PART_NUMBER, _head
 from app.features.offers.normalization.sources.ksenukai import color_from_title
 
 SLUG = "onea-phones"
-VERSION = "onea-4"
+VERSION = "onea-5"
 
 _TRAILING = re.compile(r"[\s,/-]+$")
 
@@ -77,9 +77,31 @@ RULESET = register(
 # of 1a's 229 tablets. ksenukai's own model rule reads its phones from a line field its
 # tablets do not carry, and left `11` and `M4 11`; so both shops' tablets run this one.
 TABLETS_SLUG = "onea-tablets"
-TABLETS_VERSION = "onea-tablets-1"
+TABLETS_VERSION = "onea-tablets-2"
 KSENUKAI_TABLETS_SLUG = "ksenukai-tablets"
-KSENUKAI_TABLETS_VERSION = "ksenukai-tablets-1"
+KSENUKAI_TABLETS_VERSION = "ksenukai-tablets-2"
+
+# The codes the group leaves inside a tablet's head, by shape: Xiaomi's five-digit article
+# (`Pad 8 71703`), Huawei's part number (`MatePad 53013UJQ`), Samsung's model code in full
+# or short (`SM-X135FZAAEEE`, `Galaxy Tab S11 X730`), and a code that is letters, three or
+# more digits and letters again (`TB390FU`, `ZAEG0022PL`). A name is not one of them: the
+# same heads carry `Fun 1008`, `Viva H1003`, `MegaPad 2404v7` and `Iconia V11-21M`, and bigbox
+# writes those names too.
+_TABLET_CODE = re.compile(
+    r"(?<!\S)(?:\d{5,}[A-Z]*|SM-[A-Z0-9]+|[A-Z]\d{3}|[A-Z]{2,}\d{3,}[A-Z]{2,})(?!\S)"
+)
+_SPACES = re.compile(r"\s{2,}")
+
+
+def _tablet_model(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The phone cut, and then the codes the head still holds, wherever in it they sit."""
+    model = _model(payload, fields, vocabulary).get("model")
+    if not model:
+        return {}
+    model = _SPACES.sub(" ", _TABLET_CODE.sub("", model)).strip()
+    return {"model": model} if model else {}
 
 
 def _tablet_rules(prefix: str) -> tuple[Rule, ...]:
@@ -90,9 +112,14 @@ def _tablet_rules(prefix: str) -> tuple[Rule, ...]:
             why=(
                 "The sister shops' title order, cut as for 1a's phones: the head before the"
                 " first comma, the maker's code off its end. The screen size after the comma"
-                " is put back by the tablet category's rule."
+                " is put back by the tablet category's rule. A tablet's head holds more codes"
+                " than a phone's, and not only at the end: on 23.09.2026 38 of 458 tablets"
+                " kept one (`Pad 8 71703`, `Galaxy Tab S11 X730`, `Yoga Tab Plus ZAEG0022PL`,"
+                " `Galaxy Tab A11 SM-X135FZAAEEE Enterprise Edition`), and a model with a code"
+                " in it agrees with no other shop — 17 of 1a's, with no barcode to fall back"
+                " on, were unplaced for it."
             ),
-            body=_model,
+            body=_tablet_model,
         ),
         Rule(
             id=f"{prefix}-tablets-color-from-title",
