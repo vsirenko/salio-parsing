@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "dateks-phones"
-VERSION = "dateks-2"
+VERSION = "dateks-3"
 
 # What the shop has, in its own words. `Birojā` is the office counter and is stock like any
 # other; `Pasūtāms` is the supplier's shelf, not ours.

@@ -76,7 +76,7 @@ def test_a_feed_row_is_read():
     assert fields["brand_raw"] == "Apple"
     assert fields["category_raw"] == "Elektronika / Telefoni"
     # Punctuation out, digits kept.
-    assert fields["gtin"] == "194253000001"
+    assert fields["gtin"] == "00194253000001"
     # A comma decimal separator and a space thousands separator are how feeds for humans
     # are written across the Baltics.
     assert str(fields["price"]) == "1179.00"
@@ -124,7 +124,7 @@ def test_one_observation_creates_the_listing_and_its_reading(client):
     reading = client.get(
         f"/api/admin/raw-offers/{result['raw_offer_id']}/reading", headers=auth(token)
     ).json()
-    assert reading["gtin"] == "194253000001"
+    assert reading["gtin"] == "00194253000001"
     assert reading["brand_raw"] == "Apple"
     # A brand string, not a brand: resolving it is matching's work.
     assert reading["brand_id"] is None
@@ -279,7 +279,7 @@ def test_renormalizing_is_idempotent(client):
     )
     assert again.status_code == 200
     assert again.json()["id"] == result["normalized_offer_id"]
-    assert again.json()["gtin"] == "194253000001"
+    assert again.json()["gtin"] == "00194253000001"
 
 
 # --- the measurement everything is downstream of ---

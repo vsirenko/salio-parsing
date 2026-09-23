@@ -202,6 +202,12 @@ is also what a candidate queue would be filled from.
 - **Choosing a barcode is a reading decision, not a parser's.** Check digits and GS1's
   reserved prefixes are a standard, so `normalization/barcodes.py` owns it: a channel hands
   over whatever the shop called its codes, and one place decides which is real.
+- **A barcode has one form: a zero-padded GTIN-14.** A UPC-A and the EAN-13 it becomes with
+  a leading zero are one code, and stored as written they were two: 229 of 2736 codes were
+  read both ways, and the barcode rung missed between the shops that wrote them
+  differently. `barcodes.canonical` pads every code a reading keeps, the catalogue pads one
+  typed in by hand, and `variant_gtins` refuses anything but fourteen digits. A channel
+  still hands the shop's own digits over untouched — the padding is a reading decision.
 - **A source names its category** (`sources.category_id`, nullable). It is what selects the
   category's rules. Null means a channel carrying a whole shop, and then those rules simply
   do not apply — honest rather than a gap, because reading a monitor by a phone's rules is a

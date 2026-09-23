@@ -36,6 +36,19 @@ def restricted(code: str) -> bool:
     return digits.startswith(RESTRICTED)
 
 
+# Every barcode is stored as a GTIN-14, zero-padded. A UPC-A and the EAN-13 it becomes with
+# a leading zero are one code — `840493610849` at rdveikals and `0840493610849` at dateks are
+# one Motorola — and 229 of 2736 distinct codes were read both ways on 23.09.2026, so the
+# barcode rung missed between exactly the shops that wrote them differently. Padding is the
+# standard's own rule for comparing GTINs of different lengths, and it loses nothing.
+CANONICAL_LENGTH = 14
+
+
+def canonical(code: str) -> str:
+    """The one form a barcode is stored and compared in."""
+    return _DIGITS.sub("", str(code)).zfill(CANONICAL_LENGTH)
+
+
 def pick(candidates: object) -> str | None:
     """The one real barcode in a list, or nothing.
 
@@ -49,4 +62,4 @@ def pick(candidates: object) -> str | None:
     found = [
         _DIGITS.sub("", str(value)) for value in values if valid(value) and not restricted(value)
     ]
-    return max(found, key=len) if found else None
+    return canonical(max(found, key=len)) if found else None

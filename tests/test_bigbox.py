@@ -164,9 +164,9 @@ def test_the_rules_find_what_generic_cannot(event_loop):
     assert generic["mpn"] is None
 
     full = read(fields, source_slug="bigbox-phones", category="phones")
-    assert full["gtin"] == "6941749811523"
+    assert full["gtin"] == "06941749811523"
     assert full["mpn"] == "Oukitel WP56 Black"
-    assert full["ruleset_version"] == "generic-1+phones-12+bigbox-4"
+    assert full["ruleset_version"] == "generic-2+phones-12+bigbox-5"
 
 
 def test_the_phone_line_is_not_the_model(event_loop):

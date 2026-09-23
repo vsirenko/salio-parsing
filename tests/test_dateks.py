@@ -242,7 +242,7 @@ def reading(payload: dict | None = None):
 def test_the_barcode_is_picked_out_of_the_list():
     """643 of 745 name at least one code, and 99 name more than one — the maker's beside a
     distributor's. Dropping those would give up 88 barcodes another shop also has."""
-    assert reading()["gtin"] == "6936520895564"
+    assert reading()["gtin"] == "06936520895564"
 
 
 def test_a_card_naming_no_code_reads_as_having_none():
@@ -316,4 +316,4 @@ def test_without_the_registry_the_gap_stays_visible():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-1+phones-12+dateks-2"
+    assert reading()["ruleset_version"] == "generic-2+phones-12+dateks-3"

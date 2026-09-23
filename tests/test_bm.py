@@ -158,7 +158,7 @@ def test_the_generic_layer_already_reads_most_of_it():
 
     fields = read(one("Xiaomi 15T"), source_slug="bm-phones")
     assert fields["brand_raw"] == "Xiaomi"
-    assert fields["gtin"] == "6932554448912"
+    assert fields["gtin"] == "06932554448912"
     assert fields["mpn"] == "MZB0KY9EU"
     assert fields["currency_code"] == "EUR"
 
@@ -263,4 +263,4 @@ def test_a_marketing_name_resolves_to_nothing():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-1+phones-12+bm-2"
+    assert reading()["ruleset_version"] == "generic-2+phones-12+bm-2"

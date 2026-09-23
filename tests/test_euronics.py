@@ -189,7 +189,7 @@ def test_the_generic_layer_already_reads_nearly_all_of_it(event_loop):
 
     fields = read(product(event_loop), source_slug="euronics-phones")
     assert fields["brand_raw"] == "Samsung"
-    assert fields["gtin"] == "8806095851136"
+    assert fields["gtin"] == "08806095851136"
     assert fields["mpn"] == "SM-S931BLBDEUE"
     assert fields["model"] == "Galaxy S25"
     assert float(fields["price"]) == 839.99
@@ -251,5 +251,5 @@ def test_the_ruleset_version_says_what_was_applied(event_loop):
     # The Samsung the fixture holds also selects the brand layer, which is the point of
     # the composed version: it names every ruleset that touched the reading.
     assert reading(event_loop)["ruleset_version"] == (
-        "generic-1+phones-12+euronics-1+samsung-phones-2"
+        "generic-2+phones-12+euronics-1+samsung-phones-2"
     )

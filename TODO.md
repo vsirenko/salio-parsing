@@ -556,13 +556,21 @@ and the questions that have to be answered with real data first, are written dow
       six of 9096 and no phone. The two that were matched were unlinked and their entries
       hidden; the third was on the real `Ulefone RugKing` phone through the tablet's barcode,
       which came off the phone. Three were already queued and stay there.
-- [ ] **One barcode written two ways is two barcodes.** `0840493610849` at dateks and
-      `840493610849` at rdveikals are one Motorola: the same code as an EAN-13 with its
-      leading zero and as a UPC-A without it. 229 of 2736 distinct codes in the readings on
-      23.09.2026 appear in both forms, and 223 in `variant_gtins`, so the barcode rung misses
-      between exactly the shops that write them differently. `barcodes.pick` checks the digit
-      and keeps the shop's length; one canonical form (GTIN-14, zero-padded) is the fix, and
-      it moves every stored code, so it wants a migration and a reparse.
+- [x] **One barcode written two ways was two barcodes.** `0840493610849` and
+      `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
+      is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,
+      held there by the column's check. Migrated and re-read on 23.09.2026: nothing but the
+      padding moved. 160 entries held both forms of one code and keep one; 9 pairs of entries
+      that were one phone apart are merged.
+- [ ] **60 barcodes sit on two entries that are not one product.** Found once one code had
+      one form: 42 pairs differ in colour (`iPhone 16 Plus 512 GB blue` and `white`), 17 in
+      model (`iPhone 17 Pro Max` and `17 Pro`), 1 in storage. `merge_duplicates` checks
+      brand and category only and would fold a blue phone into a white one, so it was not
+      run. Nothing is filed wrongly because of them — a listing that finds two entries by a
+      barcode has a contradicting learned code retired or is queued `ambiguous` — but each is
+      one wrong barcode on one entry, to find and take off. Six clean-looking pairs were left
+      as well: two cross a brand (`Artfone`/`Sponge`, `RugOne`/`Ulefone`), four are an
+      uncoloured `Moto G17`/`G37` entry that matches two coloured ones.
 - [ ] **Working memory tells some phones apart, and the key does not carry it.** Measured on
       23.09.2026 over 11995 pairs of barcodes that share a model: storage or colour tells
       91.5% of them apart; 56 pairs differ only in RAM — `Moto G17 4/128` and `8/128`, `Moto

@@ -295,7 +295,11 @@ class CatalogService:
         await self._variant(variant_id)
         audit.set_target("variant", variant_id)
 
+        # The form every reading stores, so a barcode typed in from a box meets the one a shop
+        # sent. The column's check holds the two to it.
         digits = payload.value.strip()
+        if digits.isdigit() and 8 <= len(digits) <= 14:
+            digits = digits.zfill(14)
         row = VariantGtin(variant_id=variant_id, gtin=digits, origin=payload.origin.value)
         self.session.add(row)
         try:

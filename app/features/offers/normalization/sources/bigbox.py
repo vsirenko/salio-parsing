@@ -13,7 +13,7 @@ from app.features.offers.normalization import barcodes, colours
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "bigbox-phones"
-VERSION = "bigbox-4"
+VERSION = "bigbox-5"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)

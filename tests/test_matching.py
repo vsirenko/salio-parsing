@@ -124,7 +124,7 @@ def test_the_evidence_says_what_the_link_is_made_of(client):
     run_on(client, token, offer)
 
     matches = client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json()
-    assert matches[0]["evidence"] == {"signal": "gtin", "value": "194253000001"}
+    assert matches[0]["evidence"] == {"signal": "gtin", "value": "00194253000001"}
     assert matches[0]["confidence"] == "1.000"
 
 
@@ -891,7 +891,7 @@ def test_a_confirmed_model_match_keeps_the_barcode_it_was_made_without(client):
         external_id="A-2",
     )
     assert run_on(client, token, theirs)["method"] == "brand_model"
-    assert gtins_of(client, token, variant_id) == {"4006381333931", "5902983617747"}
+    assert gtins_of(client, token, variant_id) == {"04006381333931", "05902983617747"}
 
 
 def test_the_kept_barcode_is_what_places_the_next_listing(client):
@@ -961,7 +961,7 @@ def test_an_unconfirmed_model_match_does_not_keep_the_barcode(client):
         external_id="A-2",
     )
     assert run_on(client, token, theirs)["method"] == "brand_model"
-    assert gtins_of(client, token, variant_id) == {"4006381333931"}
+    assert gtins_of(client, token, variant_id) == {"04006381333931"}
 
 
 # --- an entry learns what its listings know ---
@@ -1432,7 +1432,7 @@ def test_a_barcode_is_kept_only_when_every_axis_was_weighed(client):
         external_id="A-2",
     )
     assert run_on(client, token, coloured)["method"] == "brand_model"
-    assert gtins_of(client, token, variant_id) == {"4006381333931"}, "the barcode was not kept"
+    assert gtins_of(client, token, variant_id) == {"04006381333931"}, "the barcode was not kept"
 
 
 def test_a_silent_axis_is_not_agreement(client):
@@ -1479,7 +1479,7 @@ def test_a_silent_axis_is_not_agreement(client):
         external_id="A-2",
     )
     assert run_on(client, token, also_silent)["method"] == "brand_model"
-    assert gtins_of(client, token, variant_id) == {"4006381333931"}, "the barcode was not kept"
+    assert gtins_of(client, token, variant_id) == {"04006381333931"}, "the barcode was not kept"
 
 
 def test_a_category_with_no_declared_axes_keeps_the_older_bar(client):
@@ -1528,7 +1528,7 @@ def test_a_category_with_no_declared_axes_keeps_the_older_bar(client):
         external_id="A-2",
     )
     assert run_on(client, token, second)["method"] == "brand_model"
-    assert gtins_of(client, token, variant_id) == {"4006381333931", "5902983617747"}
+    assert gtins_of(client, token, variant_id) == {"04006381333931", "05902983617747"}
 
 
 # --- a shop that publishes no barcode at all ---
@@ -1806,7 +1806,7 @@ def test_a_barcode_reaches_the_catalogue_from_the_part_number_rung(client):
     assert run_on(client, token, coded)["method"] == "brand_mpn"
 
     gtins = client.get(f"/api/admin/variants/{variant_id}/gtins", headers=auth(token)).json()
-    assert "4006381333931" in [row["gtin"] for row in gtins], (
+    assert "04006381333931" in [row["gtin"] for row in gtins], (
         "the entry never learned the barcode its own listing carried"
     )
 

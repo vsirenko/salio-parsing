@@ -13,9 +13,11 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from app.features.offers.normalization import barcodes
+
 # Bumped whenever the reading below changes. Stored on every row it produces, so two
 # readings of the same bytes can be told apart and compared.
-RULESET_VERSION = "generic-1"
+RULESET_VERSION = "generic-2"
 
 # A generic reading of a flat object. Real sources get their own rulesets; this one exists
 # so that a sample can be loaded by hand and measured before any of them are written.
@@ -148,7 +150,7 @@ def _gtin(payload: dict[str, Any]) -> str | None:
     if value is None:
         return None
     digits = "".join(_DIGITS.findall(str(value)))
-    return digits if 8 <= len(digits) <= 14 else None
+    return barcodes.canonical(digits) if 8 <= len(digits) <= 14 else None
 
 
 def _price(payload: dict[str, Any]) -> Decimal | None:

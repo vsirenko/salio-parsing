@@ -18,7 +18,7 @@ from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocab
 from app.features.offers.normalization.sources.ksenukai import color_from_title
 
 SLUG = "onea-phones"
-VERSION = "onea-1"
+VERSION = "onea-2"
 
 # `SM-S948BZKDEUE`, `MZB0MY8EU`, `MTP03PX/A`. A maker's own code: letters and digits with no
 # spaces, long enough not to be a word, and at the end of the part of the title before the

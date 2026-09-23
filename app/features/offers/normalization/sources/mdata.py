@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "mdata-phones"
-VERSION = "mdata-1"
+VERSION = "mdata-2"
 
 # What this shop says instead of whether it has the thing. Both mean it can be bought.
 SHIPS_IN = ("VEIKALĀ", "1-2 days", "3-5 days")

@@ -658,7 +658,7 @@ class VariantGtin(Base):
     first_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
     __table_args__ = (
-        CheckConstraint("gtin ~ '^[0-9]{8,14}$'", name="gtin_digits"),
+        CheckConstraint("gtin ~ '^[0-9]{14}$'", name="gtin_digits"),
         CheckConstraint("origin in ('rule', 'judge', 'human')", name="origin_known"),
         # The strongest single lookup the matcher has. Not unique: sellers reuse and
         # mistype barcodes, so a clash is a conflict to record rather than a write to lose.

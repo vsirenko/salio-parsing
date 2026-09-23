@@ -218,7 +218,7 @@ def reading(event_loop, payload: dict | None = None):
 
 def test_the_generic_layer_reads_the_identifiers_without_help(event_loop):
     fields = reading(event_loop)
-    assert fields["gtin"] == "195951416649"
+    assert fields["gtin"] == "00195951416649"
     assert fields["mpn"] == "MJRR4HX/A"
     assert float(fields["price"]) == 1499
 
@@ -258,4 +258,4 @@ def test_the_colour_comes_out_of_the_specification_table(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-1+phones-12+tet-2")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-2+phones-12+tet-2")

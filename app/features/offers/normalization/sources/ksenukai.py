@@ -20,7 +20,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "ksenukai-phones"
-VERSION = "ksenukai-5"
+VERSION = "ksenukai-6"
 
 # The shop's own article number. Every one of the 541 phones in the older corpus began
 # `Y0000`, without exception.

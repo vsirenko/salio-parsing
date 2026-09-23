@@ -33,7 +33,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "m79-phones"
-VERSION = "m79-5"
+VERSION = "m79-6"
 
 # Both of the shop's words mean it can be bought. `Ir noliktavā` is the warehouse and
 # `Ir veikalā` the shop floor — a difference in where it sits, not in whether it is there.

@@ -196,7 +196,7 @@ def reading(payload: dict | None = None):
 def test_the_barcode_is_picked_out_of_the_numbers_the_shop_mislabelled():
     """`model` holds the barcode here and `mpn` an internal number, so nothing is trusted by
     the name of the field it arrived in."""
-    assert reading()["gtin"] == "195949036064"
+    assert reading()["gtin"] == "00195949036064"
 
 
 def test_how_soon_reads_as_in_stock():
@@ -225,4 +225,4 @@ def test_a_record_the_shop_never_described_is_cut_at_the_configuration():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"].startswith("generic-1+phones-12+mdata-1")
+    assert reading()["ruleset_version"].startswith("generic-2+phones-12+mdata-2")

@@ -39,8 +39,8 @@ def test_a_key_with_no_rules_is_read_by_what_is_more_general():
     """Not a failure: it is how a sample gets loaded and measured before rules exist."""
     assert rules_for() == ()
     assert rules_for("nobody-has-written-this-one") == ()
-    assert version_for("nobody-has-written-this-one") == "generic-1"
-    assert version_for(category="televisions") == "generic-1"
+    assert version_for("nobody-has-written-this-one") == "generic-2"
+    assert version_for(category="televisions") == "generic-2"
 
 
 def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
@@ -107,12 +107,12 @@ def test_a_rule_can_be_declared_and_not_written():
 
 def test_the_version_names_what_was_applied():
     """Composed rather than opaque, so a row can be attributed without a lookup."""
-    assert version_for() == "generic-1"
-    assert version_for(KSENUKAI) == "generic-1+ksenukai-5"
-    assert version_for(KSENUKAI, category=PHONES) == "generic-1+phones-12+ksenukai-5"
+    assert version_for() == "generic-2"
+    assert version_for(KSENUKAI) == "generic-2+ksenukai-6"
+    assert version_for(KSENUKAI, category=PHONES) == "generic-2+phones-12+ksenukai-6"
     assert (
         read(item(), source_slug=KSENUKAI, category=PHONES)["ruleset_version"]
-        == "generic-1+phones-12+ksenukai-5"
+        == "generic-2+phones-12+ksenukai-6"
     )
 
 
@@ -178,7 +178,7 @@ def test_generic_alone_misses_what_matching_needs(client=None):
 
 def test_the_barcode_is_found_among_the_other_numbers():
     fields = read(item(), source_slug=KSENUKAI, category=PHONES)
-    assert fields["gtin"] == "5902983617747"
+    assert fields["gtin"] == "05902983617747"
 
 
 def test_the_model_is_found_in_the_attribute_table():
@@ -239,9 +239,19 @@ def test_a_number_a_shop_assigned_itself_is_refused():
     assert barcodes.pick(["2001234567893"]) is None
 
 
+def test_a_barcode_is_one_code_however_many_digits_a_shop_writes():
+    """`840493610849` at rdveikals and `0840493610849` at dateks are one Motorola; stored as
+    written they were two barcodes and the rung missed between the two shops."""
+    from app.features.offers.normalization import barcodes
+
+    assert barcodes.pick("840493610849") == barcodes.pick("0840493610849") == "00840493610849"
+    assert barcodes.pick("96385074") == "00000096385074"  # a GTIN-8, padded by the same rule
+    assert barcodes.canonical("0840493610849") == "00840493610849"
+
+
 def test_the_longer_of_two_forms_wins():
     """A shop listing both is listing an EAN and the same number without its check digit."""
-    assert barcodes.pick(["590298361774", "5902983617747"]) == "5902983617747"
+    assert barcodes.pick(["590298361774", "05902983617747"]) == "05902983617747"
 
 
 def test_nothing_valid_is_nothing():
@@ -260,7 +270,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-1+phones-12+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-2+phones-12+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -478,17 +488,17 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
     "apple-phones-2": "f940eea49212",
-    "bigbox-4": "6e7e74b83ca7",
+    "bigbox-5": "a7a353460786",
     "bm-2": "7a3d7ac028a2",
     "cec-1": "e0252dfe4696",
-    "dateks-2": "323fc66f73e7",
+    "dateks-3": "a857d7710f38",
     "discover-2": "4eac3808c544",
     "google-phones-3": "b13ca41b33fa",
-    "ksenukai-5": "90236ca60ef0",
-    "m79-5": "3b6eeff1998f",
+    "ksenukai-6": "4abed58b2f32",
+    "m79-6": "26db29a39cbf",
     "oneplus-phones-1": "29eaabd5e1ad",
-    "mdata-1": "474fbb01bcb9",
-    "onea-1": "958859debd73",
+    "mdata-2": "7d117e88b2ff",
+    "onea-2": "9f01fd11d540",
     "euronics-1": "e61bf95a7a78",
     "phones-12": "e44fa34c0a51",
     "rdveikals-4": "f5078e0afc82",
