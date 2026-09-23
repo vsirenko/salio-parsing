@@ -255,3 +255,38 @@ def test_the_ruleset_version_says_what_was_applied(event_loop):
     assert reading(event_loop)["ruleset_version"] == (
         "generic-3+phones-13+euronics-shop-1+samsung-phones-2"
     )
+
+
+# --- tablets: the same pages under the tablets' own leaf ---
+
+
+def test_the_tablet_channel_asks_for_its_own_leaf(event_loop):
+    from app.features.runs.channels.euronics import TABLETS_CHANNEL
+
+    asked: list[str] = []
+    event_loop.run_until_complete(TABLETS_CHANNEL.discover(shop(asked=asked), job()))
+    assert asked and all("/en/phones/tablets/tablets?f=" in url for url in asked)
+    assert TABLETS_CHANNEL.slug == "euronics-tablets"
+
+
+def tablet(name: str, model: str) -> str | None:
+    from app.features.offers.normalization import read
+
+    return read(
+        {"name": name, "brand": name.split()[0], "model": model},
+        source_slug="euronics-tablets",
+        shop_slug="euronics",
+        category="tablets",
+    ).get("model")
+
+
+def test_a_stated_model_gets_the_series_the_shop_left_off():
+    """`Tab S11 Ultra` for `Samsung Galaxy Tab S11 Ultra, …`: every other shop writes the
+    series. Where the name has lost the chip, the stated model stands."""
+    assert tablet("Samsung Galaxy Tab S11 Ultra, 256 GB, 5G, gray - Tablet", "Tab S11 Ultra") == (
+        "Galaxy Tab S11 Ultra"
+    )
+    assert tablet(
+        'Apple iPad Pro 11", M5 (2025), 256 GB, WiFi, glossy, space black - Tablet',
+        'iPad Pro 11" M5',
+    ) == ("iPad Pro M5")

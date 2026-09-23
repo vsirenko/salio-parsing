@@ -517,6 +517,7 @@ FINGERPRINTS = {
     "discover-3": "b9c94e3c76fa",
     "discover-shop-1": "6065096d8d22",
     "euronics-shop-1": "07e9d1415e04",
+    "euronics-tablets-1": "0deff7ac20bc",
     "google-phones-3": "b13ca41b33fa",
     "ksenukai-7": "c39ae807fae8",
     "ksenukai-shop-1": "b5a073020a15",

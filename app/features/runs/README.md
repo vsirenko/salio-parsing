@@ -196,6 +196,7 @@ lifecycle changes.
 | `dateks-tablets` | dateks.lv | retail | markup | 402 | not yet run |
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |
+| `euronics-tablets` | euronics.lv | retail | json_ld | 122 | not yet run |
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
 | `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
 | `tet-phones` | tet.lv | retail | markup | 319 | not yet run |

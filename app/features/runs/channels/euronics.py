@@ -48,6 +48,10 @@ SLUG = "euronics-phones"
 SITE = "https://www.euronics.lv"
 # The English site: the Latvian path answers 404 and the shop's own analytics is in English.
 CATEGORY_PATH = "/en/phones/smartphones/all-smartphones"
+# The tablets' own leaf. E-readers, drawing tablets, covers and keyboards are leaves beside it,
+# not inside it — unlike bigbox, whose one tablet category held all of them.
+TABLETS_SLUG = "euronics-tablets"
+TABLET_CATEGORY_PATH = "/en/phones/tablets/tablets"
 # The sort the token names. `top` is the shop's default and the only one measured.
 SORT = b"top"
 # Far past the end, so one request returns the whole cumulative listing. 319 phones sat in
@@ -61,7 +65,9 @@ MORE_TO_COME = "nextAnchor"
 class Euronics:
     """One channel: this shop's phones, off its pages."""
 
-    slug = SLUG
+    def __init__(self, slug: str = SLUG, category_path: str = CATEGORY_PATH) -> None:
+        self.slug = slug
+        self.category_path = category_path
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         """One request for the whole category, and a check that it really was the whole.
@@ -73,12 +79,12 @@ class Euronics:
         part = await self._listing(fetcher, WHOLE_CATEGORY)
         cards = _cards(part.body)
         if not cards:
-            raise ValueError(f"no products on {CATEGORY_PATH}")
+            raise ValueError(f"no products on {self.category_path}")
         if MORE_TO_COME in part.body:
             # The jump did not reach the end, so this response is a prefix of the category
             # and every product past it would be read as gone.
             raise ValueError(
-                f"{CATEGORY_PATH} still offers more after page {WHOLE_CATEGORY}:"
+                f"{self.category_path} still offers more after page {WHOLE_CATEGORY}:"
                 " the category outgrew the jump"
             )
         return cards
@@ -96,7 +102,7 @@ class Euronics:
                 page,
                 Part(
                     role="card",
-                    url=SITE + CATEGORY_PATH,
+                    url=SITE + self.category_path,
                     status=200,
                     body=json.dumps(listing.card, ensure_ascii=False),
                 ),
@@ -119,7 +125,7 @@ class Euronics:
 
     async def _listing(self, fetcher: Fetcher, page: int) -> Part:
         return await fetcher.get(
-            f"{SITE}{CATEGORY_PATH}?f={_token(page)}",
+            f"{SITE}{self.category_path}?f={_token(page)}",
             role="listing",
             headers={"Accept-Language": "en"},
         )
@@ -292,3 +298,4 @@ def _amount(text: str) -> str:
 
 
 register(Euronics())
+TABLETS_CHANNEL = register(Euronics(slug=TABLETS_SLUG, category_path=TABLET_CATEGORY_PATH))
