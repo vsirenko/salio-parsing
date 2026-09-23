@@ -195,6 +195,12 @@ lifecycle changes.
 | `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
 | `tet-phones` | tet.lv | retail | markup | 319 | not yet run |
 
+**A tablet filed among a shop's phones is left out at discovery**, through one shared check,
+`channels/tablets.py`: the word in the feed's languages, `Wi-Fi + 4G`, and the makers'
+tablet lines. m79 and bigbox need it — six tablets had become phone entries by 23.09.2026,
+`Blackview Active 7 Wi-Fi + 4G 11` among them — and a channel that meets the same thing
+calls the same function rather than growing a pattern of its own.
+
 `rdveikals-phones` is the first that reads markup and the first with a cheap pass. Its own
 module says why its discovery walks the listing rather than the sitemap, and why the brand
 comes out of an analytics block instead of the microdata beside it.

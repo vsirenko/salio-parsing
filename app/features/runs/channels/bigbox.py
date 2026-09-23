@@ -20,6 +20,7 @@ import json
 from typing import Any
 
 from app.features.runs.channel import Listing, Part, Snapshot, register
+from app.features.runs.channels.tablets import is_a_tablet
 from app.features.runs.fetching import Fetcher
 from app.features.runs.schemas import Job
 
@@ -59,7 +60,10 @@ class Bigbox:
                     card={"item": item, "names": names},
                 )
                 for item in items
-                if item.get("id") is not None
+                # The phones category holds three tablets, `planšetdators` in their names,
+                # and nothing else here says a card is one: a tablet collected as a phone
+                # becomes a phone entry nobody can tell from a real one.
+                if item.get("id") is not None and not is_a_tablet(_text(item.get("title")))
             ]
             offset += len(items)
             if offset >= int(page.get("total") or 0):

@@ -150,6 +150,10 @@ def test_a_tablet_a_bundle_and_a_used_phone_are_left_out():
     assert _is_something_else("Samsung Z Fold 8 Ultra + Galaxy Watch Ultra 2 LTE 12/512GB")
     assert _is_something_else("Apple iPhone 13 Pro 256GB Starlight Remade by 2BNew")
     assert not _is_something_else("Samsung Galaxy A57 5G 8/128GB Awesome Gray")
+    # What the channel's own pattern let through, and what it would have wrongly taken.
+    assert _is_something_else("Blackview Active 7 Wi-Fi + 4G 11 128GB ACTIVE 7 6/128GB BLACK")
+    assert _is_something_else("Samsung SM-X400NZRREUE tablet 128 GB 27,7 cm (10.9) 6 GB")
+    assert not _is_something_else("Motorola Edge 70 12GB/512GB Lily Pad")
 
 
 def test_the_category_is_mixed_and_the_filter_is_what_keeps_it_honest(event_loop):

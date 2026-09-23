@@ -89,6 +89,20 @@ def test_a_listing_carries_the_record_and_the_names(event_loop):
     assert listings[0].card["names"]["attribute_string_466"]
 
 
+def test_a_tablet_in_the_phones_category_is_not_collected(event_loop):
+    """Three of them were: `Ulefone Rugking Pad 2 Pro 4G planšetdators`, and nothing but the
+    name says a card is one."""
+    tablet = {
+        **FIXTURE["items"][0],
+        "id": 999001,
+        "title": "Ulefone Rugking Pad 2 Pro 4G planšetdators, 256/8 GB, melns",
+    }
+    colour = {**FIXTURE["items"][1], "id": 999002, "title": "Motorola Edge 70 12GB/512GB Lily Pad"}
+    page = {**FIXTURE, "items": [tablet, colour], "total": 2}
+    _, listings = discover(event_loop, [page])
+    assert [x.external_id for x in listings] == ["999002"]
+
+
 # --- reading the shop's shape ---
 
 

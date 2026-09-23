@@ -103,6 +103,7 @@ from typing import Any
 import lxml.html
 
 from app.features.runs.channel import Listing, Part, Snapshot, register
+from app.features.runs.channels.tablets import is_a_tablet
 from app.features.runs.fetching import Fetcher
 from app.features.runs.schemas import Job
 
@@ -133,9 +134,6 @@ _PAGE_LINK = re.compile(re.escape(CATEGORY_PATH) + r"/(\d+)(?:[/?#\"']|$)")
 # unit in Finnish and it is here because this shop resells a Finnish feed: 33 of its phones
 # write `512/16 Gt` and were being dropped as accessories.
 _CAPACITY = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB|Gt)\b", re.IGNORECASE)
-# Sold in the phones category, states a capacity, and is not a phone. 19 of 2647 when this
-# was written; a tablet filed as a phone is a catalogue entry nobody can tell from a real one.
-_TABLET = re.compile(r"\b(?:iPad|Tablet|Galaxy Tab|Tab\s?[A-Z0-9]|[A-Za-z]*Pad)\b")
 # A phone sold with a watch or earbuds in the box. 13 of 2647, and the bundle price on a
 # phone's entry reads as that phone getting more expensive.
 _BUNDLE = re.compile(r"\+[^+]*\b(?:Watch|Buds|Band)\b|\b(?:incl|inkl)\.", re.IGNORECASE)
@@ -343,7 +341,9 @@ def _is_something_else(name: str) -> bool:
     upper = name.upper()
     if any(word in upper for word in REFURBISHED):
         return True
-    return bool(_TABLET.search(name) or _BUNDLE.search(name))
+    # Tablets through the shared check: this one's own pattern missed a lowercase `tablet`
+    # and a `Blackview Active 7 Wi-Fi + 4G 11`, and would have taken a `Lily Pad` colour.
+    return bool(is_a_tablet(name) or _BUNDLE.search(name))
 
 
 def _specs(item: Any) -> dict[str, str]:

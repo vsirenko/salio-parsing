@@ -553,13 +553,12 @@ and the questions that have to be answered with real data first, are written dow
       key moving. Two entries could not be: `Motorola Edge 70 Fusion 5G` v24120 and `Realme
       14` v25198 have no key because they duplicate v23902 and v23626 exactly, and merging
       them is a decision.
-- [ ] **Tablets in the phone catalogue.** Six on 23.09.2026: m79's `Blackview Active 7
-      Wi-Fi + 4G 11` (no tablet word, only `Wi-Fi + 4G`), m79's `Samsung SM-X400… tablet`
-      (the filter's `Tablet` is case-sensitive), m79's `Lenovo Tab K11` (collected before the
-      filter), and bigbox's `HONOR Pad 10`, `Ulefone Rugking Pad 2 Pro` and `Armor Pad 5
-      Ultra` (`planšetdators`; bigbox has no tablet filter). m79's `[A-Za-z]*Pad` would also
-      take `Motorola Edge 70 … Lily Pad`, which is a colour. Filters are for what is
-      collected next; the six already collected need hiding or unlinking, which is a call.
+- [x] **Tablets in the phone catalogue.** Six on 23.09.2026 (`Blackview Active 7 Wi-Fi + 4G
+      11`, a lowercase `tablet`, `Lenovo Tab K11`, bigbox's three `planšetdators`). m79 and
+      bigbox now leave them out through one check, `runs/channels/tablets.py`, which took all
+      six of 9096 and no phone. The two that were matched were unlinked and their entries
+      hidden; the third was on the real `Ulefone RugKing` phone through the tablet's barcode,
+      which came off the phone. Three were already queued and stay there.
 - [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
       Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
       not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals
