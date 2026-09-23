@@ -1251,16 +1251,17 @@ class MatchingService:
                 OfferMatch,
                 (OfferMatch.offer_id == RawOffer.offer_id) & (OfferMatch.superseded_at.is_(None)),
             )
-            # A reading that found no model is no name to give an entry: an iPad listing
-            # naming no generation reads with none on purpose, and renaming its entry to
-            # nothing failed the whole pass.
-            .where(NormalizedOffer.model.is_not(None), NormalizedOffer.model != "")
+            .where(NormalizedOffer.model.is_not(None))
             .subquery()
         )
         rows = await self.session.execute(
             select(newest.c.variant_id, Variant.model, newest.c.model, func.count())
             .join(Variant, Variant.id == newest.c.variant_id)
-            .where(newest.c.rank == 1)
+            # A newest reading that found no model is no name to give an entry — an iPad
+            # listing naming no generation reads with none on purpose, and renaming its entry
+            # to nothing failed the whole pass. Left out after the newest is chosen, not
+            # before, or an older reading takes its place and keeps a stale name standing.
+            .where(newest.c.rank == 1, newest.c.model != "")
             .group_by(newest.c.variant_id, Variant.model, newest.c.model)
         )
         readings: dict[int, tuple[str, Counter[str]]] = {}

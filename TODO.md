@@ -606,6 +606,12 @@ and the questions that have to be answered with real data first, are written dow
       wrong, not the shops; find how they were filed and move the identifiers. `iPad Pro M5`
       is also four spellings (`With Standard Glass`, `with nano-texture glass`, …) — the
       glass is a real difference, the spelling is not.
+- [ ] **Tablet entries that hold two generations.** Before an iPad's model had to name its
+      generation, the model rung filed `iPad` listings of different generations under one
+      `iPad` entry: v27470 holds bm's `iPad 10th Gen (2022)` beside the 2025 `iPad A16` of four
+      shops. The entry is renamed to what most listings read, and the minority stays on it.
+      The same untangling `tools/replus.py` did for the plus — each identifier's listings
+      vote — would take them off.
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,
