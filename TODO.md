@@ -556,6 +556,18 @@ and the questions that have to be answered with real data first, are written dow
       six of 9096 and no phone. The two that were matched were unlinked and their entries
       hidden; the third was on the real `Ulefone RugKing` phone through the tablet's barcode,
       which came off the phone. Three were already queued and stay there.
+- [ ] **ksenukai's and 1a's tablets, what is left of them.** First run 23.09.2026: 229
+      each, 83.8% and 83.0% placed; 153 of ksenukai's 168 entries and 160 of 1a's 171 are
+      shared with another shop. The rest, by cause:
+      - colour words the registry lacks: `astromelna` 20, `astropelēka` 20, `zvaigžņu` 14,
+        `granīta` 4, `platīna` 2 — every unplaced iPad is one of them (`axis_unpublished`);
+      - brands the registry lacks: Amazon, Blow, Huion, Umax, XORO — `brand_unknown` on 1a,
+        and promotion refuses them everywhere;
+      - 1a leaves the article code in the model where ksenukai does not: `MatePad 53013UJQ`,
+        `Galaxy Tab S11 X730`, `Pad 8 71703`, `Yoga Tab Plus ZAEG0022PL` — 17 unmatched;
+      - Denver's model is only its code (`TAQ-10463`) and the reading leaves it empty;
+      - no connectivity on 152 of 458: a tablet that names no radio is almost always Wi-Fi
+        only, but that is a guess until measured against a shop that states it.
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,
