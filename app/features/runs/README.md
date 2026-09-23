@@ -187,11 +187,11 @@ lifecycle changes.
 | `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 521 | 100% |
 | `bigbox-phones` | bigbox.lv | wholesale | private_api | 985 | 93.1% |
 | `bigbox-tablets` | bigbox.lv | wholesale | private_api | 537 | 98.5% placed |
-| `ksenukai-tablets` | ksenukai.lv | wholesale | private_api | 229 | not yet run |
+| `ksenukai-tablets` | ksenukai.lv | wholesale | private_api | 229 | 98.7% placed |
 | `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
-| `onea-tablets` | 1a.lv | wholesale | private_api | 229 | not yet run |
+| `onea-tablets` | 1a.lv | wholesale | private_api | 229 | 90.8% placed |
 | `rdveikals-phones` | rdveikals.lv | retail | markup | 1396 | 99.8% |
-| `rdveikals-tablets` | rdveikals.lv | retail | markup | 584 | not yet run |
+| `rdveikals-tablets` | rdveikals.lv | retail | markup | 584 | 99.0% placed |
 | `dateks-phones` | dateks.lv | retail | markup | 745 | not yet run |
 | `bm-phones` | bm.market | wholesale | graphql | 937 | not yet run |
 | `euronics-phones` | euronics.lv | retail | json_ld | 319 | not yet run |

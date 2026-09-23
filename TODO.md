@@ -575,6 +575,13 @@ and the questions that have to be answered with real data first, are written dow
       - Denver's model is only its code (`TAQ-10463`) and the reading leaves it empty — 4 at
         each shop;
       - `Surface Pro 10 13` and `Galaxy Tab A11 9` find two entries each (`ambiguous`).
+- [ ] **Tablets across four shops, 23.09.2026: 1543 of 1622 placed (95.1%).** rdveikals
+      578/584, ksenukai 226/229, bigbox 531/580, 1a 208/229. rdveikals brought 200 entries
+      with barcodes, and 1a — which can only join an entry — went from 90.0% to 90.8%. The
+      tablet model registry holds one name so far (`iPad A16`, spelled `iPad (A16)` and
+      `iPad 11th Gen A16`); ksenukai's and 1a's bare `iPad 11` is left alone, because an
+      `iPad 10th gen` at 10.9" rounds to the same thing. bigbox's 48 `signals_unmatched` are
+      its spec-sheet models (`Iconia Tab V11 (V11-21M-84N8) " WUXGA, IPS Touch, …`).
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,
