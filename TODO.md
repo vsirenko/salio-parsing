@@ -600,18 +600,15 @@ and the questions that have to be answered with real data first, are written dow
       only the pages whose record lacks an axis, or a slow pass of its own — before turning
       it back on. ksenukai's pages answer a challenge outright; its index already carries
       the fields, bar 5G.
-- [ ] **iPad Air M4 part numbers on `iPad Air M3` entries.** Checked through the part
-      numbers in shop names on 23.09.2026: 11 of bm's `iPad Air M4` codes and two of
-      euronics' `iPad Air M4 13` barcodes sit on entries named `iPad Air M3`. The entries are
-      wrong, not the shops; find how they were filed and move the identifiers. `iPad Pro M5`
-      is also four spellings (`With Standard Glass`, `with nano-texture glass`, …) — the
-      glass is a real difference, the spelling is not.
-- [ ] **Tablet entries that hold two generations.** Before an iPad's model had to name its
-      generation, the model rung filed `iPad` listings of different generations under one
-      `iPad` entry: v27470 holds bm's `iPad 10th Gen (2022)` beside the 2025 `iPad A16` of four
-      shops. The entry is renamed to what most listings read, and the minority stays on it.
-      The same untangling `tools/replus.py` did for the plus — each identifier's listings
-      vote — would take them off.
+- [x] **iPad Air M4 part numbers on `iPad Air M3` entries.** Found on 23.09.2026 through the
+      part numbers in shop names: 11 of bm's M4 codes and two of euronics' M4 barcodes on
+      `iPad Air M3` entries, and `iPad Pro M5` under four spellings. Fixed the same day: an
+      iPad Pro's glass is part of its model (`Nano-texture` or nothing, `tablets-8`), and
+      `tools/retablet.py` took the other iPads off each entry — 49 entries, 111 listings
+      moved, 56 barcodes and 24 part numbers taken off the wrong entry, 21 entries made.
+      Left on the entry they were on: five listings whose own barcode votes for it.
+- [x] **Tablet entries that hold two generations.** v27470's 2022 `iPad 10th Gen`
+      listing went to an entry of its own with the rest, through `tools/retablet.py`.
 - [x] **One barcode written two ways was two barcodes.** `0840493610849` and
       `840493610849` are one Motorola; 229 of 2736 codes were read both ways. Every barcode
       is now a zero-padded GTIN-14 (`barcodes.canonical`), in readings and in the catalogue,
