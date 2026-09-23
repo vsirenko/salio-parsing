@@ -18,7 +18,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "cec-phones"
-VERSION = "cec-2"
+VERSION = "cec-3"
 
 # What this channel collects, as the shop names the category it was resolved from.
 CATEGORY = "iPhone"
@@ -68,7 +68,16 @@ RULESET = register(
 # Purple`, which carries the capacity and the colour into the model and splits one iPad into
 # one product per configuration.
 TABLETS_SLUG = "cec-tablets"
-TABLETS_VERSION = "cec-tablets-1"
+TABLETS_VERSION = "cec-tablets-2"
+
+
+def _ipad_brand(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    if fields.get("brand_raw"):
+        return {}
+    return {"brand_raw": BRAND} if (payload.get("category") or "").strip() == "iPad" else {}
+
 
 _CAPACITY = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB)\b", re.IGNORECASE)
 
@@ -90,6 +99,16 @@ TABLETS_RULESET = register(
     Ruleset(
         version=TABLETS_VERSION,
         rules=(
+            Rule(
+                id="cec-tablets-brand",
+                layer=SOURCE,
+                why=(
+                    "An Apple reseller that states no brand on its iPads either: without it"
+                    " none of the 160 collected on 23.09.2026 resolved a maker, and none"
+                    " could be placed."
+                ),
+                body=_ipad_brand,
+            ),
             Rule(
                 id="cec-tablets-model-before-the-capacity",
                 layer=SOURCE,

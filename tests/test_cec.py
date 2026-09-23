@@ -182,7 +182,7 @@ def test_the_identity_axes_come_from_the_options(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-13+cec-2")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-13+cec-3")
 
 
 def test_an_ipad_s_stated_model_is_cut_at_its_capacity():
@@ -199,3 +199,19 @@ def test_an_ipad_s_stated_model_is_cut_at_its_capacity():
         category="tablets",
     )
     assert fields["model"] == "iPad mini (A17 Pro)"
+
+
+def test_an_ipad_is_apple_s():
+    from app.features.offers.normalization import read
+
+    fields = read(
+        {
+            "name": 'iPad Air 13" M4 256GB WiFi Space Grey',
+            "model": 'iPad Air 13" M4',
+            "category": "iPad",
+        },
+        source_slug="cec-tablets",
+        shop_slug="cec",
+        category="tablets",
+    )
+    assert fields["brand_raw"] == "Apple"
