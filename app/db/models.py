@@ -1286,7 +1286,8 @@ class JudgeVerdict(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind in ('brand_choice', 'variant_choice', 'colour_choice')", name="kind_known"
+            "kind in ('brand_choice', 'variant_choice', 'colour_choice', 'model_match')",
+            name="kind_known",
         ),
         CheckConstraint("confidence between 0 and 1", name="confidence_is_a_fraction"),
         Index("ix_judge_verdicts_kind_created", "kind", "created_at"),

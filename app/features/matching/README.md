@@ -15,6 +15,8 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `GET /api/admin/match-queue/summary` | the breakdown that says what to build next |
 | `POST /api/admin/matching/judge` | ask the judge about the brand choices, then retry them |
 | `POST /api/admin/matching/judge/colours` | buy the colour a title carries and no rule may read |
+| `POST /api/admin/matching/judge/matches` | ask whether each rule's match names the right model |
+| `GET /api/admin/matching/doubts` | the matches the judge doubts, for a person to decide |
 | `POST /api/admin/offers/{offer_id}/promote` | make the variant this listing was looking for |
 | `POST /api/admin/matching/promote` | do that for everything identifiable in the queue |
 

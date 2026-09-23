@@ -144,6 +144,11 @@ class Settings(BaseSettings):
     # starting point, not a measurement: the docs are explicit that a threshold has to be
     # evaluated against real data, and this catalogue has none yet.
     judge_min_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+    # A rule's match is listed for review when the judge gives the listing less than this
+    # chance of naming the entry's own model. Measured, unlike the one above: over all 8982
+    # live matches on 22.09.2026, below 0.1 about three flags in four were real misfiles,
+    # between 0.1 and 0.5 fewer than one in ten — mostly entry names carrying `5G` or `Z`.
+    judge_doubt_below: float = Field(default=0.1, ge=0.0, le=1.0)
 
     # --- Audit ---
     # Trust X-Forwarded-For / X-Request-ID. Only enable behind a proxy that rewrites them.

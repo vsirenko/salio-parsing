@@ -9,6 +9,7 @@ from app.core.config import settings
 BRAND_CHOICE = "brand_choice"
 VARIANT_CHOICE = "variant_choice"
 COLOUR_CHOICE = "colour_choice"
+MODEL_MATCH = "model_match"
 
 # A Choice has to be able to answer "neither". Without a way out the model can only pick
 # one of the options it was handed, and it will do that as confidently as any other
@@ -49,6 +50,37 @@ COLOUR_NO_MATCH_DESCRIPTION = (
     "The title does not name a colour at all, or the colour it names is none of those"
     " above — a two-tone case, or a shade with no plain name here."
 )
+
+# Not a Choice among catalogue rows but a check on one a rule already chose: does the listing
+# sell the model the entry is named? Asked about the title, never about the model our
+# reading cut out of it — that would reduce the question to comparing two strings, and the
+# strings are what was wrong both times this was needed: `Galaxy S26+` read as `Galaxy S26`,
+# and `iPhone 16 Pro` read as `iPhone 16`.
+MODEL_MATCH_INSTRUCTIONS = (
+    "A shop listing (`listing_title`, made by `brand`) has been filed under the catalogue"
+    " entry `entry_model`. Does the listing sell that exact model, or a different model?"
+    " Judge only the model designation. Storage, memory, colour, the shop's wording, the"
+    " language of the title, and whether the brand or a 5G suffix is written are not part"
+    " of the model."
+)
+
+SAME_MODEL = "same"
+MODEL_MATCH_CRITERIA: dict[str, str | None] = {
+    # The equivalence is spelled out because without it the model read `S25+` and
+    # `S25 Plus` as siblings — three of five errors on the labelled set, one at 0.96.
+    SAME_MODEL: (
+        "The title names the model in `entry_model` itself. `+` and `Plus` are one word"
+        " written two ways, with or without a space or brackets: `S25+`, `S25 +` and"
+        " `S25 (Plus)` all name `S25 Plus`."
+    ),
+    "sibling": (
+        "The title names a different model of the same line: the entry's model with a"
+        " variant word added or removed — Plus or +, Pro, Ultra, Max, FE, Lite, Mini, Neo,"
+        " Edge — or a neighbouring number in the series."
+    ),
+    "different": "The title names an unrelated model, or is not this maker's phone at all.",
+    "cant_tell": "The title does not name a model clearly enough to decide.",
+}
 
 
 @dataclass(frozen=True)
@@ -257,4 +289,24 @@ def colour_choice(
         # nothing reads: what this map is for here is saying which answers are real ones.
         by_option={colour.canonical: index for index, colour in enumerate(ordered)},
         hash=_identity(COLOUR_CHOICE, state, criteria),
+    )
+
+
+def model_match(*, title: str, brand: str, entry_model: str) -> Question:
+    """Whether a listing sells the model the entry it was filed under is named.
+
+    Three fields and nothing else. The configuration and the colour are left out on
+    purpose: the matcher compares those in code and does it right, and the model is poor
+    at telling 256 from 512 — its own notes say so. What the matcher cannot do is read a
+    title for the word that makes another phone of the same line.
+    """
+    state = {"listing_title": title, "brand": brand, "entry_model": entry_model}
+    criteria = dict(MODEL_MATCH_CRITERIA)
+    return Question(
+        kind=MODEL_MATCH,
+        state=state,
+        instructions=MODEL_MATCH_INSTRUCTIONS,
+        criteria=criteria,
+        by_option={option: index for index, option in enumerate(criteria)},
+        hash=_identity(MODEL_MATCH, state, criteria),
     )

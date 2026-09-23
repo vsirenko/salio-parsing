@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
+from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from app.db.models import (
     Attribute,
@@ -19,6 +20,7 @@ from app.db.models import (
     Brand,
     BrandAlias,
     CategoryAttribute,
+    JudgeVerdict,
     MatchQueue,
     NormalizedOffer,
     Offer,
@@ -48,17 +50,20 @@ from app.features.catalog.schemas import (
     VariantUpdate,
 )
 from app.features.catalog.service import CatalogService
+from app.features.judge import questions
 from app.features.judge.schemas import (
     BrandRequest,
     BrandVerdict,
     ColourRequest,
     JudgeReport,
+    MatchCheckRequest,
     VariantRequest,
 )
 from app.features.judge.service import COLOUR_KEY, JudgeService
 from app.features.matching.schemas import (
     DecidedBy,
     ManualMatch,
+    MatchDoubtRead,
     MatchOutcome,
     MatchQueueRead,
     MergeReport,
@@ -1712,6 +1717,131 @@ class MatchingService:
         report = report.model_copy(update={"placed": placed})
         audit.record_changes(**report.model_dump(mode="json"))
         return report
+
+    # --- asking whether a rule's match names the right model ---
+
+    async def check_matches(self, *, limit: int = 500) -> JudgeReport:
+        """Ask the judge whether each rule's match sells the model its entry is named.
+
+        Every live match a rule made, in offer order; `limit` is how many new questions
+        this pass may pay for, and answers already bought do not count against it, so
+        repeated passes work through the catalogue and then cost only what is new — a
+        match to a different entry, or a listing whose title changed, is a new question.
+
+        Nothing is moved. Both of this week's silent misfilings — `Galaxy S26+` under the
+        plain phone, `iPhone 16 Pro` under `iPhone 16` — were the matcher agreeing with a
+        reading that was wrong, and a verdict that could move listings would be one more
+        thing agreeing with itself. What this produces is `doubts()`, for a person.
+        """
+        rows = (
+            await self.session.execute(self._rule_matches().order_by(OfferMatch.offer_id))
+        ).all()
+        requests = [
+            MatchCheckRequest(key=offer_id, title=title, brand=brand, entry_model=model)
+            for offer_id, _, title, brand, model, _ in rows
+        ]
+        _, report = await self.judge.check_matches(requests, budget=limit)
+        audit.record_changes(**report.model_dump(mode="json"))
+        return report
+
+    async def doubts(self, pagination: Pagination) -> tuple[list[MatchDoubtRead], int]:
+        """The live matches whose stored verdict says the listing is probably another model.
+
+        Found by what the judge was shown rather than by a key back to the offer: the
+        judge knows nothing about offers, and a verdict is only about this match while the
+        title, the maker and the entry's name are still the ones it was asked about. A
+        renamed entry or a re-read title leaves the old verdict behind, which is right —
+        it answered a question nobody is asking any more.
+        """
+        matched = self._rule_matches().subquery()
+        verdict = (
+            select(JudgeVerdict.id)
+            .where(
+                JudgeVerdict.kind == questions.MODEL_MATCH,
+                JudgeVerdict.state["listing_title"].astext == matched.c.title,
+                JudgeVerdict.state["brand"].astext == matched.c.brand,
+                JudgeVerdict.state["entry_model"].astext == matched.c.model,
+                JudgeVerdict.answer["probabilities"][questions.SAME_MODEL].as_float()
+                < settings.judge_doubt_below,
+            )
+            .order_by(JudgeVerdict.created_at.desc(), JudgeVerdict.id.desc())
+            .limit(1)
+            .correlate(matched)
+            .scalar_subquery()
+        )
+        doubted = (
+            select(matched.c.offer_id).where(verdict.is_not(None)).order_by(matched.c.offer_id)
+        )
+        offer_ids, total = await paginated(self.session, doubted, pagination)
+
+        items: list[MatchDoubtRead] = []
+        for offer_id in offer_ids:
+            row = (
+                await self.session.execute(
+                    select(matched, verdict.label("verdict_id")).where(
+                        matched.c.offer_id == offer_id
+                    )
+                )
+            ).one()
+            stored = await self.session.get(JudgeVerdict, row.verdict_id)
+            items.append(
+                MatchDoubtRead(
+                    offer_id=offer_id,
+                    variant_id=row.variant_id,
+                    method=Method(row.method),
+                    listing_title=row.title,
+                    brand=row.brand,
+                    entry_model=row.model,
+                    choice=stored.choice,
+                    same=Decimal(str(stored.answer["probabilities"].get(questions.SAME_MODEL, 0))),
+                    confidence=stored.confidence,
+                    verdict_id=stored.id,
+                )
+            )
+        return items, total
+
+    @staticmethod
+    def _rule_matches():
+        """Every live match a rule made, with the title of the listing's newest full reading.
+
+        The newest reading from a pass that carried the catalogue, as `_reading` chooses it,
+        for all of them in one query rather than one per match. A person's match is theirs
+        and a judge's was already a judgement, so only a rule's is checked.
+        """
+        newest = (
+            select(
+                RawOffer.offer_id,
+                NormalizedOffer.title,
+                func.row_number()
+                .over(
+                    partition_by=RawOffer.offer_id,
+                    order_by=(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc()),
+                )
+                .label("rank"),
+            )
+            .join(NormalizedOffer, NormalizedOffer.raw_offer_id == RawOffer.id)
+            .outerjoin(Run, Run.id == RawOffer.run_id)
+            .where(or_(Run.id.is_(None), Run.kind != Kind.QUICK.value))
+            .subquery()
+        )
+        return (
+            select(
+                OfferMatch.offer_id,
+                OfferMatch.variant_id,
+                newest.c.title,
+                Brand.canonical_name.label("brand"),
+                Variant.model,
+                OfferMatch.method,
+            )
+            .join(newest, (newest.c.offer_id == OfferMatch.offer_id) & (newest.c.rank == 1))
+            .join(Variant, Variant.id == OfferMatch.variant_id)
+            .join(Brand, Brand.id == Variant.brand_id)
+            .where(
+                OfferMatch.superseded_at.is_(None),
+                OfferMatch.decided_by == DecidedBy.RULE.value,
+                newest.c.title.is_not(None),
+            )
+        )
 
     # --- a human deciding ---
 

@@ -543,13 +543,11 @@ and the questions that have to be answered with real data first, are written dow
       with a colour code (`KX-TU160EXB` holding the grey one), Maxcom `SE` entries holding the
       plain phones, `Enterprise Edition` entries holding listings that do not say so. Each is
       a merge, a split or an unlink someone decides.
-- [ ] **Ask the judge whether a rule's match names the same model.** Probed over all 8982 live
-      matches on 22.09.2026 (title, brand and entry name only, never our parsed model): 315
-      flagged at P(same)<0.5, 108 of them the plus misfiles. Of the other 207, P(same)<0.1 held
-      63 and about 45 were real — `iPhone 16 Pro` on `iPhone 16`, an S25 FE barcode on `Galaxy
-      S26 FE`, `Blade A31` on an entry named `Blade`; between 0.1 and 0.5 it was mostly entry
-      names carrying `5G`, `Z` or `Enterprise Edition`. So a review queue at 0.1, not 0.5. Not
-      built: the probe was a script; the question belongs in `judge/questions.py`.
+- [x] **Ask the judge whether a rule's match names the same model.** `model_match`, the
+      fourth question: `POST /api/admin/matching/judge/matches` asks about every live rule
+      match not yet asked about, `GET /api/admin/matching/doubts` lists the ones given under
+      `JUDGE_DOUBT_BELOW` (0.1) chance of naming the entry's model. It moves nothing.
+      Measured before it was built, over all 8982 matches — see the judge README.
 - [ ] **A third of this market sells to order, and nothing compares prices accordingly.**
       Counted across the twelve: bm.market has 3 phones in stock and 934 to order, which is
       not a misreading — the shop writes `Pēc pasūtījuma` on every one of them. rdveikals

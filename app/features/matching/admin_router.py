@@ -9,6 +9,8 @@ GET    /api/admin/match-queue           what could not be placed, and why
 GET    /api/admin/match-queue/summary   the breakdown that says what to build next
 POST   /api/admin/matching/judge        ask the judge about the brand choices, then retry
 POST   /api/admin/matching/judge/colours  buy the colour a title carries and no rule reads
+POST   /api/admin/matching/judge/matches  ask whether each rule's match names the right model
+GET    /api/admin/matching/doubts   the matches the judge doubts, for a person
 POST   /api/admin/offers/{id}/promote   make the variant this listing was looking for
 POST   /api/admin/matching/promote      do that for everything identifiable in the queue
 """
@@ -22,6 +24,7 @@ from app.api.pagination import pagination_params
 from app.features.judge.schemas import JudgeReport
 from app.features.matching.schemas import (
     ManualMatch,
+    MatchDoubtRead,
     MatchOutcome,
     MatchQueueRead,
     MergeReport,
@@ -200,6 +203,38 @@ async def judge_colours(
     rather than entered in the registry — `Canyon` is pink on a Google and orange on an
     Oppo, so a global alias would be wrong somewhere."""
     return await service.judge_colours(limit=limit)
+
+
+@router.post(
+    "/judge/matches",
+    response_model=JudgeReport,
+    summary="Ask whether each rule's match names the right model",
+    responses={422: {"model": ErrorResponse, "description": "No TypeSafe API key configured"}},
+)
+async def check_matches(
+    service: MatchingServiceDep,
+    limit: Annotated[
+        int, Query(ge=1, le=2000, description="How many new questions to pay for")
+    ] = 500,
+) -> JudgeReport:
+    """Every live match a rule made, asked about by the listing's title and the entry's
+    name. Answers already held are free and do not count against `limit`, so repeated
+    passes work through the catalogue and then pay only for what is new. Nothing is moved:
+    what comes out is `GET /doubts`."""
+    return await service.check_matches(limit=limit)
+
+
+@router.get(
+    "/doubts",
+    response_model=Page[MatchDoubtRead],
+    summary="The matches the judge doubts",
+)
+async def doubts(service: MatchingServiceDep, pagination: PageParams) -> Page[MatchDoubtRead]:
+    """Live rule matches whose verdict gives the listing less than `JUDGE_DOUBT_BELOW` chance
+    of naming the entry's own model. Each one is a decision for a person — unlink, split,
+    merge or leave it."""
+    items, total = await service.doubts(pagination)
+    return Page[MatchDoubtRead].of(items, total, pagination)
 
 
 @router.post(

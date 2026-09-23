@@ -3,9 +3,10 @@
 Asking an outside model a bounded question, and remembering what it said.
 
 Backed by [TypeSafe](https://docs.typesafe.ai), whose System One models return a typed
-answer and a probability rather than text. The judge here asks three kinds of question:
-which of several brands a listing means, which of several catalogue entries it is, and what
-plain colour the maker's own name for one stands for.
+answer and a probability rather than text. The judge here asks four kinds of question:
+which of several brands a listing means, which of several catalogue entries it is, what
+plain colour the maker's own name for one stands for, and whether a match a rule already
+made names the right model.
 
 ## Endpoints
 
@@ -14,8 +15,9 @@ plain colour the maker's own name for one stands for.
 | `GET /api/admin/judge/verdicts` | every answer bought, with what it was asked, filterable by `kind` |
 
 Running the judge is deliberately **not** here. For brands that is
-`POST /api/admin/matching/judge`, for entries `POST /api/admin/matching/judge/ambiguous`
-and for colours `POST /api/admin/matching/judge/colours`, because deciding a question is
+`POST /api/admin/matching/judge`, for entries `POST /api/admin/matching/judge/ambiguous`,
+for colours `POST /api/admin/matching/judge/colours` and for checking matches
+`POST /api/admin/matching/judge/matches`, because deciding a question is
 worth asking belongs to whoever owns the work — this feature only answers and remembers.
 
 ## How it works
@@ -64,6 +66,36 @@ confident wrong answer the colour rule exists to avoid. The verdict is keyed by 
 the maker together — the granularity a marketing name actually has — and the matcher consults
 it exactly where it consults a bought brand.
 
+**The fourth question: `model_match`.** A `Choice` — `same`, `sibling`, `different`,
+`cant_tell` — about a match a rule has already made: does the listing sell the model its
+entry is named? It exists because both silent misfilings found on 22.09.2026 were the
+matcher agreeing with a reading that was wrong. `normalize_model` dropped the `+`, so 111
+`Galaxy S26+`-style listings sat under the plain phones; the registry reader cut `iPhone 16
+Pro` to `iPhone 16`. Every rung agreed each time, because every rung reads the same model
+string.
+
+**So it is asked about the title, never about our model.** The state is the listing's title,
+the maker and the entry's name, and nothing the reading cut out: with the parsed model in
+the state the question reduces to comparing two strings, and the strings were what was
+wrong. Storage and colour are left out as well — the matcher compares those in code and
+gets them right, and the model's own notes say it is poor at numbers.
+
+**It doubts and never decides.** Measured over all 8982 live matches: of the 63 it gave
+under 0.1 chance of being the entry's model, about 45 were real misfiles; between 0.1 and 0.5
+fewer than one in ten were — mostly entries whose names carry `5G`, `Z` or `Enterprise
+Edition`, which it reads literally. `JUDGE_DOUBT_BELOW` (0.1) is where a match is listed at
+`GET /api/admin/matching/doubts`; the match itself is not touched. A doubt that moved
+listings would be one more part of the system agreeing with itself, and the cases it finds
+— a barcode on the wrong entry, an entry named after the wrong phone — are merges, splits
+and unlinks, which are decisions. The threshold is on `probabilities.same`, not on
+`confidence`: a listing the model is sure is a sibling has high confidence and a `same` near
+nothing.
+
+**The `+`-and-`Plus` line in its criteria is measured, not decoration.** Without it the
+model read `S25+` against `S25 Plus` as siblings — three of the five errors on the labelled
+set of 361, one of them at 0.96. With it the labelled set had no judge errors left: every
+remaining disagreement was the label or the catalogue being wrong.
+
 **A verdict here places the listing**, unlike a brand's, which goes into the store for the
 ladder to resolve on its own. No rung consults this one: the model rung found the candidates
 and the judge chose among them, so that is what the link records — `method` the rung that
@@ -97,6 +129,14 @@ and as fast as its indexes. Asking is a separate pass an admin starts.
   listing twice — it is that the matcher retries the whole queue on every pass, because the
   catalogue it failed against keeps changing underneath it. Without a store, one stuck
   listing would be paid for again on every run, forever.
+- **The key covers the state and the options, not the instructions.** Rewording
+  `MODEL_MATCH_INSTRUCTIONS` keeps every answer already bought, which is cheap and also
+  means a reworded question is not re-asked. A change of meaning needs new criteria, or
+  the stored rows cleared for that kind.
+- **A match-check verdict is found by what was asked, not by the offer.** The judge knows
+  nothing about offers, so `doubts()` joins a live match to the verdict whose state holds
+  that listing's title, maker and entry name. A renamed entry or a re-read title leaves the
+  old verdict describing nothing, which is right — it answered a question nobody is asking.
 - **The configured model name is in the key; the one that answered is not.** Pinning a
   version is a deliberate act and deserves fresh answers. `jev-latest` moving underneath is
   not, and should not silently invalidate everything ever asked. Which model actually

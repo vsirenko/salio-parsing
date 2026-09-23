@@ -85,6 +85,29 @@ class ColourVerdict(NamedTuple):
     no_match: bool
 
 
+class MatchCheckRequest(NamedTuple):
+    """One match a rule made, to be checked against the listing's own title."""
+
+    key: int
+    title: str
+    brand: str
+    entry_model: str
+
+
+class MatchCheckVerdict(NamedTuple):
+    """What the judge thinks of a match, and whether that is a doubt worth listing.
+
+    `same` is the probability the listing names the entry's own model — the number the
+    threshold is on. Not `confidence`, which says how concentrated the answer was: a
+    listing the model is sure is a sibling has high confidence and a `same` near nothing.
+    """
+
+    choice: str
+    confidence: Decimal
+    same: Decimal
+    doubted: bool
+
+
 class VerdictRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -117,6 +140,9 @@ class JudgeReport(BaseModel):
     no_match: int
     failed: int
     placed: int
+    # Matches the answer casts doubt on. Only the match check fills it; for the questions
+    # that choose, a doubt is not a thing they produce.
+    doubted: int = 0
     input_tokens: int
     output_tokens: int
     # The first failure, named. A pass that reports twenty failures and no reason is a

@@ -78,6 +78,27 @@ class OfferMatchRead(BaseModel):
     superseded_at: datetime | None
 
 
+class MatchDoubtRead(BaseModel):
+    """A match a rule made that the judge doubts, with what it was shown and what it said.
+
+    Read-only on purpose. A doubt is a question for a person — unlink, split, merge or
+    leave — and never a reason for the matcher to move a listing by itself.
+    """
+
+    offer_id: int
+    variant_id: int
+    method: Method
+    listing_title: str
+    brand: str
+    entry_model: str
+    # The judge's answer, `same` being the probability the listing names the entry's own
+    # model — what the review threshold is on.
+    choice: str
+    same: Decimal
+    confidence: Decimal
+    verdict_id: int
+
+
 class MatchQueueRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -657,3 +657,180 @@ def test_a_bought_colour_completes_an_identity_and_makes_an_entry(judged):
     ]
     axes = client.get(f"/api/admin/variants/{variant_id}/attributes", headers=auth(token)).json()
     assert any(axis.get("value_id") for axis in axes)
+
+
+# --- whether a rule's match names the right model ---
+
+MATCH_ANSWER = "model_match"
+
+
+def match_reply(same: float) -> dict:
+    """The answer as TypeSafe gives it: a choice, and a probability for every option."""
+    rest = round(1 - same, 4)
+    choice = "same" if same >= 0.5 else "sibling"
+    return {
+        "model": "jev-1.13.0",
+        "usage": {"input_tokens": 590, "output_tokens": 50},
+        "answers": {
+            MATCH_ANSWER: {
+                "type": "choice",
+                "choice": choice,
+                "confidence": max(same, rest),
+                "probabilities": {
+                    "same": same,
+                    "sibling": rest,
+                    "different": 0.0,
+                    "cant_tell": 0.0,
+                },
+            }
+        },
+    }
+
+
+def a_pro_max_under_the_pro(client, token, external_id="PM-1", ean="194253000001"):
+    """The shape both of this week's misfilings had: a barcode that reached the wrong entry.
+
+    `catalogue` holds `iPhone 15 Pro` with a barcode; this listing carries that barcode and
+    says Pro Max in its title, so the first rung files it under the Pro without a word.
+    """
+    from tests.test_matching import catalogue
+    from tests.test_offers import setup_source
+
+    _, source = setup_source(client, token)
+    _, _, variant = catalogue(client, token)
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple iPhone 15 Pro Max 256GB Black", "brand": "Apple", "ean": ean},
+        external_id=external_id,
+    )
+    assert run_on(client, token, offer)["variant_id"] == variant["id"]
+    return offer, variant, source
+
+
+def checking(client, token, limit=None):
+    url = "/api/admin/matching/judge/matches" + (f"?limit={limit}" if limit else "")
+    response = client.post(url, headers=auth(token))
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def doubts(client, token) -> list:
+    response = client.get("/api/admin/matching/doubts", headers=auth(token))
+    assert response.status_code == 200, response.text
+    return response.json()["items"]
+
+
+def test_a_doubted_match_is_listed_and_not_moved(judged):
+    client, stub = judged
+    token = admin_token(client)
+    offer, variant, _ = a_pro_max_under_the_pro(client, token)
+    stub.answers(match_reply(same=0.02))
+
+    report = checking(client, token)
+    assert (report["asked"], report["doubted"]) == (1, 1)
+
+    listed = doubts(client, token)
+    assert [(d["offer_id"], d["variant_id"]) for d in listed] == [(offer, variant["id"])]
+    assert listed[0]["entry_model"] == "iPhone 15 Pro"
+    assert listed[0]["listing_title"] == "Apple iPhone 15 Pro Max 256GB Black"
+    assert float(listed[0]["same"]) == 0.02
+
+    # A doubt is for a person: the match stands exactly as the rule made it.
+    matches = client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json()
+    assert [(m["variant_id"], m["superseded_at"]) for m in matches] == [(variant["id"], None)]
+
+
+def test_the_question_is_the_title_the_maker_and_the_entry_s_name(judged):
+    """Never the model our reading cut out: that would compare two strings, and the strings
+    are what was wrong."""
+    client, stub = judged
+    token = admin_token(client)
+    a_pro_max_under_the_pro(client, token)
+    stub.answers(match_reply(same=0.02))
+    checking(client, token)
+
+    body = stub.asked[0]
+    assert body["state"] == {
+        "listing_title": "Apple iPhone 15 Pro Max 256GB Black",
+        "brand": "Apple",
+        "entry_model": "iPhone 15 Pro",
+    }
+    assert set(body["questions"][MATCH_ANSWER]["criteria"]) == {
+        "same",
+        "sibling",
+        "different",
+        "cant_tell",
+    }
+
+
+def test_a_match_the_judge_agrees_with_is_not_a_doubt(judged):
+    client, stub = judged
+    token = admin_token(client)
+    a_pro_max_under_the_pro(client, token)
+    stub.answers(match_reply(same=0.91))
+
+    assert checking(client, token)["doubted"] == 0
+    assert doubts(client, token) == []
+
+
+def test_an_answer_is_bought_once_and_the_limit_is_what_is_paid_for(judged):
+    """Held answers are free and do not count against the limit, so a second pass moves on
+    to what the first one could not afford."""
+    client, stub = judged
+    token = admin_token(client)
+    _, _, source = a_pro_max_under_the_pro(client, token)
+    second = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Apple iPhone 15 Pro 128GB Blue", "brand": "Apple", "ean": "194253000001"},
+        external_id="PM-2",
+    )
+    run_on(client, token, second)
+
+    stub.answers(match_reply(same=0.02))
+    first = checking(client, token, limit=1)
+    assert (first["considered"], first["asked"], first["cached"]) == (2, 1, 0)
+
+    stub.answers(match_reply(same=0.95))
+    again = checking(client, token, limit=1)
+    assert (again["asked"], again["cached"]) == (1, 1)
+
+    # Everything is held now: a third pass asks nothing, and the stub would fail if it did.
+    assert checking(client, token)["asked"] == 0
+
+
+def test_a_person_s_match_is_not_second_guessed(judged):
+    client, stub = judged
+    token = admin_token(client)
+    offer, variant, _ = a_pro_max_under_the_pro(client, token)
+    placed = client.put(
+        f"/api/admin/offers/{offer}/match",
+        headers=auth(token),
+        json={"variant_id": variant["id"]},
+    )
+    assert placed.status_code == 200, placed.text
+
+    assert checking(client, token)["considered"] == 0
+    assert stub.asked == []
+
+
+def test_a_verdict_about_an_old_name_is_not_a_doubt_about_the_new_one(judged):
+    """Renaming the entry asks a different question; the old answer stays in the store and
+    stops describing this match."""
+    client, stub = judged
+    token = admin_token(client)
+    _, variant, _ = a_pro_max_under_the_pro(client, token)
+    stub.answers(match_reply(same=0.02))
+    checking(client, token)
+    assert len(doubts(client, token)) == 1
+
+    renamed = client.patch(
+        f"/api/admin/variants/{variant['id']}",
+        headers=auth(token),
+        json={"model": "iPhone 15 Pro Max"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert doubts(client, token) == []

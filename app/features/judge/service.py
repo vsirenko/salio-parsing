@@ -44,6 +44,8 @@ from app.features.judge.schemas import (
     ColourRequest,
     ColourVerdict,
     JudgeReport,
+    MatchCheckRequest,
+    MatchCheckVerdict,
     VariantRequest,
     VariantVerdict,
     VerdictRead,
@@ -254,6 +256,65 @@ class JudgeService:
             input_tokens=usage[0],
             output_tokens=usage[1],
             error=error,
+        )
+
+    async def check_matches(
+        self, requests: list[MatchCheckRequest], *, budget: int
+    ) -> tuple[dict[int, MatchCheckVerdict], JudgeReport]:
+        """Whether each listing sells the model its entry is named, at most `budget` paid for.
+
+        The fourth question, and the only one that questions a decision rather than making
+        one. A rule's match is right far more often than not — 8982 were checked on
+        22.09.2026 and 45-odd were wrong — so the cost that matters is asking at all, and
+        the store is what keeps it proportional to how many matches are new. `budget`
+        bounds what a pass pays for; answers already held do not count against it, so a
+        pass always moves forward however many of them there are.
+        """
+        if not settings.judge_enabled:
+            raise ValidationError(
+                "No TypeSafe API key is configured, so nothing can be judged."
+                " Set TYPESAFE_API_KEY.",
+                code="judge_disabled",
+            )
+
+        verdicts: dict[int, MatchCheckVerdict] = {}
+        unanswered: list[tuple[MatchCheckRequest, Question]] = []
+        cached = 0
+        for request in requests:
+            question = questions.model_match(
+                title=request.title, brand=request.brand, entry_model=request.entry_model
+            )
+            stored = await self._stored(question.hash)
+            if stored is not None:
+                cached += 1
+                verdicts[request.key] = self._read_match(stored, question)
+            elif len(unanswered) < budget:
+                unanswered.append((request, question))
+
+        asked, failed, error, usage = await self._ask_all(unanswered, verdicts, self._read_match)
+        return verdicts, JudgeReport(
+            considered=len(requests),
+            asked=asked,
+            cached=cached,
+            accepted=sum(1 for v in verdicts.values() if not v.doubted),
+            unconfident=0,
+            no_match=0,
+            failed=failed,
+            placed=0,
+            doubted=sum(1 for v in verdicts.values() if v.doubted),
+            input_tokens=usage[0],
+            output_tokens=usage[1],
+            error=error,
+        )
+
+    @staticmethod
+    def _read_match(stored: JudgeVerdict, question: Question) -> MatchCheckVerdict:
+        same = Decimal(str((stored.answer.get("probabilities") or {}).get(questions.SAME_MODEL, 0)))
+        return MatchCheckVerdict(
+            choice=stored.choice,
+            confidence=stored.confidence,
+            same=same,
+            doubted=same < Decimal(str(settings.judge_doubt_below)),
         )
 
     @staticmethod
