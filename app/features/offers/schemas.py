@@ -194,3 +194,90 @@ class Coverage(BaseModel):
     with_nothing: int
     gtin_share: float
     deterministic_share: float
+
+
+# --- the path of one listing, for a person to follow ---
+
+
+class TraceStep(BaseModel):
+    """One rule as it ran on this listing, and exactly what it changed."""
+
+    rule: str
+    layer: str
+    # The reader makes two rounds: the second re-runs the brand's layers and below once the
+    # brand is known.
+    round: int
+    why: str
+    changed: dict[str, list[Any]]
+
+
+class TraceObservation(BaseModel):
+    """What the shop served, as the channel parsed it — the newest pass that carried it."""
+
+    raw_offer_id: int
+    run_id: int | None
+    run_kind: str | None
+    fetched_at: datetime
+    payload: dict[str, Any]
+
+
+class TraceReading(BaseModel):
+    ruleset_version: str
+    fields: dict[str, Any]
+
+
+class TraceMatch(BaseModel):
+    variant_id: int
+    method: str
+    confidence: Decimal
+    decided_by: str
+    decided_at: datetime
+    superseded_at: datetime | None
+    evidence: dict[str, Any]
+
+
+class TraceQueue(BaseModel):
+    reason: str
+    candidates: list[Any]
+    attempts: int
+    last_attempt_at: datetime
+
+
+class TraceEntry(BaseModel):
+    """The catalogue entry the listing is on, and who else is."""
+
+    variant_id: int
+    model: str
+    title: str
+    identity_key: str | None
+    axes: dict[str, str]
+    product_id: int | None
+    product_title: str | None
+    listings_by_shop: dict[str, int]
+
+
+class OfferTrace(BaseModel):
+    """One listing from the shop's bytes to the catalogue, step by step.
+
+    `now` is the reading recomputed with today's rules and words, with `steps` saying how it
+    was reached; `stored` is what the database holds. They differ when a rule or the registry
+    changed since the listing was last read, which is what `stale` says.
+    """
+
+    offer_id: int
+    shop: str
+    source: str | None
+    category: str | None
+    url: str | None
+    price: Decimal | None
+    currency_code: str | None
+    availability: str
+    observation: TraceObservation | None
+    stored: TraceReading | None
+    now: TraceReading | None
+    stale: bool
+    steps: list[TraceStep]
+    match: TraceMatch | None
+    history: list[TraceMatch]
+    queue: TraceQueue | None
+    entry: TraceEntry | None

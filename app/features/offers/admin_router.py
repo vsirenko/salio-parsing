@@ -25,6 +25,7 @@ from app.features.offers.schemas import (
     IngestResult,
     NormalizedOfferRead,
     OfferRead,
+    OfferTrace,
     RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
@@ -116,6 +117,19 @@ async def list_offers(
 )
 async def get_offer(offer_id: int, service: OfferServiceDep) -> OfferRead:
     return await service.get_offer(offer_id)
+
+
+@router.get(
+    "/{offer_id}/trace",
+    response_model=OfferTrace,
+    summary="One listing from the shop's bytes to the catalogue",
+    responses={404: {"model": ErrorResponse, "description": "Offer not found"}},
+)
+async def trace_offer(offer_id: int, service: OfferServiceDep) -> OfferTrace:
+    """The observation, the reading recomputed rule by rule with what each rule changed, the
+    stored reading beside it, the match with its history, and the entry it is on. Writes
+    nothing."""
+    return await service.trace(offer_id)
 
 
 @router.get(

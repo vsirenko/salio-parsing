@@ -46,6 +46,16 @@ from typing import Any
 from app.features.attributes.normalization import normalize_attribute_name
 
 GENERIC, CATEGORY, SHOP, SOURCE, BRAND, PRODUCT, FINISH = 10, 20, 25, 30, 40, 50, 90
+# What each layer is called where a person reads a trace of it.
+LAYER_NAMES = {
+    GENERIC: "generic",
+    CATEGORY: "category",
+    SHOP: "shop",
+    SOURCE: "source",
+    BRAND: "brand",
+    PRODUCT: "product",
+    FINISH: "finish",
+}
 
 
 @dataclass(frozen=True)

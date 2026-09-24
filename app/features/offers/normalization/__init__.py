@@ -22,6 +22,7 @@ from app.features.offers.normalization.generic import content_hash
 from app.features.offers.normalization.rules import (
     BRANDS,
     CATEGORIES,
+    LAYER_NAMES,
     PRODUCTS,
     SHOPS,
     SOURCES,
@@ -132,8 +133,14 @@ def read(
     shop_slug: str | None = None,
     category: str | None = None,
     vocabulary: Vocabulary | None = None,
+    trace: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One reading of one payload. Everything it cannot make sense of stays None.
+
+    With `trace`, every step is appended to it as it runs — the generic read, then each
+    rule with its layer, its `why` and exactly what it changed — so the path from a shop's
+    fields to a reading can be shown rather than guessed at. The reading is the same either
+    way: the trace watches, it decides nothing.
 
     The brand and the product line are not passed in: they are worked out from what the
     earlier layers read, which is why those layers come last. A rule that needs to name a
@@ -142,6 +149,16 @@ def read(
     """
     fields = generic.read(payload)
     fields.setdefault("identity", {})
+    if trace is not None:
+        trace.append(
+            {
+                "rule": "generic",
+                "layer": "generic",
+                "round": 1,
+                "why": "What every payload is read for before any rule selected by it runs.",
+                "changed": {key: [None, value] for key, value in fields.items() if value},
+            }
+        )
     # Handed in rather than looked up, so this stays a pure function of its arguments and a
     # reading can be recomputed over stored bytes and compared with the old one.
     words = vocabulary or Vocabulary()
@@ -153,7 +170,7 @@ def read(
     ):
         # Each rule sees what the ones before it tidied, and later wins. A rule that finds
         # nothing returns nothing rather than a None that would erase an earlier answer.
-        fields.update(rule.apply(payload, fields, words))
+        _apply(rule, payload, fields, words, trace, 1)
         if brand is None:
             brand = _brand_key(fields)
         line = fields.get("_line") or line
@@ -166,12 +183,50 @@ def read(
         source_slug, shop_slug=shop_slug, category=category, brand=brand, line=line
     ):
         if rule.layer >= 40:  # BRAND and below: the layers that could not be selected yet
-            fields.update(rule.apply(payload, fields, words))
+            _apply(rule, payload, fields, words, trace, 2)
 
     fields["ruleset_version"] = version_for(
         source_slug, shop_slug=shop_slug, category=category, brand=brand, line=line
     )
     return {key: value for key, value in fields.items() if not key.startswith("_")}
+
+
+def _apply(
+    rule: Any,
+    payload: dict[str, Any],
+    fields: dict[str, Any],
+    words: Vocabulary,
+    trace: list[dict[str, Any]] | None,
+    run: int,
+) -> None:
+    """One rule's changes onto the reading, and onto the trace what they were."""
+    found = rule.apply(payload, fields, words)
+    if trace is not None:
+        trace.append(
+            {
+                "rule": rule.id,
+                "layer": LAYER_NAMES.get(rule.layer, str(rule.layer)),
+                "round": run,
+                "why": rule.why,
+                "changed": _changes(fields, found),
+            }
+        )
+    fields.update(found)
+
+
+def _changes(before: dict[str, Any], found: dict[str, Any]) -> dict[str, list[Any]]:
+    """What a rule's answer changes, key by key, `[before, after]`; an axis by its own key."""
+    changed: dict[str, list[Any]] = {}
+    for key, after in found.items():
+        was = before.get(key)
+        if key == "identity" and isinstance(after, dict):
+            old = was if isinstance(was, dict) else {}
+            for axis in sorted(set(old) | set(after)):
+                if old.get(axis) != after.get(axis):
+                    changed[f"identity.{axis}"] = [old.get(axis), after.get(axis)]
+        elif was != after:
+            changed[key] = [was, after]
+    return changed
 
 
 def _brand_key(fields: dict[str, Any]) -> str | None:

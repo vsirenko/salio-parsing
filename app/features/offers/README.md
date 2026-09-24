@@ -15,6 +15,7 @@ Everything downstream is derived from them and can be thrown away.
 | `GET /api/admin/offers/coverage` | how far a deterministic matcher could get |
 | `GET /api/admin/offers/{offer_id}` | one listing |
 | `GET /api/admin/offers/{offer_id}/raw` | every observation of it |
+| `GET /api/admin/offers/{offer_id}/trace` | its path from the shop's bytes to the catalogue: the reading recomputed rule by rule, the match, the entry |
 | `GET /api/admin/raw-offers/{raw_offer_id}/reading` | our reading of one observation |
 | `POST /api/admin/raw-offers/{raw_offer_id}/renormalize` | read the stored bytes again |
 

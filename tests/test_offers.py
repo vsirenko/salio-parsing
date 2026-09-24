@@ -327,3 +327,42 @@ def test_offers_require_an_admin_token(client):
     user_token = tokens(client, CUSTOMER)["access_token"]
     assert client.get("/api/admin/offers", headers=auth(user_token)).status_code == 401
     assert client.post("/api/admin/sources/1/offers", json={}).status_code == 401
+
+
+# --- the path of one listing ---
+
+
+def test_a_trace_watches_and_decides_nothing():
+    """The same reading with a trace as without, and each step says what it changed."""
+    steps: list[dict] = []
+    traced = read(FEED_ROW, trace=steps)
+    assert traced == read(FEED_ROW)
+    assert steps[0]["rule"] == "generic"
+    assert steps[0]["changed"]["gtin"] == [None, "00194253000001"]
+    assert all({"rule", "layer", "round", "why", "changed"} <= set(step) for step in steps)
+
+
+def test_a_listing_can_be_traced_from_its_bytes_to_its_reading(client):
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    result = ingest(
+        client,
+        token,
+        source["id"],
+        {"external_id": "SKU-1", "market_code": "LV", "payload": FEED_ROW},
+    )
+    trace = client.get(f"/api/admin/offers/{result['offer_id']}/trace", headers=auth(token))
+    assert trace.status_code == 200, trace.text
+    body = trace.json()
+    assert body["observation"]["payload"]["ean"] == FEED_ROW["ean"]
+    assert body["now"]["fields"]["gtin"] == "00194253000001"
+    # Nothing changed since it was read, so what is stored is what would be read now.
+    assert body["stale"] is False
+    assert body["steps"][0]["rule"] == "generic"
+    # Not matched yet: no entry, no history.
+    assert (body["match"], body["entry"], body["history"]) == (None, None, [])
+
+
+def test_a_trace_of_nothing_is_a_404(client):
+    token = admin_token(client)
+    assert client.get("/api/admin/offers/999999/trace", headers=auth(token)).status_code == 404

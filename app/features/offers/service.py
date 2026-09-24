@@ -2,7 +2,9 @@
 
 from collections import Counter
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import MappingProxyType
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
@@ -21,14 +23,19 @@ from app.db.models import (
     CategoryAlias,
     CategoryAttribute,
     Market,
+    MatchQueue,
     ModelAlias,
     NormalizedOffer,
     Offer,
+    OfferMatch,
+    Product,
     RawOffer,
     Run,
     Seller,
     Shop,
     Source,
+    Variant,
+    VariantAttribute,
 )
 from app.db.query import paginated
 from app.features.brands.normalization import normalize_brand
@@ -46,9 +53,16 @@ from app.features.offers.schemas import (
     IngestResult,
     NormalizedOfferRead,
     OfferRead,
+    OfferTrace,
     RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
+    TraceEntry,
+    TraceMatch,
+    TraceObservation,
+    TraceQueue,
+    TraceReading,
+    TraceStep,
 )
 from app.features.prices.service import PriceService
 from app.features.runs.schemas import Kind
@@ -278,6 +292,159 @@ class OfferService:
         await self.session.flush()
         audit.record_changes(raw_offer_id=raw_offer_id, ruleset_version=reading.ruleset_version)
         return NormalizedOfferRead.model_validate(reading)
+
+    # --- the path of one listing ---
+
+    async def trace(self, offer_id: int) -> OfferTrace:
+        """One listing from the shop's bytes to the catalogue, with every step shown.
+
+        Reads what is stored and recomputes the reading with a trace; writes nothing. The
+        other features' tables are read directly, which is allowed — every model lives in
+        `app/db/models.py` — so this imports no matching or catalogue code.
+        """
+        offer = await self.session.get(Offer, offer_id)
+        if offer is None:
+            raise NotFoundError(f"Offer {offer_id} not found")
+        shop = await self.session.scalar(
+            select(Shop.name)
+            .join(Seller, Seller.shop_id == Shop.id)
+            .where(Seller.id == offer.seller_id)
+        )
+
+        # The newest observation from a pass that carried the catalogue, the rule the
+        # matcher reads by: a cheap pass carries a price and nothing else.
+        raw = await self.session.scalar(
+            select(RawOffer)
+            .outerjoin(Run, Run.id == RawOffer.run_id)
+            .where(RawOffer.offer_id == offer_id, (Run.kind.is_(None)) | (Run.kind != "quick"))
+            .order_by(RawOffer.fetched_at.desc(), RawOffer.id.desc())
+            .limit(1)
+        )
+        source = await self.session.get(Source, raw.source_id) if raw else None
+        observation = stored = now = None
+        steps: list[dict[str, Any]] = []
+        stale = False
+        if raw is not None and source is not None:
+            run = await self.session.get(Run, raw.run_id) if raw.run_id else None
+            observation = TraceObservation(
+                raw_offer_id=raw.id,
+                run_id=raw.run_id,
+                run_kind=run.kind if run else None,
+                fetched_at=raw.fetched_at,
+                payload=raw.payload,
+            )
+            reading = await self.session.scalar(
+                select(NormalizedOffer)
+                .where(NormalizedOffer.raw_offer_id == raw.id)
+                .order_by(NormalizedOffer.id.desc())
+                .limit(1)
+            )
+            fields = read(
+                raw.payload,
+                source_slug=source.slug,
+                shop_slug=await self._shop_slug(source),
+                category=await self._category_slug(source),
+                vocabulary=await self._vocabulary(source),
+                trace=steps,
+            )
+            now = TraceReading(ruleset_version=fields["ruleset_version"], fields=_plain(fields))
+            if reading is not None:
+                held = {key: getattr(reading, key, None) for key in fields}
+                stored = TraceReading(ruleset_version=reading.ruleset_version, fields=_plain(held))
+                stale = stored.fields != now.fields
+        category = (
+            await self.session.scalar(
+                select(Category.slug).where(Category.id == source.category_id)
+            )
+            if source is not None and source.category_id is not None
+            else None
+        )
+
+        matches = (
+            await self.session.scalars(
+                select(OfferMatch)
+                .where(OfferMatch.offer_id == offer_id)
+                .order_by(OfferMatch.decided_at.desc(), OfferMatch.id.desc())
+            )
+        ).all()
+        current = next((m for m in matches if m.superseded_at is None), None)
+        queued = await self.session.get(MatchQueue, offer_id)
+
+        return OfferTrace(
+            offer_id=offer.id,
+            shop=shop or "",
+            source=source.slug if source else None,
+            category=category,
+            url=offer.url,
+            price=offer.price,
+            currency_code=offer.currency_code,
+            availability=offer.availability,
+            observation=observation,
+            stored=stored,
+            now=now,
+            stale=stale,
+            steps=[TraceStep(**step) for step in steps],
+            match=_trace_match(current) if current else None,
+            history=[_trace_match(m) for m in matches if m is not current],
+            queue=(
+                TraceQueue(
+                    reason=queued.reason,
+                    candidates=queued.candidates or [],
+                    attempts=queued.attempts,
+                    last_attempt_at=queued.last_attempt_at,
+                )
+                if queued is not None
+                else None
+            ),
+            entry=await self._trace_entry(current.variant_id) if current else None,
+        )
+
+    async def _trace_entry(self, variant_id: int) -> TraceEntry | None:
+        variant = await self.session.get(Variant, variant_id)
+        if variant is None:
+            return None
+        product = (
+            await self.session.get(Product, variant.product_id) if variant.product_id else None
+        )
+        axes = {
+            key: text if text is not None else canonical if canonical is not None else _axis(number)
+            for key, text, canonical, number in (
+                await self.session.execute(
+                    select(
+                        Attribute.key,
+                        VariantAttribute.value_text,
+                        AttributeValue.canonical,
+                        VariantAttribute.value_num,
+                    )
+                    .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+                    .outerjoin(AttributeValue, AttributeValue.id == VariantAttribute.value_id)
+                    .where(VariantAttribute.variant_id == variant_id)
+                )
+            ).all()
+        }
+        by_shop = dict(
+            (
+                await self.session.execute(
+                    select(Shop.name, func.count())
+                    .select_from(OfferMatch)
+                    .join(Offer, Offer.id == OfferMatch.offer_id)
+                    .join(Seller, Seller.id == Offer.seller_id)
+                    .join(Shop, Shop.id == Seller.shop_id)
+                    .where(OfferMatch.variant_id == variant_id, OfferMatch.superseded_at.is_(None))
+                    .group_by(Shop.name)
+                )
+            ).all()
+        )
+        return TraceEntry(
+            variant_id=variant.id,
+            model=variant.model,
+            title=variant.title,
+            identity_key=variant.identity_key,
+            axes=axes,
+            product_id=product.id if product else None,
+            product_title=product.title if product else None,
+            listings_by_shop=by_shop,
+        )
 
     # --- reading it back ---
 
@@ -628,3 +795,32 @@ class OfferService:
                 f"Unknown market '{code}'. Open the market first.", code="unknown_market"
             )
         return market
+
+
+def _plain(fields: dict[str, Any]) -> dict[str, Any]:
+    """A reading as JSON carries it: a number as its shortest string, the rest as it is —
+    so `529.00` stored and `529` recomputed are one price, not a stale reading."""
+    return {
+        key: _number(value) if isinstance(value, Decimal) else value
+        for key, value in fields.items()
+    }
+
+
+def _number(value: Decimal) -> str:
+    return format(value.normalize(), "f")
+
+
+def _trace_match(match: OfferMatch) -> TraceMatch:
+    return TraceMatch(
+        variant_id=match.variant_id,
+        method=match.method,
+        confidence=match.confidence,
+        decided_by=match.decided_by,
+        decided_at=match.decided_at,
+        superseded_at=match.superseded_at,
+        evidence=match.evidence or {},
+    )
+
+
+def _axis(number: Decimal | None) -> str:
+    return _number(number) if number is not None else ""
