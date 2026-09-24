@@ -944,6 +944,27 @@ and the questions that have to be answered with real data first, are written dow
       no description and the answer comes back unconfident by design. A human-written note
       on the brand row would cover the cold start; there is no column for one.
 
+- [x] **Laptops, the third category, from bigbox.** 2501 collected on 24.09.2026, 317
+      of them second-hand and left at the channel; the 2169 new ones read with a processor
+      on 92%, memory, storage, screen and graphics on 97-99%, colour on 61% and a keyboard
+      layout on 32%. 1815 placed (83.7%) on 1696 entries — 1656 by barcode, 146 by part
+      number, 13 by model on a complete identity. The model rung needs every axis in this
+      category (`model_match_needs_full_identity`): the first run without that made 234 of
+      its 392 model matches on half an identity and put different chips on one entry.
+- [ ] **313 of bigbox's laptops wait with no barcode and a real part number** —
+      `83JH000XGE`, `BZ8B5EA#ABD`, `NX.J1UEG.00K`. Promotion takes only a barcode; a maker's
+      part number on a trusted channel names one SKU as surely, but bigbox also hands over
+      its distributors' own codes (`PV14250_RPLR_008_3YPSNO`, `1033707745/1`) in the same
+      field. Which part numbers may start an entry is the question.
+- [ ] **Chips a shop writes without `Ultra`** — `Intel Core 7 255H` is the Ultra 7 255H,
+      which Intel's non-Ultra 200 series never numbered — are values of their own until
+      someone enters them as aliases of the right chip.
+- [ ] **New chips are skipped until entered.** `cpu` and `gpu` are enums, and a value the
+      registry does not hold is left off an entry's axes: the 202 chips and 21 cards bigbox
+      read on 24.09.2026 are entered, the next launch is not.
+- [ ] **More shops' laptops**: dateks, rdveikals, 1a/ksenukai, euronics, bm — to read with
+      the category's rules and measure, as for tablets.
+
 ## Features
 
 - [ ] **No admin password reset.** An admin cannot set a password for a user who has

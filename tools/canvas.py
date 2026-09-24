@@ -185,6 +185,21 @@ def serve(port: int) -> None:
                 return self._proxy("POST")
             self.send_error(404)
 
+        def do_PATCH(self) -> None:
+            if self.path.startswith("/api/admin/"):
+                return self._proxy("PATCH")
+            self.send_error(404)
+
+        def do_PUT(self) -> None:
+            if self.path.startswith("/api/admin/"):
+                return self._proxy("PUT")
+            self.send_error(404)
+
+        def do_DELETE(self) -> None:
+            if self.path.startswith("/api/admin/"):
+                return self._proxy("DELETE")
+            self.send_error(404)
+
     print(f"live canvas on http://localhost:{port}  (ctrl-c to stop)")
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
 

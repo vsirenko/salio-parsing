@@ -7,6 +7,6 @@ true only of a MacBook Pro. Keeping them in one module would mean applying one s
 knowledge to a machine it was never about.
 """
 
-from app.features.offers.normalization.brands import phones, tablets
+from app.features.offers.normalization.brands import laptops, phones, tablets
 
-__all__ = ("phones", "tablets")
+__all__ = ("laptops", "phones", "tablets")

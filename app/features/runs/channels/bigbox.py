@@ -28,6 +28,7 @@ from app.features.runs.schemas import Job
 
 SLUG = "bigbox-phones"
 TABLETS_SLUG = "bigbox-tablets"
+LAPTOPS_SLUG = "bigbox-laptops"
 SITE = "https://bigbox.lv"
 # Taken from the shop's own front end, as with every index key. A different key is a
 # different shop.
@@ -36,6 +37,8 @@ INDEX = "https://api.lupasearch.com/v1/query/gd3mh4qy0fin"
 CATEGORY_IDS = (1549,)
 # /1652-plansetdatori.
 TABLET_CATEGORY_IDS = (1652,)
+# /1229-portativie-datori: every laptop, the maker and purpose sub-categories inside it.
+LAPTOP_CATEGORY_IDS = (1229,)
 # Verified against the live index: 150 comes back, 200 does not.
 PAGE = 150
 MAX_PAGES = 40
@@ -235,7 +238,25 @@ def _text(value: Any) -> str:
     return str(value).strip() if value is not None else ""
 
 
+# Second-hand stock, in the shop's own words for it. On 24.09.2026 every one of the 282
+# laptops in its `Rūpnīcā atjaunoti datori` section said so in its title or in its
+# `Atjaunots` field, and 50 more outside that section did too — `ReNew`, `Renewed`, `REPACK`,
+# `Grade B`.
+_SECOND_HAND = re.compile(
+    r"(?i)\b(?:repack\w*|re-?new\w*|refurb\w*|atjaunot\w*|demo|pre-owned|used|lietot\w*"
+    r"|grade\s?[abc]\+?|b-stock)\b"
+)
+REFURBISHED_FIELD = "Atjaunots"
+
+
+def _second_hand(name: str, fields: dict[str, str]) -> bool:
+    return bool(_SECOND_HAND.search(name)) or fields.get(REFURBISHED_FIELD) == "Jā"
+
+
 register(Bigbox())
 # The tablet category keeps everything it is given. What else the shop files there is
 # measured on the first run rather than guessed at in advance.
 register(Bigbox(slug=TABLETS_SLUG, category_ids=TABLET_CATEGORY_IDS, leaves_out=_not_a_device))
+# Laptops, new ones only: the refurbished are a sixth of the category, and where second-hand
+# stock belongs in the catalogue is still open (TODO.md).
+register(Bigbox(slug=LAPTOPS_SLUG, category_ids=LAPTOP_CATEGORY_IDS, leaves_out=_second_hand))
