@@ -26,6 +26,7 @@ TEST_DATABASE_URL = os.getenv(
 )
 
 TABLES = (
+    "scheduler_heartbeat",
     "audit_entries",
     "login_attempts",
     "users",

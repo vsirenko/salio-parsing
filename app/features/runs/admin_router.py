@@ -5,6 +5,7 @@ GET  /api/admin/runs/due                what the scheduler would start right now
 GET  /api/admin/runs/{run_id}           one run, with its coverage and verdict
 POST /api/admin/sources/{id}/runs       start one by hand
 POST /api/admin/runs/{run_id}/finish    a worker reporting back
+GET  /api/admin/scheduler               alive or not, what runs, what is due, every next slot
 """
 
 from typing import Annotated
@@ -13,12 +14,13 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import RunServiceDep
 from app.api.pagination import pagination_params
-from app.features.runs.schemas import Due, Kind, RunRead, RunResult, Status
+from app.features.runs.schemas import Due, Kind, RunRead, RunResult, SchedulerStatus, Status
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
 
 router = APIRouter(prefix="/runs", tags=["admin: runs"])
 sources_router = APIRouter(prefix="/sources", tags=["admin: runs"])
+scheduler_router = APIRouter(prefix="/scheduler", tags=["admin: runs"])
 
 PageParams = Annotated[Pagination, Depends(pagination_params())]
 
@@ -84,3 +86,12 @@ async def finish(run_id: int, result: RunResult, service: RunServiceDep) -> RunR
     """The contract is evaluated here, and it decides one thing: whether what this run did
     not see may be treated as gone. What it did see is written either way."""
     return await service.finish(run_id, result)
+
+
+@scheduler_router.get(
+    "", response_model=SchedulerStatus, summary="The scheduler, and every channel's schedule"
+)
+async def scheduler_status(service: RunServiceDep) -> SchedulerStatus:
+    """Whether the scheduler ticked within three ticks, what is running, what is due now, and
+    for every channel its schedule, its last run and its next slot, computed from the cron."""
+    return await service.status()

@@ -106,3 +106,39 @@ class Due(BaseModel):
     source_id: int
     kind: Kind
     due_at: datetime
+
+
+class ChannelSchedule(BaseModel):
+    """One channel as the scheduler sees it: its schedule, its last run, its next slot.
+
+    The next slot is computed on read from the cron and never stored, for the reason `runs`
+    has no `next_run_at`: a stored one goes stale the moment somebody edits the schedule.
+    """
+
+    source_id: int
+    source: str
+    shop: str
+    category: str | None
+    is_enabled: bool
+    cron_full: str | None
+    cron_quick: str | None
+    next_full_at: datetime | None
+    next_quick_at: datetime | None
+    last_run: RunRead | None
+
+
+class SchedulerStatus(BaseModel):
+    """Whether the scheduler is alive, and what it is doing and will do.
+
+    `alive` is a heartbeat fresher than three ticks. Nothing else can say it: a scheduler
+    with nothing due is as quiet as one that has stopped.
+    """
+
+    alive: bool
+    started_at: datetime | None
+    ticked_at: datetime | None
+    pid: int | None
+    tick_seconds: int
+    running: list[RunRead]
+    due: list[Due]
+    channels: list[ChannelSchedule]

@@ -11,10 +11,19 @@ One execution of one channel: starting it, judging it, and deciding what is due.
 | `GET /api/admin/runs/{run_id}` | one run, with its coverage and verdict |
 | `POST /api/admin/sources/{source_id}/runs` | start one by hand |
 | `POST /api/admin/runs/{run_id}/finish` | a worker reporting back |
+| `GET /api/admin/scheduler` | alive or not, what runs, what is due, and every channel's schedule, last run and next slot |
 
 ## How it works
 
-**`runs` is the scheduler's entire memory.** It answers both questions the scheduler has:
+**`runs` is the scheduler's memory, and `scheduler_heartbeat` is its pulse.** `runs`
+answers when each channel last ran and what is running; with nothing due it says nothing,
+and on 23.09.2026 that looked exactly like a scheduler that had stopped — no source had a
+schedule, the log was empty, and the container's health check probed an HTTP port this
+process does not open, so it read `unhealthy` whatever the scheduler did. Each tick now
+rewrites one row, `GET /scheduler` calls it alive within three ticks, and the container
+check is `python -m app.features.runs.scheduler --healthy`, which asks the same question.
+
+**`runs` is the scheduler's entire memory of schedules.** It answers both questions the scheduler has:
 when did this channel last run, and is it running now. There is no scheduler state anywhere
 else, and deliberately no `next_run_at` column — that would be a cache of `cron + last run`
 which goes stale the moment somebody edits a schedule, leaving two sources of truth to

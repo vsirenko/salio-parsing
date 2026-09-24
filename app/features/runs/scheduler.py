@@ -69,6 +69,7 @@ class Scheduler:
         self.workers: dict[int, Worker] = {}
         self.stopping = False
         self._lock: AsyncConnection | None = None
+        self.started_at = datetime.now(UTC)
 
     # --- being the only one ---
 
@@ -103,7 +104,8 @@ class Scheduler:
         try:
             while not self.stopping:
                 await self.reap()
-                await self.tick()
+                started = await self.tick()
+                await self.beat(started)
                 if once:
                     return
                 await asyncio.sleep(settings.scheduler_tick_seconds)
@@ -124,6 +126,22 @@ class Scheduler:
             if await self._spawn(item.source_id, item.kind):
                 started += 1
         return started
+
+    async def beat(self, started: int) -> None:
+        """Say this scheduler is alive. A failure to say so is logged and never fatal: the
+        heartbeat is for whoever watches, and a scheduler that stopped over it would be
+        the outage it exists to reveal."""
+        try:
+            async with session_factory() as session:
+                await RunService(session).beat(
+                    started_at=self.started_at,
+                    pid=os.getpid(),
+                    running=len(self.workers),
+                    started=started,
+                )
+                await session.commit()
+        except Exception as error:  # noqa: BLE001 - see the docstring
+            log.warning("could not record the heartbeat: %s", error)
 
     async def _spawn(self, source_id: int, kind: Kind) -> bool:
         async with session_factory() as session:
@@ -220,6 +238,12 @@ class Scheduler:
         await self.release()
 
 
+async def healthy() -> int:
+    """0 when the heartbeat is fresher than three ticks, 1 otherwise."""
+    async with session_factory() as session:
+        return 0 if await RunService(session).heartbeat_is_fresh() else 1
+
+
 async def main(*, once: bool = False) -> int:
     scheduler = Scheduler()
     loop = asyncio.get_running_loop()
@@ -239,7 +263,14 @@ if __name__ == "__main__":  # pragma: no cover
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true", help="one tick and exit")
+    parser.add_argument(
+        "--healthy",
+        action="store_true",
+        help="exit 0 if the running scheduler ticked recently, 1 if not — the container check",
+    )
     arguments = parser.parse_args()
 
     configure_logging()
+    if arguments.healthy:
+        raise SystemExit(asyncio.run(healthy()))
     raise SystemExit(asyncio.run(main(once=arguments.once)))

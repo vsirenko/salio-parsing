@@ -164,3 +164,29 @@ async def _one_tick() -> int:
         for worker in sched.workers.values():
             await worker.process.wait()
         await sched.release()
+
+
+# --- saying it is alive ---
+
+
+def test_a_tick_leaves_a_heartbeat_the_panel_and_the_container_can_read(client, event_loop):
+    """With nothing due a working scheduler is as quiet as a stopped one; the heartbeat is
+    what tells them apart — for `GET /scheduler` and for the container's own check."""
+    from app.features.runs.scheduler import healthy
+
+    token = admin_token(client)
+    source = channel(client, token)
+    before = client.get("/api/admin/scheduler", headers=auth(token)).json()
+    assert before["alive"] is False
+    assert event_loop.run_until_complete(healthy()) == 1
+
+    event_loop.run_until_complete(scheduler().run_forever(once=True))
+
+    after = client.get("/api/admin/scheduler", headers=auth(token)).json()
+    assert after["alive"] is True
+    assert after["ticked_at"] is not None
+    assert event_loop.run_until_complete(healthy()) == 0
+    # Every channel with its schedule and its next slot, computed from the cron.
+    (row,) = [c for c in after["channels"] if c["source_id"] == source["id"]]
+    assert row["cron_full"] == "0 3 * * *"
+    assert row["next_full_at"] is not None and row["next_quick_at"] is not None

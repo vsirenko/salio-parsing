@@ -1360,3 +1360,25 @@ class Run(Base):
         # Both "when did this last run" and "the last one that ended ok" read from here.
         Index("ix_runs_source_kind_started", "source_id", "kind", desc("started_at")),
     )
+
+
+class SchedulerHeartbeat(Base):
+    """The scheduler saying it is alive, once per tick. One row.
+
+    The one question `runs` cannot answer. It says when each channel last ran and what is
+    running, and with nothing due it says nothing at all — which on 23.09.2026 looked the same
+    as a scheduler that had stopped: no source had a schedule, the log was empty, and the only
+    health check probed an HTTP port this process does not open. So each tick writes here,
+    and a stale `ticked_at` is a scheduler that stopped, whatever else is quiet.
+    """
+
+    __tablename__ = "scheduler_heartbeat"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    started_at: Mapped[datetime] = mapped_column(TimestampTZ)
+    ticked_at: Mapped[datetime] = mapped_column(TimestampTZ)
+    pid: Mapped[int] = mapped_column(Integer)
+    running: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    started_last_tick: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    __table_args__ = (CheckConstraint("id = 1", name="one_row"),)

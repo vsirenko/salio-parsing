@@ -63,6 +63,14 @@ services:
     volumes:
       - snapshots:/snapshots
     command: ["python", "-m", "app.features.runs.scheduler"]
+    # The image's check probes the api's HTTP port, which this process does not open, so it
+    # read `unhealthy` whatever the scheduler did. This asks whether it ticked lately.
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.features.runs.scheduler", "--healthy"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     restart: unless-stopped
     depends_on:
       db:

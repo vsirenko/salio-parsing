@@ -13,10 +13,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
+from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from app.db.models import Run, ShopMarket, Source
+from app.db.models import Category, Run, SchedulerHeartbeat, Shop, ShopMarket, Source
 from app.db.query import paginated
-from app.features.runs.schemas import Check, Due, Job, Kind, RunRead, RunResult, Status
+from app.features.runs.schemas import (
+    ChannelSchedule,
+    Check,
+    Due,
+    Job,
+    Kind,
+    RunRead,
+    RunResult,
+    SchedulerStatus,
+    Status,
+)
 from app.schemas.pagination import Pagination
 
 # A slot missed by more than this is let go rather than caught up. A crawl six hours late
@@ -240,6 +251,82 @@ class RunService:
 
         return sorted(due, key=lambda item: (item.due_at, item.source_id))
 
+    # --- the scheduler itself ---
+
+    async def beat(self, *, started_at: datetime, pid: int, running: int, started: int) -> None:
+        """The scheduler saying it is alive: one row, rewritten every tick."""
+        now = datetime.now(UTC)
+        row = await self.session.get(SchedulerHeartbeat, 1)
+        if row is None:
+            row = SchedulerHeartbeat(id=1, started_at=started_at, ticked_at=now, pid=pid)
+            self.session.add(row)
+        row.started_at, row.ticked_at, row.pid = started_at, now, pid
+        row.running, row.started_last_tick = running, started
+        await self.session.flush()
+
+    async def heartbeat_is_fresh(self, *, now: datetime | None = None) -> bool:
+        row = await self.session.get(SchedulerHeartbeat, 1)
+        if row is None:
+            return False
+        now = now or datetime.now(UTC)
+        return now - row.ticked_at <= timedelta(seconds=3 * settings.scheduler_tick_seconds)
+
+    async def status(self, *, now: datetime | None = None) -> SchedulerStatus:
+        """Alive or not, what is running, what is due, and every channel's next slot."""
+        now = now or datetime.now(UTC)
+        beat = await self.session.get(SchedulerHeartbeat, 1)
+        running = (
+            await self.session.scalars(
+                select(Run).where(Run.finished_at.is_(None)).order_by(Run.started_at)
+            )
+        ).all()
+        latest = (
+            select(Run.id)
+            .where(Run.source_id == Source.id)
+            .order_by(Run.started_at.desc(), Run.id.desc())
+            .limit(1)
+            .correlate(Source)
+            .scalar_subquery()
+        )
+        rows = (
+            await self.session.execute(
+                select(Source, Shop.name, Category.slug, latest)
+                .join(Shop, Shop.id == Source.shop_id)
+                .outerjoin(Category, Category.id == Source.category_id)
+                .order_by(Shop.name, Source.slug)
+            )
+        ).all()
+        last_ids = [run_id for *_, run_id in rows if run_id is not None]
+        runs = {
+            run.id: run
+            for run in (await self.session.scalars(select(Run).where(Run.id.in_(last_ids)))).all()
+        }
+        channels = [
+            ChannelSchedule(
+                source_id=source.id,
+                source=source.slug,
+                shop=shop,
+                category=category,
+                is_enabled=source.is_enabled,
+                cron_full=source.cron_full,
+                cron_quick=source.cron_quick,
+                next_full_at=_next(source.cron_full, now) if source.is_enabled else None,
+                next_quick_at=_next(source.cron_quick, now) if source.is_enabled else None,
+                last_run=RunRead.model_validate(runs[run_id]) if run_id in runs else None,
+            )
+            for source, shop, category, run_id in rows
+        ]
+        return SchedulerStatus(
+            alive=await self.heartbeat_is_fresh(now=now),
+            started_at=beat.started_at if beat else None,
+            ticked_at=beat.ticked_at if beat else None,
+            pid=beat.pid if beat else None,
+            tick_seconds=settings.scheduler_tick_seconds,
+            running=[RunRead.model_validate(run) for run in running],
+            due=await self.due(now=now),
+            channels=channels,
+        )
+
     async def _last_started(self) -> dict[tuple[int, str], datetime]:
         rows = await self.session.execute(
             select(Run.source_id, Run.kind, func.max(Run.started_at)).group_by(
@@ -300,3 +387,13 @@ class RunService:
         if source is None:
             raise NotFoundError(f"Source {source_id} not found")
         return source
+
+
+def _next(expression: str | None, now: datetime) -> datetime | None:
+    """The next slot of a cron, or nothing for no schedule or one that does not parse."""
+    if not expression:
+        return None
+    try:
+        return croniter(expression, now).get_next(datetime)
+    except (CroniterBadCronError, ValueError):
+        return None
