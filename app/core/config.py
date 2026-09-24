@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     # How many observations one request may carry. Above this the worker splits, which
     # keeps one request's memory bounded no matter how large a catalogue is.
     max_batch_offers: int = Field(default=500, ge=1, le=5000)
+    # How many products a worker reads before handing them over, rather than handing over
+    # a whole shop at the end: what a run collects reaches the database while it runs, and a
+    # worker that dies at nine tenths has lost one slice rather than everything.
+    worker_handover_every: int = Field(default=100, ge=1, le=5000)
 
     # --- Collection scheduler ---
     # Its own process: inside the API it would duplicate per uvicorn worker and die with

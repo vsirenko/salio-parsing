@@ -148,5 +148,8 @@ class SchedulerStatus(BaseModel):
     tick_seconds: int
     queued: list[RunRead]
     running: list[RunRead]
+    # For each running run, the listings of its channel seen since it started. A worker
+    # hands over a slice at a time, so this grows while the run works.
+    progress: dict[int, int]
     due: list[Due]
     channels: list[ChannelSchedule]

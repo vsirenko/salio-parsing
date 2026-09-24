@@ -394,3 +394,48 @@ def test_a_reparse_reports_the_id_the_shop_gave_and_not_the_file_name(client, ev
 
     assert (seen, failed) == (1, 0)
     assert [p["external_id"] for p in payloads] == ["MJXP4HX/A"]
+
+
+def test_a_run_hands_over_as_it_reads_and_keeps_the_shop_s_order(event_loop, tmp_path):
+    """A shop was read whole and handed over at the end: nothing a run collected reached the
+    database until it was done. A slice at a time now, each in listing order."""
+    from app.core.config import settings
+    from app.features.runs.schemas import Job, Kind
+    from app.features.runs.snapshots import SnapshotStore
+    from app.features.runs.worker import _read_and_hand_over
+
+    class Receiving:
+        def __init__(self) -> None:
+            self.batches: list[list[str]] = []
+
+        async def hand_over(self, source_id, body):
+            self.batches.append([offer["external_id"] for offer in body["offers"]])
+            return {"accepted": len(body["offers"]), "coverage": {"price": 1.0}}
+
+    channel = a_slow_shop(25, in_flight=[])
+    job = Job(
+        run_id=1,
+        source_id=1,
+        source_slug="slow-shop",
+        kind=Kind.FULL,
+        access="retail",
+        decode="markup",
+        base_url=None,
+        market_codes=["LV"],
+        delivers=["catalogue", "price"],
+    )
+    kept = settings.worker_handover_every
+    settings.worker_handover_every = 10
+    try:
+        listings = event_loop.run_until_complete(channel.discover(None, job))
+        receiving = Receiving()
+        result = event_loop.run_until_complete(
+            _read_and_hand_over(job, channel, receiving, None, SnapshotStore(tmp_path), listings)
+        )
+    finally:
+        settings.worker_handover_every = kept
+
+    assert [len(batch) for batch in receiving.batches] == [10, 10, 5]
+    assert [n for batch in receiving.batches for n in batch] == [str(n) for n in range(25)]
+    assert (result.items_seen, result.items_ingested, result.error) == (25, 25, None)
+    assert result.coverage == {"price": 1.0}

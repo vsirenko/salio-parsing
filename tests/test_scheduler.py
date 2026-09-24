@@ -257,3 +257,34 @@ def test_a_channel_says_whether_it_has_a_cheap_pass(client):
     }
     assert rows[with_quick["id"]]["has_quick"] is True
     assert rows[without["id"]]["has_quick"] is False
+
+
+# --- settling what a run brought ---
+
+
+def test_a_finished_run_is_placed_without_anybody_calling_the_matcher(client, event_loop):
+    """The pipeline stopped at "read": a listing waited, unplaced, until a person called the
+    matcher. The scheduler settles a finished run now — the rebuild, the ladder, promotion."""
+    from tests.test_matching import a_shop_we_can_build_from, offer_from
+
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    offer_id = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "0194253000001",
+        },
+    )
+    before = client.get(f"/api/admin/offers/{offer_id}/trace", headers=auth(token)).json()
+    assert before["match"] is None
+
+    event_loop.run_until_complete(scheduler().settle(run_id=0))
+
+    after = client.get(f"/api/admin/offers/{offer_id}/trace", headers=auth(token)).json()
+    assert after["match"] is not None, after["queue"]
+    assert after["entry"]["model"] == "iPhone 15"

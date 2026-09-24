@@ -58,6 +58,14 @@ ALLOWED_CROSS_FEATURE = {
     # ordinary pass would rightly leave alone. The kind is recorded on the run already, and
     # a second place to say it is a second place for the two to disagree.
     ("offers", "runs"): "a reparse re-reads what an ordinary pass would leave alone",
+    # The scheduler settles what a run brought. Without it the pipeline stopped at "read":
+    # every listing a run collected waited, unplaced, until somebody called the matcher by
+    # hand — which on 23.09.2026 was every time. The worker cannot do it, and by design: it
+    # is the one process that runs hostile input all day, and its token reaches five routes.
+    # The scheduler is trusted and already holds the database, so it runs the matcher once
+    # the worker is done, the way a person did.
+    ("runs", "matching"): "the scheduler places what a finished run collected",
+    ("runs", "judge"): "the matcher is built with its judge, which only reads stored verdicts here",
 }
 
 

@@ -172,7 +172,8 @@ function sources(p) {
     const share = f.listed ? f.placed / f.listed : 0;
     const status = f.last_run_status === "ok" ? "ok" : f.last_run_status ? "bad" : "muted";
     const live = [...(S.queued || []), ...S.running].find(r => r.source_id === f.source_id);
-    const badge = live ? `<span class="busy-tag ${esc(live.status)}">${esc(live.status)} ${esc(live.kind)}</span>` : "";
+    const done = live && S.progress ? S.progress[live.id] : undefined;
+    const badge = live ? `<span class="busy-tag ${esc(live.status)}">${esc(live.status)} ${esc(live.kind)}${done !== undefined ? ` · ${done} seen` : ""}</span>` : "";
     return `<tr class="pick ${SOURCE === f.source ? "on" : ""} ${live ? "busy" : ""}" data-s="${esc(f.source)}">
       <td>${esc(f.shop)}</td><td>${esc(f.source)}${badge}</td>
       <td class="${f.scheduled ? "ok" : "warn"}">${f.scheduled ? "yes" : "no"}</td>
@@ -290,7 +291,7 @@ function runsPanel() {
   sec.hidden = false;
   const name = id => (S.channels.find(c => c.source_id === id) || {}).source || id;
   const rows = RUNS.map(r => `<tr><td>${r.id}</td><td>${esc(name(r.source_id))}</td><td>${esc(r.kind)}</td>
-    <td class="status-${esc(r.status)}"><b>${esc(r.status)}</b></td><td>${esc((r.started_at || "").replace("T", " ").slice(0, 19))}</td>
+    <td class="status-${esc(r.status)}"><b>${esc(r.status)}</b>${r.status === "running" && S.progress && S.progress[r.id] !== undefined ? ` · ${S.progress[r.id]} seen so far` : ""}</td><td>${esc((r.started_at || "").replace("T", " ").slice(0, 19))}</td>
     <td>${esc((r.finished_at || "").replace("T", " ").slice(0, 19))}</td><td>${r.items_seen}</td><td>${r.items_ingested}</td>
     <td>${r.items_failed}</td><td class="muted">${esc((r.contract || {}).verdict || "")}</td><td class="bad">${esc(r.error || "")}</td></tr>`).join("");
   document.getElementById("runs").innerHTML = `<thead><tr><th>Run</th><th>Channel</th><th>Kind</th><th>Status</th>

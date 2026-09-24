@@ -83,8 +83,7 @@ async def collect(
                 )
 
             log.info("run %d: %d listing(s)", job.run_id, len(listings))
-            seen = len(listings)
-            payloads, failed = await _read_all(job, channel, session, store, listings)
+            return await _read_and_hand_over(job, channel, collector, session, store, listings)
 
     ingested, coverage, handover_error = await _hand_over(job, collector, payloads)
     return RunResult(
@@ -93,6 +92,50 @@ async def collect(
         items_failed=failed,
         coverage=coverage,
         error=handover_error,
+    )
+
+
+async def _read_and_hand_over(
+    job: Job,
+    channel: Channel,
+    collector: Collector,
+    fetcher: Fetcher,
+    store: SnapshotStore,
+    listings: list[Listing],
+) -> RunResult:
+    """Read the listings a slice at a time and hand each slice over as it is read.
+
+    A shop used to be read whole and handed over at the end, so nothing a run collected
+    reached the database until it was done, and a worker that died at nine tenths had lost
+    all of it. A slice keeps the shop's order — each one is read side by side and handed
+    over in listing order — so a run can still be compared with the one before it.
+    """
+    every = settings.worker_handover_every
+    ingested = failed = 0
+    weighted: Counter[str] = Counter()
+    for start in range(0, len(listings), every):
+        payloads, broken = await _read_all(
+            job, channel, fetcher, store, listings[start : start + every]
+        )
+        failed += broken
+        accepted, coverage, error = await _hand_over(job, collector, payloads)
+        ingested += accepted
+        for field, share in coverage.items():
+            weighted[field] += share * accepted
+        if error is not None:
+            return RunResult(
+                items_seen=len(listings),
+                items_ingested=ingested,
+                items_failed=failed,
+                coverage=_share(weighted, ingested),
+                error=error,
+            )
+        log.info("run %d: %d of %d handed over", job.run_id, ingested, len(listings))
+    return RunResult(
+        items_seen=len(listings),
+        items_ingested=ingested,
+        items_failed=failed,
+        coverage=_share(weighted, ingested),
     )
 
 

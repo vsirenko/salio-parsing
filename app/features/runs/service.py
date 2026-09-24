@@ -15,7 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import audit
 from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from app.db.models import Category, Run, SchedulerHeartbeat, Shop, ShopMarket, Source
+from app.db.models import (
+    Category,
+    Offer,
+    RawOffer,
+    Run,
+    SchedulerHeartbeat,
+    Shop,
+    ShopMarket,
+    Source,
+)
 from app.db.query import paginated
 from app.features.runs.schemas import (
     ChannelSchedule,
@@ -344,11 +353,26 @@ class RunService:
             ticked_at=beat.ticked_at if beat else None,
             pid=beat.pid if beat else None,
             tick_seconds=settings.scheduler_tick_seconds,
+            progress={
+                r.id: await self._seen_since(r.source_id, r.started_at)
+                for r in live
+                if r.status == Status.RUNNING.value
+            },
             queued=[RunRead.model_validate(r) for r in live if r.status == Status.QUEUED.value],
             running=[RunRead.model_validate(r) for r in live if r.status == Status.RUNNING.value],
             due=await self.due(now=now),
             channels=channels,
         )
+
+    async def _seen_since(self, source_id: int, since: datetime) -> int:
+        """Listings of a channel observed since a moment, whatever their bytes were."""
+        return (
+            await self.session.scalar(
+                select(func.count(func.distinct(Offer.id)))
+                .join(RawOffer, RawOffer.offer_id == Offer.id)
+                .where(RawOffer.source_id == source_id, Offer.last_seen_at >= since)
+            )
+        ) or 0
 
     async def _last_started(self) -> dict[tuple[int, str], datetime]:
         rows = await self.session.execute(

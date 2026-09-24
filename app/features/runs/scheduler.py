@@ -25,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.db.session import engine, session_factory
+from app.features.judge.service import JudgeService
+from app.features.matching.service import MatchingService
 from app.features.runs.schemas import Kind, RunResult
 from app.features.runs.service import RunService
 
@@ -62,6 +64,12 @@ class Worker:
     @property
     def overdue(self) -> bool:
         return datetime.now(UTC) - self.started > timedelta(minutes=settings.run_timeout_minutes)
+
+
+# How much settling one finished run may do. Bounded, because settling holds the tick: a
+# bound this size is every listing of the largest shop here, twice over.
+SETTLE_LIMIT = 5000
+SETTLE_ROUNDS = 5
 
 
 class Scheduler:
@@ -210,6 +218,40 @@ class Scheduler:
             del self.workers[worker.run_id]
             if worker.process.returncode != 0:
                 await self._finish(worker.run_id, f"worker exited with {worker.process.returncode}")
+            elif worker.kind in (Kind.FULL, Kind.REPARSE):
+                await self.settle(worker.run_id)
+
+    async def settle(self, run_id: int) -> None:
+        """Place what a finished run collected, the way a person used to by hand.
+
+        The rebuild first, so entries follow readings that moved; then the listings nobody
+        has placed; then promotion of what can start an entry; then the ladder once more,
+        for the listings that can now join what was just made. A failure here is logged and
+        never stops the scheduler: the listings wait in the queue, which is where they were.
+        """
+        try:
+            async with session_factory() as session:
+                matching = MatchingService(session, judge=JudgeService(session))
+                renamed = 0
+                for _ in range(SETTLE_ROUNDS):
+                    report = await matching.rebuild_named_from_a_stale_reading(limit=SETTLE_LIMIT)
+                    renamed += report.renamed + report.merged
+                    if not report.found:
+                        break
+                first = await matching.run(limit=SETTLE_LIMIT)
+                promoted = await matching.promote_queue(limit=SETTLE_LIMIT)
+                again = await matching.run(limit=SETTLE_LIMIT)
+                await session.commit()
+            log.info(
+                "run %d settled: %d renamed, %d matched, %d promoted, %d matched after",
+                run_id,
+                renamed,
+                first.matched,
+                promoted.promoted,
+                again.matched,
+            )
+        except Exception as error:  # noqa: BLE001 - see the docstring
+            log.warning("run %d could not be settled: %s", run_id, error)
 
     async def _finish(self, run_id: int, error: str) -> None:
         """Close a run its worker never closed.
