@@ -28,11 +28,13 @@ class BrandService:
         self.session = session
 
     async def list_brands(
-        self, pagination: Pagination, *, search: str | None = None
+        self, pagination: Pagination, *, search: str | None = None, ids: list[int] | None = None
     ) -> tuple[list[BrandRead], int]:
         stmt = select(Brand)
         if search:
             stmt = stmt.where(Brand.canonical_name.ilike(f"%{search}%"))
+        if ids:
+            stmt = stmt.where(Brand.id.in_(ids))
 
         rows, total = await paginated(
             self.session, stmt.order_by(Brand.canonical_name, Brand.id), pagination

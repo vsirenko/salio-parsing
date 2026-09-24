@@ -11,6 +11,7 @@ neither exists; building the operation before there is anything to move would be
 at its hardest part.
 """
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -18,6 +19,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from app.api.deps import CatalogServiceDep
 from app.api.pagination import pagination_params
 from app.features.catalog.schemas import (
+    PRODUCT_SORT,
     IdentifierCreate,
     ProductCreate,
     ProductRead,
@@ -37,6 +39,9 @@ products_router = APIRouter(prefix="/products", tags=["admin: catalogue"])
 variants_router = APIRouter(prefix="/variants", tags=["admin: catalogue"])
 
 PageParams = Annotated[Pagination, Depends(pagination_params())]
+ProductPageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=PRODUCT_SORT, default_sort="id"))
+]
 
 
 # --- products ---
@@ -45,13 +50,31 @@ PageParams = Annotated[Pagination, Depends(pagination_params())]
 @products_router.get("", response_model=Page[ProductRead], summary="List products")
 async def list_products(
     service: CatalogServiceDep,
-    pagination: PageParams,
-    brand_id: Annotated[int | None, Query()] = None,
-    category_id: Annotated[int | None, Query()] = None,
-    search: Annotated[str | None, Query(max_length=200, description="Title contains")] = None,
+    pagination: ProductPageParams,
+    brand_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    category_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    is_visible: Annotated[bool | None, Query()] = None,
+    created_from: Annotated[datetime | None, Query(description="Inclusive")] = None,
+    created_to: Annotated[datetime | None, Query(description="Exclusive")] = None,
+    search: Annotated[
+        str | None,
+        Query(
+            max_length=200,
+            description=(
+                "Title, model or slug contains; an id (up to 7 digits); a barcode (8 to 14"
+                " digits, any padding); an entry's part number"
+            ),
+        ),
+    ] = None,
 ) -> Page[ProductRead]:
     items, total = await service.list_products(
-        pagination, brand_id=brand_id, category_id=category_id, search=search
+        pagination,
+        brand_ids=brand_id,
+        category_ids=category_id,
+        is_visible=is_visible,
+        created_from=created_from,
+        created_to=created_to,
+        search=search,
     )
     return Page[ProductRead].of(items, total, pagination)
 

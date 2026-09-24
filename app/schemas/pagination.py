@@ -31,6 +31,9 @@ class Pagination:
     # emitted. The first page of a cursor-paged feed has no before_id yet, so the
     # presence of an anchor cannot be what selects the mode.
     cursor_mode: bool = False
+    # The order the caller asked for, already checked against the endpoint's allowed keys:
+    # `(key, descending)` pairs, first key first. Empty means the endpoint's default.
+    sort: tuple[tuple[str, bool], ...] = ()
 
     def slice[T](self, items: Sequence[T]) -> list[T]:
         """Apply the window. `before_id` has already filtered the input upstream."""

@@ -24,6 +24,18 @@ Once it does, most of this becomes read-and-correct rather than create.
 
 ## How it works
 
+**The list of families is built to be read without further requests.** A row names its
+brand and category (`{id, canonical_name}`, `{id, name}`) instead of carrying ids a table
+would print as `#15`, and three counts say whether the family is comparable at all:
+`variants_count`, `shops_count` — shops with a *new* listing placed on one of its entries —
+and `min_price` among those listings. They are grouped once over the catalogue, which is
+what lets the list sort and filter by them; at a few thousand families that costs nothing.
+It sorts by `?sort=` over the keys in `PRODUCT_SORT`, filters by several brands or
+categories, visibility and a creation window, and searches words in the title, model or
+slug, an id (up to seven digits), a barcode (eight to fourteen, compared padded to fourteen
+as every reading stores it) or an entry's part number. A barcode and a part number belong to
+entries, so either finds the family of the entry that carries it.
+
 **A variant is the primary entity.** It is what is bought, what carries a barcode, and what
 an offer will attach to. An offer linked at product level would put the price of a 128 GB
 phone in the same history as the 1 TB one. A product is a grouping with no price and no

@@ -72,6 +72,12 @@
   `app/api/pagination.py`. Never redeclare `limit` / `offset` on a route.
 - Services accept a `Pagination` object and return `(items, total)`; routes wrap it with
   `Page[Model].of(...)`. Do not slice lists by hand in a service or a route.
+- A list that sorts says what by: `pagination_params(sortable=..., default_sort=...)` takes
+  `?sort=-created_at,title`, refuses a key outside the list with 422 `unknown_sort_key`,
+  and hands the keys to the service in `Pagination.sort`. The service maps each key to a
+  column through `ordered()` in `app/db/query.py`, which always adds the id last — without
+  that tie-breaker offset pages swap rows between requests. Never an `order_by` built from
+  a query string by hand.
 - Append-only feeds read newest-first (the audit trail) page by cursor, not offset —
   offset repeats rows as new entries arrive. `cursor_mode` is chosen by the endpoint, not
   by whether the caller sent `before_id`.

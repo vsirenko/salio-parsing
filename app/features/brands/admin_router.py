@@ -34,8 +34,14 @@ async def list_brands(
     service: BrandServiceDep,
     pagination: PageParams,
     search: Annotated[str | None, Query(max_length=200, description="Name contains")] = None,
+    ids: Annotated[
+        list[int] | None,
+        Query(
+            description="Only these brands — the ones a filter in a URL names. Repeat for several."
+        ),
+    ] = None,
 ) -> Page[BrandRead]:
-    items, total = await service.list_brands(pagination, search=search)
+    items, total = await service.list_brands(pagination, search=search, ids=ids)
     return Page[BrandRead].of(items, total, pagination)
 
 

@@ -63,13 +63,34 @@ class ProductUpdate(BaseModel):
     is_visible: bool | None = None
 
 
+# What a list of families may be sorted by, `?sort=`.
+PRODUCT_SORT = ("id", "title", "created_at", "brand", "variants_count", "shops_count", "min_price")
+
+
+class BrandRef(BaseModel):
+    """A brand as a row names it: enough to print and to link, nothing to edit."""
+
+    id: int
+    canonical_name: str
+
+
+class CategoryRef(BaseModel):
+    id: int
+    name: str
+
+
 class ProductRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """A family, with what a list of them needs to be read without further requests.
+
+    The brand and the category come named, so a table shows `Lenovo` rather than `#15`, and
+    three counts say whether the family is comparable at all: how many entries it holds,
+    how many shops sell one of them new, and the lowest price any of them asks.
+    """
 
     id: int
     slug: str
-    brand_id: int
-    category_id: int
+    brand: BrandRef
+    category: CategoryRef
     model: str
     title: str
     title_override: str | None
@@ -77,6 +98,11 @@ class ProductRead(BaseModel):
     manufacturer_url: str | None
     is_visible: bool
     created_at: datetime
+    variants_count: int = Field(description="Catalogue entries in the family")
+    shops_count: int = Field(description="Shops with a new listing placed on one of them")
+    min_price: Decimal | None = Field(
+        description="The lowest price of those listings, in the shop's currency (EUR)"
+    )
 
 
 # --- variant ---

@@ -1,8 +1,10 @@
 """The catalogue: families, the things that are bought, and what is known about them."""
 
+from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,15 +16,17 @@ from app.db.models import (
     Brand,
     Category,
     CategoryAttribute,
+    Offer,
     OfferMatch,
     Product,
+    Seller,
     Variant,
     VariantAttribute,
     VariantGtin,
     VariantMerge,
     VariantMpn,
 )
-from app.db.query import paginated
+from app.db.query import ordered, paginated, paginated_rows
 from app.features.catalog.identity import (
     compose_title,
     compute_identity_key,
@@ -31,6 +35,8 @@ from app.features.catalog.identity import (
     slugify,
 )
 from app.features.catalog.schemas import (
+    BrandRef,
+    CategoryRef,
     IdentifierCreate,
     ProductCreate,
     ProductRead,
@@ -68,23 +74,33 @@ class CatalogService:
         self,
         pagination: Pagination,
         *,
-        brand_id: int | None = None,
-        category_id: int | None = None,
+        brand_ids: list[int] | None = None,
+        category_ids: list[int] | None = None,
+        is_visible: bool | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
         search: str | None = None,
     ) -> tuple[list[ProductRead], int]:
-        stmt = select(Product)
-        if brand_id is not None:
-            stmt = stmt.where(Product.brand_id == brand_id)
-        if category_id is not None:
-            stmt = stmt.where(Product.category_id == category_id)
-        if search:
-            stmt = stmt.where(Product.title.ilike(f"%{search}%"))
+        stmt = _product_rows()
+        if brand_ids:
+            stmt = stmt.where(Product.brand_id.in_(brand_ids))
+        if category_ids:
+            stmt = stmt.where(Product.category_id.in_(category_ids))
+        if is_visible is not None:
+            stmt = stmt.where(Product.is_visible.is_(is_visible))
+        if created_from is not None:
+            stmt = stmt.where(Product.created_at >= created_from)
+        if created_to is not None:
+            stmt = stmt.where(Product.created_at < created_to)
+        if search and search.strip():
+            stmt = stmt.where(_product_search(search.strip()))
 
-        rows, total = await paginated(self.session, stmt.order_by(Product.id), pagination)
-        return [ProductRead.model_validate(row) for row in rows], total
+        stmt = ordered(stmt, pagination, _product_sort(stmt), Product.id)
+        rows, total = await paginated_rows(self.session, stmt, pagination)
+        return [_product_read(row) for row in rows], total
 
     async def get_product(self, product_id: int) -> ProductRead:
-        return ProductRead.model_validate(await self._product(product_id))
+        return await self._read_product(product_id)
 
     async def create_product(self, payload: ProductCreate) -> ProductRead:
         brand = await self._brand(payload.brand_id)
@@ -106,7 +122,7 @@ class CatalogService:
 
         audit.set_target("product", product.id)
         audit.record_changes(**payload.model_dump(mode="json"), title=product.title)
-        return ProductRead.model_validate(product)
+        return await self._read_product(product.id)
 
     async def update_product(self, product_id: int, payload: ProductUpdate) -> ProductRead:
         product = await self._product(product_id)
@@ -133,9 +149,8 @@ class CatalogService:
             product.slug = slugify(product.title, entity_id=product.id)
 
         await self.session.flush()
-        await self.session.refresh(product)
         audit.record_changes(**sent)
-        return ProductRead.model_validate(product)
+        return await self._read_product(product.id)
 
     # --- variants ---
 
@@ -607,6 +622,12 @@ class CatalogService:
             await self.session.rollback()
             raise ConflictError(f"That {what} already exists") from exc
 
+    async def _read_product(self, product_id: int) -> ProductRead:
+        row = (await self.session.execute(_product_rows().where(Product.id == product_id))).first()
+        if row is None:
+            raise NotFoundError(f"Product {product_id} not found")
+        return _product_read(row)
+
     async def _product(self, product_id: int) -> Product:
         product = await self.session.get(Product, product_id)
         if product is None:
@@ -650,3 +671,125 @@ class _Value:
 
 def _plain(value: Decimal) -> str:
     return format(value.normalize(), "f")
+
+
+# --- a product as a list shows it ---
+
+# Search by id where the string could be one: short digits. A barcode is eight digits or
+# more, and one of those is searched as a barcode instead.
+_LONGEST_ID = 7
+
+
+def _product_rows() -> Select[Any]:
+    """Each family with its brand and category named and the three counts beside it.
+
+    The counts are grouped once over the whole catalogue rather than per row, which is what
+    lets a page sort and filter by them. A shop counts where a *new* listing of it is placed
+    on one of the family's entries — the matcher places nothing else, and a refurbished
+    price is not a price of this product.
+    """
+    entries = (
+        select(Variant.product_id, func.count(Variant.id).label("variants"))
+        .where(Variant.product_id.is_not(None))
+        .group_by(Variant.product_id)
+        .subquery()
+    )
+    market = (
+        select(
+            Variant.product_id,
+            func.count(func.distinct(Seller.shop_id)).label("shops"),
+            func.min(Offer.price).label("min_price"),
+        )
+        .join(
+            OfferMatch, (OfferMatch.variant_id == Variant.id) & OfferMatch.superseded_at.is_(None)
+        )
+        .join(Offer, Offer.id == OfferMatch.offer_id)
+        .join(Seller, Seller.id == Offer.seller_id)
+        .where(Variant.product_id.is_not(None), Offer.condition == "new")
+        .group_by(Variant.product_id)
+        .subquery()
+    )
+    return (
+        select(
+            Product,
+            Brand.canonical_name.label("brand_name"),
+            Category.name.label("category_name"),
+            func.coalesce(entries.c.variants, 0).label("variants_count"),
+            func.coalesce(market.c.shops, 0).label("shops_count"),
+            market.c.min_price.label("min_price"),
+        )
+        .join(Brand, Brand.id == Product.brand_id)
+        .join(Category, Category.id == Product.category_id)
+        .outerjoin(entries, entries.c.product_id == Product.id)
+        .outerjoin(market, market.c.product_id == Product.id)
+    )
+
+
+def _product_sort(stmt: Select[Any]) -> dict[str, Any]:
+    columns = {c.name: c for c in stmt.selected_columns}
+    return {
+        "id": Product.id,
+        "title": Product.title,
+        "created_at": Product.created_at,
+        "brand": Brand.canonical_name,
+        "variants_count": columns["variants_count"],
+        "shops_count": columns["shops_count"],
+        "min_price": columns["min_price"],
+    }
+
+
+def _product_search(text: str) -> Any:
+    """The words in the title, model or slug; an id; a barcode; a part number.
+
+    A barcode or a part number is an entry's, not a family's, so either finds the family of
+    the entry that carries it. A barcode is compared in the one form every reading stores —
+    fourteen digits, padded — which is what makes `4006381333931` from a box find
+    `04006381333931`.
+    """
+    pattern = f"%{text}%"
+    found = [
+        Product.title.ilike(pattern),
+        Product.model.ilike(pattern),
+        Product.slug.ilike(pattern),
+    ]
+    digits = text.replace(" ", "")
+    if digits.isdigit() and len(digits) <= _LONGEST_ID:
+        found.append(Product.id == int(digits))
+    if digits.isdigit() and 8 <= len(digits) <= 14:
+        found.append(
+            Product.id.in_(
+                select(Variant.product_id)
+                .join(VariantGtin, VariantGtin.variant_id == Variant.id)
+                .where(VariantGtin.gtin == digits.zfill(14))
+            )
+        )
+    part = normalize_model(text)
+    if part:
+        found.append(
+            Product.id.in_(
+                select(Variant.product_id)
+                .join(VariantMpn, VariantMpn.variant_id == Variant.id)
+                .where(VariantMpn.mpn_normalized == part)
+            )
+        )
+    return or_(*found)
+
+
+def _product_read(row: Any) -> ProductRead:
+    product = row[0]
+    return ProductRead(
+        id=product.id,
+        slug=product.slug,
+        brand=BrandRef(id=product.brand_id, canonical_name=row.brand_name),
+        category=CategoryRef(id=product.category_id, name=row.category_name),
+        model=product.model,
+        title=product.title,
+        title_override=product.title_override,
+        description=product.description,
+        manufacturer_url=product.manufacturer_url,
+        is_visible=product.is_visible,
+        created_at=product.created_at,
+        variants_count=row.variants_count,
+        shops_count=row.shops_count,
+        min_price=row.min_price,
+    )
