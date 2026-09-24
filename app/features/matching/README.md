@@ -11,14 +11,19 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `DELETE /api/admin/offers/{offer_id}/match` | unlink, back to the queue |
 | `GET /api/admin/offers/{offer_id}/matches` | every opinion ever held about it |
 | `POST /api/admin/matching/run` | work through what is unplaced |
-| `GET /api/admin/match-queue` | what could not be placed, filterable by `reason` |
+| `GET /api/admin/match-queue` | what could not be placed, with its listing and candidates — by `reason`, `shop_id`, `brand_id`, `category_id`, `search`, `include_snoozed`; `?sort=` |
+| `GET /api/admin/match-queue/{offer_id}` | one queued listing |
+| `POST · DELETE /api/admin/match-queue/{offer_id}/snooze` | set it aside until a time, or bring it back |
 | `GET /api/admin/match-queue/summary` | the breakdown that says what to build next |
 | `POST /api/admin/matching/judge` | ask the judge about the brand choices, then retry them |
 | `POST /api/admin/matching/judge/colours` | buy the colour a title carries and no rule may read |
 | `POST /api/admin/matching/judge/matches` | ask whether each rule's match names the right model |
-| `GET /api/admin/matching/doubts` | the matches the judge doubts, for a person to decide |
+| `GET /api/admin/matching/doubts` | the matches the judge doubts, for a person to decide — by `method`, `shop_id`; `?sort=` |
+| `POST /api/admin/matching/doubts/{offer_id}/keep` | a person looked and left the match where it is |
 | `POST /api/admin/offers/{offer_id}/promote` | make the variant this listing was looking for |
 | `POST /api/admin/matching/promote` | do that for everything identifiable in the queue |
+| `POST /api/admin/matching/merge` | fold together the entries a barcode says are one product |
+| `POST /api/admin/matching/rebuild` | rebuild the entries named after a reading that has since changed |
 
 ## How it works
 
@@ -166,6 +171,71 @@ deleted — the trail points at it — and **an entry filed into a hidden family
 Nothing else hides a family, so a hidden one with an entry in it is only this pass's leftover:
 on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the storefront that way,
 their names emptied by one reading and filled again by the next.
+
+## Working the queue
+
+**A queue row carries what deciding needs.** `offer` is the listing as the shop wrote it —
+title, shop, brand string, barcode, price, link, category — and `candidates` the near misses,
+each named (`variant_title`, `model`, `brand`, how many listings `offers_count` already sit
+on it) and compared with the listing axis by axis: `listing`, `entry`, and `agrees`, which is
+null where one side is silent — the ladder treats a silence differently from a
+disagreement, and so should whoever is choosing. The comparison is made when the row is
+read, against the catalogue as it is, with the same values the ladder weighs — the reading's
+identity and a colour the judge was asked for. **There is no score**: the ladder does not
+rank candidates, it agrees or refuses, and a number here would be invented for the page. A
+`brand_ambiguous` row's candidates are brands, not entries.
+
+**`brand` and `model_key` are what the matcher looked for**, written onto the row as it
+queues it: the brand it settled on, and the stated model normalized as the model rung
+compares it (never the title — a whole title normalized groups nothing). `siblings` counts
+the queued listings looking for the same pair, itself included, so `sort=-siblings` puts
+first the one new entry that would place the most listings. That holds where a model names
+a product; where it names a family it counts the family — nineteen of bigbox's `Dell Pro 14
+Essential` configurations share one on 24.09.2026, and they are nineteen entries, not one.
+A row queued before the columns existed has neither until the matcher next retries it, which
+every pass does.
+
+**Snoozing hides a row until a time**, and the promotion sweep leaves it alone — a person
+said not now, and making an entry of it is exactly what they deferred. The matcher still
+retries it: the catalogue may grow the entry it needed. `include_snoozed=true` shows them.
+
+**Keeping a doubt is a person's decision, not a flag.** `POST /doubts/{offer_id}/keep`
+supersedes the rule's match with the same entry by the same `method`, now `decided_by:
+human`, with `kept_rule_match` in its evidence. It leaves `GET /doubts`, which is only about
+what a rule decided, and it survives the next pass as every human decision does. Placing it
+by hand with `PUT /match` would do the second and lose the first: the method would read
+`human`, and "which matches rest on a barcode" would no longer find it.
+
+**`GET /doubts` reads the listing's title off `offers`, and joins the verdicts by
+equality.** It used to pick the title out of every observation with a window over all the
+readings — 7.5 s a page on 201 thousand of them — and the two agreed on all 18486 listings
+when it changed; and it found each match's verdict with a subquery that compared JSON fields
+of every verdict for every one of 17 thousand matches, which is 25 s. `POST /judge/matches` reads the same
+column, so the question asked and the doubt looked up cannot name different titles.
+
+## What cannot be undone, previewed
+
+`promote` (one or the sweep) and `merge` take `dry_run=true`. The preview is the real code
+inside a savepoint that is then rolled back, so it cannot drift from what a real run does:
+`created` lists the entries a promotion makes (their `id` null on a dry run), `pairs` the
+merges. A preview leaves the trail with its envelope and no changes — the trail says what
+was done, not what would have been.
+
+**How long a pass takes**, measured from the trail's own durations on 24.09.2026, so a
+caller can choose a `limit` that answers inside a request (about 30 s):
+
+| pass | per item, worst seen | a safe `limit` |
+|---|---|---|
+| `POST /api/admin/matching/run` | 3.5 s the longest pass seen, whatever its `limit` | 1000 |
+| `POST /api/admin/matching/promote` | 17 ms | 1000 |
+| `POST /api/admin/matching/merge` | 90 ms | 300 |
+| `POST /api/admin/matching/rebuild` | 75 ms | 300 |
+| `POST /api/admin/matching/judge/ambiguous` | 195 ms (four questions at a time) | 150 |
+| `POST /api/admin/matching/judge/colours` | 85 ms | 200 |
+| `POST /api/admin/matching/judge/matches` | nothing for an answer already bought; a new one as the two above | 150 new |
+
+These are synchronous on purpose for now; a pass the size of the queue belongs in a
+background job with a run id and progress, as the collectors have — see `TODO.md`.
 
 ## Decisions worth knowing before changing it
 

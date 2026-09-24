@@ -8,10 +8,11 @@ through the matcher.
 
 import asyncio
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from typesafe_sdk import (
@@ -28,6 +29,7 @@ from app.db.models import (
     Attribute,
     AttributeValue,
     AttributeValueAlias,
+    AuditEntry,
     Brand,
     Category,
     CategoryAttribute,
@@ -44,6 +46,8 @@ from app.features.judge.schemas import (
     ColourRequest,
     ColourVerdict,
     JudgeReport,
+    JudgeSummary,
+    JudgeWindow,
     MatchCheckRequest,
     MatchCheckVerdict,
     VariantRequest,
@@ -489,6 +493,46 @@ class JudgeService:
             self.session, stmt.order_by(JudgeVerdict.id.desc()), pagination
         )
         return [VerdictRead.model_validate(row) for row in rows], total
+
+    async def summary(self) -> JudgeSummary:
+        now = datetime.now(UTC)
+        return JudgeSummary(
+            day=await self._window(now - timedelta(days=1)),
+            week=await self._window(now - timedelta(days=7)),
+            all_time=await self._window(None),
+        )
+
+    async def _window(self, since: datetime | None) -> JudgeWindow:
+        bought = select(
+            JudgeVerdict.kind,
+            func.count(),
+            func.coalesce(func.sum(JudgeVerdict.input_tokens), 0),
+            func.coalesce(func.sum(JudgeVerdict.output_tokens), 0),
+        ).group_by(JudgeVerdict.kind)
+        # Every pass that asks lives under this prefix and records its report; the trail
+        # keeps it whatever the response was, so only the ones that finished are counted.
+        passes = select(
+            func.count(),
+            func.coalesce(func.sum(AuditEntry.changes["cached"].as_integer()), 0),
+        ).where(
+            AuditEntry.method == "POST",
+            AuditEntry.path.like("/api/admin/matching/judge%"),
+            AuditEntry.status_code < 300,
+        )
+        if since is not None:
+            bought = bought.where(JudgeVerdict.created_at >= since)
+            passes = passes.where(AuditEntry.created_at >= since)
+        rows = (await self.session.execute(bought)).all()
+        count, cached = (await self.session.execute(passes)).one()
+        return JudgeWindow(
+            since=since,
+            passes=count,
+            asked=sum(row[1] for row in rows),
+            cached=cached,
+            input_tokens=sum(row[2] for row in rows),
+            output_tokens=sum(row[3] for row in rows),
+            by_kind={row[0]: row[1] for row in rows},
+        )
 
     async def _stored(self, question_hash: str) -> JudgeVerdict | None:
         return await self.session.scalar(

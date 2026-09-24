@@ -7,10 +7,13 @@ GET    /api/admin/offers/{id}/matches   every opinion ever held about it
 POST   /api/admin/matching/run          work through what is unplaced
 GET    /api/admin/match-queue           what could not be placed, and why
 GET    /api/admin/match-queue/summary   the breakdown that says what to build next
+GET    /api/admin/match-queue/{id}      one row
+POST · DELETE /api/admin/match-queue/{id}/snooze  set aside until, or bring back
 POST   /api/admin/matching/judge        ask the judge about the brand choices, then retry
 POST   /api/admin/matching/judge/colours  buy the colour a title carries and no rule reads
 POST   /api/admin/matching/judge/matches  ask whether each rule's match names the right model
 GET    /api/admin/matching/doubts   the matches the judge doubts, for a person
+POST   /api/admin/matching/doubts/{id}/keep  a person looked and left it
 POST   /api/admin/offers/{id}/promote   make the variant this listing was looking for
 POST   /api/admin/matching/promote      do that for everything identifiable in the queue
 """
@@ -23,17 +26,22 @@ from app.api.deps import MatchingServiceDep
 from app.api.pagination import pagination_params
 from app.features.judge.schemas import JudgeReport
 from app.features.matching.schemas import (
+    DOUBT_SORT,
+    QUEUE_SORT,
+    DoubtKept,
     ManualMatch,
     MatchDoubtRead,
     MatchOutcome,
     MatchQueueRead,
     MergeReport,
+    Method,
     OfferMatchRead,
     PromotionReport,
     QueueSummary,
     Reason,
     RenameReport,
     RunReport,
+    Snooze,
 )
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
@@ -43,6 +51,16 @@ router = APIRouter(prefix="/matching", tags=["admin: matching"])
 queue_router = APIRouter(prefix="/match-queue", tags=["admin: matching"])
 
 PageParams = Annotated[Pagination, Depends(pagination_params())]
+QueuePageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=QUEUE_SORT, default_sort="offer_id"))
+]
+DoubtPageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=DOUBT_SORT, default_sort="offer_id"))
+]
+DryRun = Annotated[
+    bool,
+    Query(description="Compute the same report and keep none of it: nothing is written"),
+]
 
 
 @offers_router.post(
@@ -118,14 +136,16 @@ async def run(
         422: {"model": ErrorResponse, "description": "Not enough to build a variant from"},
     },
 )
-async def promote(offer_id: int, service: MatchingServiceDep) -> MatchOutcome:
+async def promote(
+    offer_id: int, service: MatchingServiceDep, dry_run: DryRun = False
+) -> MatchOutcome:
     """The catalogue has to start somewhere, and only the shops know what is in them.
 
     Deliberately not a new kind of match: the variant is created and then the ordinary
     ladder runs, so the link records the rung that actually fired rather than a method
     meaning "we made this from itself". Where the variant came from is in the audit trail.
     """
-    return await service.promote(offer_id)
+    return await service.promote(offer_id, dry_run=dry_run)
 
 
 @router.post(
@@ -135,7 +155,11 @@ async def promote(offer_id: int, service: MatchingServiceDep) -> MatchOutcome:
 )
 async def promote_queue(
     service: MatchingServiceDep,
-    limit: Annotated[int, Query(ge=1, le=1000, description="How many to consider")] = 100,
+    limit: Annotated[
+        int,
+        Query(ge=1, le=1000, description="How many to consider. ~17 ms each at worst"),
+    ] = 100,
+    dry_run: DryRun = False,
 ) -> PromotionReport:
     """Takes only listings that carry a barcode and come from a channel we trust.
 
@@ -143,7 +167,7 @@ async def promote_queue(
     rest stay queued where somebody can look at them. Each candidate is matched before it
     is promoted, because the one before it may have just created the variant it needed.
     """
-    return await service.promote_queue(limit=limit)
+    return await service.promote_queue(limit=limit, dry_run=dry_run)
 
 
 @router.post(
@@ -153,11 +177,14 @@ async def promote_queue(
 )
 async def merge_duplicates(
     service: MatchingServiceDep,
-    limit: Annotated[int, Query(ge=1, le=500, description="How many pairs to consider")] = 100,
+    limit: Annotated[
+        int, Query(ge=1, le=500, description="How many pairs to consider. ~90 ms each")
+    ] = 100,
+    dry_run: DryRun = False,
 ) -> MergeReport:
     """Only a barcode decides. A part number names a family as often as a product, so two
     entries sharing one are usually two real configurations rather than one written twice."""
-    return await service.merge_duplicates(limit=limit)
+    return await service.merge_duplicates(limit=limit, dry_run=dry_run)
 
 
 @router.post(
@@ -229,12 +256,40 @@ async def check_matches(
     response_model=Page[MatchDoubtRead],
     summary="The matches the judge doubts",
 )
-async def doubts(service: MatchingServiceDep, pagination: PageParams) -> Page[MatchDoubtRead]:
+async def doubts(
+    service: MatchingServiceDep,
+    pagination: DoubtPageParams,
+    method: Annotated[
+        list[Method] | None, Query(description="What placed it. Repeat for several")
+    ] = None,
+    shop_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+) -> Page[MatchDoubtRead]:
     """Live rule matches whose verdict gives the listing less than `JUDGE_DOUBT_BELOW` chance
     of naming the entry's own model. Each one is a decision for a person — unlink, split,
-    merge or leave it."""
-    items, total = await service.doubts(pagination)
+    merge or leave it (`POST /doubts/{offer_id}/keep`). `sort=same` puts the surest
+    doubts first."""
+    items, total = await service.doubts(
+        pagination,
+        methods=[value.value for value in method or []],
+        shop_ids=shop_id,
+    )
     return Page[MatchDoubtRead].of(items, total, pagination)
+
+
+@router.post(
+    "/doubts/{offer_id}/keep",
+    response_model=DoubtKept,
+    summary="A person looked at a doubted match and left it",
+    responses={
+        404: {"model": ErrorResponse, "description": "No active match"},
+        409: {"model": ErrorResponse, "description": "Not a rule's match"},
+    },
+)
+async def keep_doubted(offer_id: int, service: MatchingServiceDep) -> DoubtKept:
+    """The same entry by the same signal, now decided by a person: the rule's match is
+    superseded and stays in the history, and a person's decision survives the next pass.
+    It leaves `GET /doubts`, which is only about what a rule decided."""
+    return await service.keep_doubted(offer_id)
 
 
 @router.post(
@@ -272,10 +327,71 @@ async def summary(service: MatchingServiceDep) -> QueueSummary:
 @queue_router.get("", response_model=Page[MatchQueueRead], summary="What could not be placed")
 async def queue(
     service: MatchingServiceDep,
-    pagination: PageParams,
-    reason: Annotated[Reason | None, Query(description="One kind of problem")] = None,
+    pagination: QueuePageParams,
+    reason: Annotated[
+        list[Reason] | None, Query(description="One kind of problem. Repeat for several")
+    ] = None,
+    shop_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    brand_id: Annotated[
+        list[int] | None,
+        Query(description="The brand the matcher settled on. Repeat for several"),
+    ] = None,
+    category_id: Annotated[
+        list[int] | None, Query(description="What the channel collects. Repeat for several")
+    ] = None,
+    search: Annotated[
+        str | None,
+        Query(max_length=200, description="Title or the shop's id contains; barcode equals"),
+    ] = None,
+    include_snoozed: Annotated[
+        bool, Query(description="Also the rows a person set aside until later")
+    ] = False,
 ) -> Page[MatchQueueRead]:
-    """Each row carries the near misses that were considered, so deciding is a choice
-    rather than a search."""
-    items, total = await service.queue(pagination, reason=reason)
+    """Each row carries its listing and the near misses that were considered, compared axis
+    by axis with it, so deciding is a choice rather than a search. `sort=-siblings` puts
+    first the brand and model whose one new entry would place the most listings."""
+    items, total = await service.queue(
+        pagination,
+        reasons=[value.value for value in reason or []],
+        shop_ids=shop_id,
+        brand_ids=brand_id,
+        category_ids=category_id,
+        search=search,
+        include_snoozed=include_snoozed,
+    )
     return Page[MatchQueueRead].of(items, total, pagination)
+
+
+@queue_router.get(
+    "/{offer_id}",
+    response_model=MatchQueueRead,
+    summary="One queued listing",
+    responses={404: {"model": ErrorResponse, "description": "Not queued"}},
+)
+async def queue_row(offer_id: int, service: MatchingServiceDep) -> MatchQueueRead:
+    return await service.queue_row(offer_id)
+
+
+@queue_router.post(
+    "/{offer_id}/snooze",
+    response_model=MatchQueueRead,
+    summary="Set a queued listing aside until a time",
+    responses={
+        404: {"model": ErrorResponse, "description": "Not queued"},
+        422: {"model": ErrorResponse, "description": "A time in the past, or with no zone"},
+    },
+)
+async def snooze(offer_id: int, payload: Snooze, service: MatchingServiceDep) -> MatchQueueRead:
+    """Hidden from the queue until then. The matcher still retries it, and the promotion
+    sweep leaves it alone: a person has said not now."""
+    return await service.snooze(offer_id, payload)
+
+
+@queue_router.delete(
+    "/{offer_id}/snooze",
+    response_model=MatchQueueRead,
+    summary="Bring a snoozed listing back",
+    responses={404: {"model": ErrorResponse, "description": "Not queued"}},
+)
+async def unsnooze(offer_id: int, service: MatchingServiceDep) -> MatchQueueRead:
+    return await service.unsnooze(offer_id)

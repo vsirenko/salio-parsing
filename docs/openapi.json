@@ -622,6 +622,56 @@
         "title": "AvailabilityEventRead",
         "type": "object"
       },
+      "AxisCompare": {
+        "description": "One identity axis, as the listing and the candidate each hold it.\n\n`agrees` is null when one side has nothing on it: a silence, which the ladder treats\ndifferently from a disagreement — and so should whoever is choosing.",
+        "properties": {
+          "agrees": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agrees"
+          },
+          "entry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "listing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listing"
+          }
+        },
+        "required": [
+          "key",
+          "listing",
+          "entry",
+          "agrees"
+        ],
+        "title": "AxisCompare",
+        "type": "object"
+      },
       "BatchFailure": {
         "description": "One observation that did not go in, and why.\n\nNamed rather than counted: a batch reporting \"two failed\" is a batch nobody can fix.",
         "properties": {
@@ -987,6 +1037,93 @@
           }
         },
         "title": "BrandUpdate",
+        "type": "object"
+      },
+      "Candidate": {
+        "description": "A near miss the matcher found while failing, and why it was considered.\n\nA variant for the rungs that search entries; a brand for `brand_ambiguous`, whose\nquestion is which maker a string means. `why` is the signal that found it — `gtin`,\n`mpn`, `model`, `brand_alias` — and `axes` how it compares with the listing now, read\nagainst the catalogue as it is rather than as it was when the row was written. There is\nno score: the ladder does not rank, it agrees or refuses, and a number here would be one\ninvented for the page.",
+        "properties": {
+          "axes": {
+            "items": {
+              "$ref": "#/components/schemas/AxisCompare"
+            },
+            "title": "Axes",
+            "type": "array"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "offers_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Listings placed on this entry — how settled it is",
+            "title": "Offers Count"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          },
+          "variant_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Title"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "why"
+        ],
+        "title": "Candidate",
         "type": "object"
       },
       "CategoryAliasCreate": {
@@ -1931,6 +2068,47 @@
         "title": "Coverage",
         "type": "object"
       },
+      "CreatedVariant": {
+        "description": "The entry a promotion makes. `id` is null on a dry run, which made nothing.",
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "offer_id": {
+            "title": "Offer Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "model",
+          "brand",
+          "offer_id"
+        ],
+        "title": "CreatedVariant",
+        "type": "object"
+      },
       "CurrencyRead": {
         "properties": {
           "code": {
@@ -1986,6 +2164,33 @@
         ],
         "title": "Decode",
         "type": "string"
+      },
+      "DoubtKept": {
+        "description": "A doubted match a person looked at and left where it was.",
+        "properties": {
+          "decided_by": {
+            "$ref": "#/components/schemas/DecidedBy"
+          },
+          "method": {
+            "$ref": "#/components/schemas/Method"
+          },
+          "offer_id": {
+            "title": "Offer Id",
+            "type": "integer"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "offer_id",
+          "variant_id",
+          "method",
+          "decided_by"
+        ],
+        "title": "DoubtKept",
+        "type": "object"
       },
       "Due": {
         "description": "A channel and kind the scheduler should start now.",
@@ -2361,6 +2566,81 @@
         "title": "JudgeReport",
         "type": "object"
       },
+      "JudgeSummary": {
+        "properties": {
+          "all_time": {
+            "$ref": "#/components/schemas/JudgeWindow"
+          },
+          "day": {
+            "$ref": "#/components/schemas/JudgeWindow"
+          },
+          "week": {
+            "$ref": "#/components/schemas/JudgeWindow"
+          }
+        },
+        "required": [
+          "day",
+          "week",
+          "all_time"
+        ],
+        "title": "JudgeSummary",
+        "type": "object"
+      },
+      "JudgeWindow": {
+        "description": "What the judge cost over one stretch of time.\n\n`asked` and the tokens are the answers bought — one stored verdict each, so they are\nexact. `cached` is how many questions were answered from the store instead, summed from\nthe passes' own reports in the audit trail: a cache hit writes no verdict, and the\ntrail is the one place it is recorded. No money: the price per token is the provider's\nand changes, and a figure computed from a stale one would be believed.",
+        "properties": {
+          "asked": {
+            "title": "Asked",
+            "type": "integer"
+          },
+          "by_kind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Kind",
+            "type": "object"
+          },
+          "cached": {
+            "title": "Cached",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "passes": {
+            "title": "Passes",
+            "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "since",
+          "passes",
+          "asked",
+          "cached",
+          "input_tokens",
+          "output_tokens",
+          "by_kind"
+        ],
+        "title": "JudgeWindow",
+        "type": "object"
+      },
       "Kind": {
         "description": "Two that collect, and one that does not.\n\nA dedicated stock endpoint is not a fourth: it is another channel into the same shop\nwhose full pass happens to carry availability and nothing else, which the channel\nmodel already covers.",
         "enum": [
@@ -2596,6 +2876,9 @@
           "method": {
             "$ref": "#/components/schemas/Method"
           },
+          "offer": {
+            "$ref": "#/components/schemas/OfferBrief"
+          },
           "offer_id": {
             "title": "Offer Id",
             "type": "integer"
@@ -2609,6 +2892,10 @@
             "title": "Variant Id",
             "type": "integer"
           },
+          "variant_title": {
+            "title": "Variant Title",
+            "type": "string"
+          },
           "verdict_id": {
             "title": "Verdict Id",
             "type": "integer"
@@ -2621,6 +2908,8 @@
           "listing_title",
           "brand",
           "entry_model",
+          "variant_title",
+          "offer",
           "choice",
           "same",
           "confidence",
@@ -2645,9 +2934,26 @@
         "description": "What running the matcher over one listing did.",
         "properties": {
           "candidates": {
-            "items": {},
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
             "title": "Candidates",
             "type": "array"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreatedVariant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
           },
           "matched": {
             "title": "Matched",
@@ -2701,13 +3007,26 @@
         "type": "object"
       },
       "MatchQueueRead": {
+        "description": "A listing the matcher could not place, with the listing itself and what it found.\n\n`brand` and `model_key` are what it looked for; `siblings` counts the queued listings\nlooking for the same brand and model — what one new entry would place.",
         "properties": {
           "attempts": {
             "title": "Attempts",
             "type": "integer"
           },
+          "brand": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "candidates": {
-            "items": {},
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
             "title": "Candidates",
             "type": "array"
           },
@@ -2716,12 +3035,30 @@
             "title": "Last Attempt At",
             "type": "string"
           },
+          "model_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Key"
+          },
+          "offer": {
+            "$ref": "#/components/schemas/OfferBrief"
+          },
           "offer_id": {
             "title": "Offer Id",
             "type": "integer"
           },
           "reason": {
             "$ref": "#/components/schemas/Reason"
+          },
+          "siblings": {
+            "title": "Siblings",
+            "type": "integer"
           },
           "snoozed_until": {
             "anyOf": [
@@ -2742,7 +3079,11 @@
           "candidates",
           "attempts",
           "last_attempt_at",
-          "snoozed_until"
+          "snoozed_until",
+          "offer",
+          "brand",
+          "model_key",
+          "siblings"
         ],
         "title": "MatchQueueRead",
         "type": "object"
@@ -2760,6 +3101,11 @@
       "MergeReport": {
         "description": "What a pass of merges did.\n\nA barcode is the strongest thing this system has, so two catalogue entries both holding\nlistings that carry one and the same barcode are not two products. `refused` is the\ninteresting number: a pair the barcode named and something else contradicted.",
         "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
           "found": {
             "title": "Found",
             "type": "integer"
@@ -3058,6 +3404,118 @@
           "availability"
         ],
         "title": "NormalizedOfferRead",
+        "type": "object"
+      },
+      "OfferBrief": {
+        "description": "The listing a queue row or a doubt is about, enough to decide from the row.",
+        "properties": {
+          "brand_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Raw"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "condition": {
+            "title": "Condition",
+            "type": "string"
+          },
+          "currency_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Code"
+          },
+          "external_id": {
+            "title": "External Id",
+            "type": "string"
+          },
+          "gtin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "shop": {
+            "$ref": "#/components/schemas/NamedRef"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "shop",
+          "external_id",
+          "url",
+          "brand_raw",
+          "gtin",
+          "price",
+          "currency_code",
+          "condition",
+          "category"
+        ],
+        "title": "OfferBrief",
         "type": "object"
       },
       "OfferMatchRead": {
@@ -4937,6 +5395,18 @@
             "title": "Considered",
             "type": "integer"
           },
+          "created": {
+            "items": {
+              "$ref": "#/components/schemas/CreatedVariant"
+            },
+            "title": "Created",
+            "type": "array"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
           "matched": {
             "title": "Matched",
             "type": "integer"
@@ -6287,6 +6757,21 @@
         "title": "ShopUpdate",
         "type": "object"
       },
+      "Snooze": {
+        "additionalProperties": false,
+        "properties": {
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "until"
+        ],
+        "title": "Snooze",
+        "type": "object"
+      },
       "SourceCreate": {
         "additionalProperties": false,
         "properties": {
@@ -6944,6 +7429,74 @@
         "title": "TokenPair",
         "type": "object"
       },
+      "TraceCandidate": {
+        "description": "A near miss as the queue row stored it, named. Compared axis by axis with the\nlisting in `GET /api/admin/match-queue/{offer_id}`, which is where the choosing is.",
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          },
+          "variant_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Title"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "why"
+        ],
+        "title": "TraceCandidate",
+        "type": "object"
+      },
       "TraceEntry": {
         "description": "The catalogue entry the listing is on, and who else is.",
         "properties": {
@@ -7131,7 +7684,9 @@
             "type": "integer"
           },
           "candidates": {
-            "items": {},
+            "items": {
+              "$ref": "#/components/schemas/TraceCandidate"
+            },
             "title": "Candidates",
             "type": "array"
           },
@@ -11929,6 +12484,33 @@
         ]
       }
     },
+    "/api/admin/judge/summary": {
+      "get": {
+        "description": "Questions bought and their tokens, and how many were answered from the store\ninstead, over the last day, the last week and all time. Tokens, not money: the price\nis the provider's and would go stale here.",
+        "operationId": "summary_api_admin_judge_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JudgeSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "What the judge cost",
+        "tags": [
+          "admin: judge"
+        ]
+      }
+    },
     "/api/admin/judge/verdicts": {
       "get": {
         "description": "Newest first, each row carrying the state it was asked about and the full\ndistribution that came back.\n\nStored for the same reason a match keeps its evidence: an answer nobody can inspect\ncan only be deleted, never argued with.",
@@ -12278,25 +12860,122 @@
     },
     "/api/admin/match-queue": {
       "get": {
-        "description": "Each row carries the near misses that were considered, so deciding is a choice\nrather than a search.",
+        "description": "Each row carries its listing and the near misses that were considered, compared axis\nby axis with it, so deciding is a choice rather than a search. `sort=-siblings` puts\nfirst the brand and model whose one new entry would place the most listings.",
         "operationId": "queue_api_admin_match_queue_get",
         "parameters": [
           {
-            "description": "One kind of problem",
+            "description": "One kind of problem. Repeat for several",
             "in": "query",
             "name": "reason",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Reason"
+                  "items": {
+                    "$ref": "#/components/schemas/Reason"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "One kind of problem",
+              "description": "One kind of problem. Repeat for several",
               "title": "Reason"
+            }
+          },
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "shop_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Shop Id"
+            }
+          },
+          {
+            "description": "The brand the matcher settled on. Repeat for several",
+            "in": "query",
+            "name": "brand_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The brand the matcher settled on. Repeat for several",
+              "title": "Brand Id"
+            }
+          },
+          {
+            "description": "What the channel collects. Repeat for several",
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What the channel collects. Repeat for several",
+              "title": "Category Id"
+            }
+          },
+          {
+            "description": "Title or the shop's id contains; barcode equals",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Title or the shop's id contains; barcode equals",
+              "title": "Search"
+            }
+          },
+          {
+            "description": "Also the rows a person set aside until later",
+            "in": "query",
+            "name": "include_snoozed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also the rows a person set aside until later",
+              "title": "Include Snoozed",
+              "type": "boolean"
             }
           },
           {
@@ -12320,6 +12999,28 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: offer_id, attempts, last_attempt_at, siblings, title, price.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: offer_id, attempts, last_attempt_at, siblings, title, price.",
+              "examples": [
+                "offer_id"
+              ],
+              "title": "Sort"
             }
           }
         ],
@@ -12383,11 +13084,233 @@
         ]
       }
     },
+    "/api/admin/match-queue/{offer_id}": {
+      "get": {
+        "operationId": "queue_row_api_admin_match_queue__offer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "offer_id",
+            "required": true,
+            "schema": {
+              "title": "Offer Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchQueueRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not queued"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One queued listing",
+        "tags": [
+          "admin: matching"
+        ]
+      }
+    },
+    "/api/admin/match-queue/{offer_id}/snooze": {
+      "delete": {
+        "operationId": "unsnooze_api_admin_match_queue__offer_id__snooze_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "offer_id",
+            "required": true,
+            "schema": {
+              "title": "Offer Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchQueueRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not queued"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Bring a snoozed listing back",
+        "tags": [
+          "admin: matching"
+        ]
+      },
+      "post": {
+        "description": "Hidden from the queue until then. The matcher still retries it, and the promotion\nsweep leaves it alone: a person has said not now.",
+        "operationId": "snooze_api_admin_match_queue__offer_id__snooze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "offer_id",
+            "required": true,
+            "schema": {
+              "title": "Offer Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Snooze"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchQueueRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not queued"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A time in the past, or with no zone"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set a queued listing aside until a time",
+        "tags": [
+          "admin: matching"
+        ]
+      }
+    },
     "/api/admin/matching/doubts": {
       "get": {
-        "description": "Live rule matches whose verdict gives the listing less than `JUDGE_DOUBT_BELOW` chance\nof naming the entry's own model. Each one is a decision for a person — unlink, split,\nmerge or leave it.",
+        "description": "Live rule matches whose verdict gives the listing less than `JUDGE_DOUBT_BELOW` chance\nof naming the entry's own model. Each one is a decision for a person — unlink, split,\nmerge or leave it (`POST /doubts/{offer_id}/keep`). `sort=same` puts the surest\ndoubts first.",
         "operationId": "doubts_api_admin_matching_doubts_get",
         "parameters": [
+          {
+            "description": "What placed it. Repeat for several",
+            "in": "query",
+            "name": "method",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/Method"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What placed it. Repeat for several",
+              "title": "Method"
+            }
+          },
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "shop_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Shop Id"
+            }
+          },
           {
             "in": "query",
             "name": "limit",
@@ -12409,6 +13332,28 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: offer_id, same, price.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: offer_id, same, price.",
+              "examples": [
+                "offer_id"
+              ],
+              "title": "Sort"
             }
           }
         ],
@@ -12440,6 +13385,74 @@
           }
         ],
         "summary": "The matches the judge doubts",
+        "tags": [
+          "admin: matching"
+        ]
+      }
+    },
+    "/api/admin/matching/doubts/{offer_id}/keep": {
+      "post": {
+        "description": "The same entry by the same signal, now decided by a person: the rule's match is\nsuperseded and stays in the history, and a person's decision survives the next pass.\nIt leaves `GET /doubts`, which is only about what a rule decided.",
+        "operationId": "keep_doubted_api_admin_matching_doubts__offer_id__keep_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "offer_id",
+            "required": true,
+            "schema": {
+              "title": "Offer Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoubtKept"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No active match"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not a rule's match"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A person looked at a doubted match and left it",
         "tags": [
           "admin: matching"
         ]
@@ -12663,17 +13676,29 @@
         "operationId": "merge_duplicates_api_admin_matching_merge_post",
         "parameters": [
           {
-            "description": "How many pairs to consider",
+            "description": "How many pairs to consider. ~90 ms each",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
-              "description": "How many pairs to consider",
+              "description": "How many pairs to consider. ~90 ms each",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Compute the same report and keep none of it: nothing is written",
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Compute the same report and keep none of it: nothing is written",
+              "title": "Dry Run",
+              "type": "boolean"
             }
           }
         ],
@@ -12716,17 +13741,29 @@
         "operationId": "promote_queue_api_admin_matching_promote_post",
         "parameters": [
           {
-            "description": "How many to consider",
+            "description": "How many to consider. ~17 ms each at worst",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
-              "description": "How many to consider",
+              "description": "How many to consider. ~17 ms each at worst",
               "maximum": 1000,
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Compute the same report and keep none of it: nothing is written",
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Compute the same report and keep none of it: nothing is written",
+              "title": "Dry Run",
+              "type": "boolean"
             }
           }
         ],
@@ -13590,6 +14627,18 @@
             "schema": {
               "title": "Offer Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Compute the same report and keep none of it: nothing is written",
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Compute the same report and keep none of it: nothing is written",
+              "title": "Dry Run",
+              "type": "boolean"
             }
           }
         ],

@@ -86,6 +86,14 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **Images are hotlinked.** `variant.image_url` points at a shop's CDN, so it rots
       when that shop removes the file and we serve it from someone else's server in the
       meantime. The answer is to store the image, and there is no file storage.
+- [ ] **A numeric axis does not make candidates `axis_unpublished`.** `_why_several` counts
+      the distinct `value_id`s the candidates hold, and a number has none — so two entries at
+      128 and 256 GB and a listing that names no capacity come out `ambiguous`, and the judge
+      is asked a question nobody can answer. Count `value_num` as well; re-run the matcher.
+- [ ] **Matching passes are synchronous.** `run`, `promote`, `merge`, `rebuild` and the judge
+      passes answer inside the request; the matching README has the measured cost per item
+      and a safe `limit` for each. A pass the size of the queue wants a background job with
+      an id, a status and progress, as the collectors' runs have.
 - [ ] **Nothing reads a picture.** No reading has an image field, so neither a listing row
       nor `variant.image_url` (null on all 6193) has one. The shops write it five ways — a
       list under `images` (bigbox, dateks, euronics, rd, tet, ksenukai/1a), relative paths

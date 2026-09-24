@@ -180,9 +180,9 @@ def test_a_brand_that_means_two_brands(client):
     assert outcome["reason"] == "brand_ambiguous"
     # The whole point of the split: the choice is on the row, so it is one click and not
     # a search through the brand table.
-    assert outcome["candidates"] == [
-        {"brand_id": ids[0], "why": "brand_alias"},
-        {"brand_id": ids[1], "why": "brand_alias"},
+    assert [(c["brand_id"], c["why"], c["brand"]["name"]) for c in outcome["candidates"]] == [
+        (ids[0], "brand_alias", "Delta"),
+        (ids[1], "brand_alias", "Delta"),
     ]
 
 

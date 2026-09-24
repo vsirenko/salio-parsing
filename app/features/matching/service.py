@@ -6,9 +6,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, NamedTuple
 
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import case, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core import audit
 from app.core.config import settings
@@ -30,15 +31,17 @@ from app.db.models import (
     Product,
     RawOffer,
     Run,
+    Seller,
+    Shop,
     Source,
     Variant,
     VariantAttribute,
     VariantGtin,
     VariantMpn,
 )
-from app.db.query import paginated
+from app.db.query import ordered, paginated_rows
 from app.features.brands.normalization import normalize_brand
-from app.features.catalog.identity import normalize_model
+from app.features.catalog.identity import display_number, normalize_model
 from app.features.catalog.schemas import (
     IdentifierCreate,
     IdentifierOrigin,
@@ -62,21 +65,28 @@ from app.features.judge.schemas import (
 )
 from app.features.judge.service import COLOUR_KEY, JudgeService
 from app.features.matching.schemas import (
+    AxisCompare,
+    Candidate,
+    CreatedVariant,
     DecidedBy,
+    DoubtKept,
     ManualMatch,
     MatchDoubtRead,
     MatchOutcome,
     MatchQueueRead,
     MergeReport,
     Method,
+    NamedRef,
+    OfferBrief,
     OfferMatchRead,
     PromotionReport,
     QueueSummary,
     Reason,
     RenameReport,
     RunReport,
+    Snooze,
 )
-from app.features.offers.normalization import naming
+from app.features.offers.normalization import barcodes, naming
 from app.features.runs.schemas import Kind
 from app.schemas.pagination import Pagination
 
@@ -169,6 +179,13 @@ class MatchingService:
             method=outcome.method.value if outcome.method else None,
             reason=outcome.reason.value if outcome.reason else None,
         )
+        return await self._named(outcome)
+
+    async def _named(self, outcome: MatchOutcome) -> MatchOutcome:
+        """An outcome with its candidates named and compared, for a person reading it. Kept
+        out of the ladder itself: a pass over a thousand listings reads none of it."""
+        stored = [candidate.model_dump(exclude_none=True) for candidate in outcome.candidates]
+        outcome.candidates = await self._candidates(outcome.offer_id, stored)
         return outcome
 
     async def run(self, *, limit: int = 100) -> RunReport:
@@ -279,7 +296,13 @@ class MatchingService:
                         await self._reconcile(usable[0], reading)
                     return outcome
                 if len(usable) > 1:
-                    return await self._queue(offer, Reason.AMBIGUOUS, self._variants(usable, "mpn"))
+                    return await self._queue(
+                        offer,
+                        Reason.AMBIGUOUS,
+                        self._variants(usable, "mpn"),
+                        brand_id=brand.id,
+                        model_key=_model_key(reading),
+                    )
                 # Everything the part number found is a different configuration. Not a
                 # miss — the listing goes on to look for a variant of its own.
 
@@ -357,15 +380,26 @@ class MatchingService:
                         offer,
                         await self._why_several(agreed, identity),
                         self._variants(agreed, "model"),
+                        brand_id=brand.id,
+                        model_key=_model_key(reading),
                     )
                 if unverifiable:
                     # The model agreed and there was no axis in common to check it with.
                     # Not a match and not a miss: somebody, or a judge, decides.
                     return await self._queue(
-                        offer, Reason.LOW_CONFIDENCE, self._variants(unverifiable, "model")
+                        offer,
+                        Reason.LOW_CONFIDENCE,
+                        self._variants(unverifiable, "model"),
+                        brand_id=brand.id,
+                        model_key=_model_key(reading),
                     )
 
-        return await self._queue(offer, *self._why(reading, lookup))
+        return await self._queue(
+            offer,
+            *self._why(reading, lookup),
+            brand_id=brand.id if brand is not None else None,
+            model_key=_model_key(reading),
+        )
 
     async def _why_several(self, agreed: list[int], identity: dict[str, Any]) -> Reason:
         """Whether anybody could choose between these, or the shop never said.
@@ -925,15 +959,31 @@ class MatchingService:
             candidates=[],
         )
 
-    async def _queue(self, offer: Offer, reason: Reason, candidates: list[dict]) -> MatchOutcome:
+    async def _queue(
+        self,
+        offer: Offer,
+        reason: Reason,
+        candidates: list[dict],
+        *,
+        brand_id: int | None = None,
+        model_key: str | None = None,
+    ) -> MatchOutcome:
         existing = await self.session.get(MatchQueue, offer.id)
         if existing is None:
             self.session.add(
-                MatchQueue(offer_id=offer.id, reason=reason.value, candidates=candidates)
+                MatchQueue(
+                    offer_id=offer.id,
+                    reason=reason.value,
+                    candidates=candidates,
+                    brand_id=brand_id,
+                    model_key=model_key,
+                )
             )
         else:
             existing.reason = reason.value
             existing.candidates = candidates
+            existing.brand_id = brand_id
+            existing.model_key = model_key
             existing.attempts += 1
             existing.last_attempt_at = datetime.now(UTC)
 
@@ -968,7 +1018,7 @@ class MatchingService:
 
     # --- starting the catalogue ---
 
-    async def promote(self, offer_id: int) -> MatchOutcome:
+    async def promote(self, offer_id: int, *, dry_run: bool = False) -> MatchOutcome:
         """Make the variant this listing was looking for, and let the ladder place it.
 
         The catalogue has to start somewhere, and the only thing that knows what is in the
@@ -988,17 +1038,36 @@ class MatchingService:
             )
 
         audit.set_target("offer", offer_id)
-        variant = await self._variant_from(offer, reading)
-        outcome = await self._decide(offer, reading)
-        audit.record_changes(
-            promoted_to_variant=variant.id,
-            model=variant.model,
-            matched=outcome.matched,
-            method=outcome.method.value if outcome.method else None,
-        )
+        # A dry run is the real thing inside a savepoint that is then rolled back: the same
+        # code decides, so the preview cannot drift from what a real run would do.
+        async with self.session.begin_nested() as preview:
+            variant = await self._variant_from(offer, reading)
+            outcome = await self._decide(offer, reading)
+            outcome = await self._named(outcome)
+            outcome.created = await self._created(variant, offer_id, dry_run=dry_run)
+            outcome.dry_run = dry_run
+            audit.record_changes(
+                promoted_to_variant=variant.id,
+                model=variant.model,
+                matched=outcome.matched,
+                method=outcome.method.value if outcome.method else None,
+            )
+            if dry_run:
+                await preview.rollback()
+                audit.discard_changes()
         return outcome
 
-    async def promote_queue(self, *, limit: int = 100) -> PromotionReport:
+    async def _created(self, variant: Variant, offer_id: int, *, dry_run: bool) -> CreatedVariant:
+        brand = await self.session.get(Brand, variant.brand_id)
+        return CreatedVariant(
+            id=None if dry_run else variant.id,
+            title=variant.title,
+            model=variant.model,
+            brand=brand.canonical_name if brand else "",
+            offer_id=offer_id,
+        )
+
+    async def promote_queue(self, *, limit: int = 100, dry_run: bool = False) -> PromotionReport:
         """Start the catalogue from the listings that can be identified, and no others.
 
         A variant made from a junk listing cannot afterwards be told from a real one, so
@@ -1013,20 +1082,36 @@ class MatchingService:
             await self.session.scalars(
                 select(MatchQueue)
                 .join(Offer, Offer.id == MatchQueue.offer_id)
-                .where(MatchQueue.reason == Reason.SIGNALS_UNMATCHED.value, Offer.condition == NEW)
+                .where(
+                    MatchQueue.reason == Reason.SIGNALS_UNMATCHED.value,
+                    Offer.condition == NEW,
+                    # A person set it aside: not now, and making an entry of it is exactly
+                    # what they deferred.
+                    or_(MatchQueue.snoozed_until.is_(None), MatchQueue.snoozed_until <= func.now()),
+                )
                 .order_by(MatchQueue.offer_id)
                 .limit(limit)
             )
         ).all()
 
+        async with self.session.begin_nested() as preview:
+            report = await self._promote_rows(rows, dry_run=dry_run)
+            if dry_run:
+                await preview.rollback()
+                audit.discard_changes()
+        return report
+
+    async def _promote_rows(self, rows: list[MatchQueue], *, dry_run: bool) -> PromotionReport:
+        offer_ids = [row.offer_id for row in rows]
         promoted = matched = 0
+        created: list[CreatedVariant] = []
         reasons: Counter[str] = Counter()
-        for row in rows:
-            reading = await self._reading(row.offer_id)
+        for offer_id in offer_ids:
+            reading = await self._reading(offer_id)
             if reading is None:
                 reasons["not_read"] += 1
                 continue
-            offer = await self._offer(row.offer_id)
+            offer = await self._offer(offer_id)
 
             # It may already have what it needs: the listing before it in this very pass
             # could have created the variant.
@@ -1049,7 +1134,7 @@ class MatchingService:
                 # with a lazy load that cannot run. Undoing only the listing that failed is
                 # what lets the other nine hundred stand.
                 async with self.session.begin_nested():
-                    await self._variant_from(offer, reading)
+                    variant = await self._variant_from(offer, reading)
             except AppError as error:
                 reasons[error.code] += 1
                 continue
@@ -1060,20 +1145,23 @@ class MatchingService:
                 continue
 
             promoted += 1
+            created.append(await self._created(variant, offer_id, dry_run=dry_run))
             await self._decide(offer, reading)
 
         audit.record_changes(
-            considered=len(rows), promoted=promoted, matched=matched, **dict(reasons)
+            considered=len(offer_ids), promoted=promoted, matched=matched, **dict(reasons)
         )
         return PromotionReport(
-            considered=len(rows),
+            considered=len(offer_ids),
             promoted=promoted,
             matched=matched,
             skipped=sum(reasons.values()),
             reasons=dict(reasons),
+            created=created,
+            dry_run=dry_run,
         )
 
-    async def merge_duplicates(self, *, limit: int = 100) -> MergeReport:
+    async def merge_duplicates(self, *, limit: int = 100, dry_run: bool = False) -> MergeReport:
         """Fold together the catalogue entries a barcode says are one product.
 
         The catalogue splits a phone in two whenever two shops write its model differently
@@ -1090,6 +1178,14 @@ class MatchingService:
         rung will keep finding; failing that the one carrying more listings, which loses
         less if this is ever undone.
         """
+        async with self.session.begin_nested() as preview:
+            report = await self._merge_pairs(limit=limit, dry_run=dry_run)
+            if dry_run:
+                await preview.rollback()
+                audit.discard_changes()
+        return report
+
+    async def _merge_pairs(self, *, limit: int, dry_run: bool) -> MergeReport:
         pairs = await self._barcode_duplicates(limit=limit)
         merged, reasons, folded = 0, Counter(), []
         catalog = CatalogService(self.session)
@@ -1119,6 +1215,7 @@ class MatchingService:
             refused=sum(reasons.values()),
             reasons=dict(reasons),
             pairs=folded,
+            dry_run=dry_run,
         )
 
     async def rebuild_named_from_a_stale_reading(self, *, limit: int = 100) -> RenameReport:
@@ -1846,7 +1943,13 @@ class MatchingService:
         audit.record_changes(**report.model_dump(mode="json"))
         return report
 
-    async def doubts(self, pagination: Pagination) -> tuple[list[MatchDoubtRead], int]:
+    async def doubts(
+        self,
+        pagination: Pagination,
+        *,
+        methods: list[str] | None = None,
+        shop_ids: list[int] | None = None,
+    ) -> tuple[list[MatchDoubtRead], int]:
         """The live matches whose stored verdict says the listing is probably another model.
 
         Found by what the judge was shown rather than by a key back to the offer: the
@@ -1854,94 +1957,162 @@ class MatchingService:
         title, the maker and the entry's name are still the ones it was asked about. A
         renamed entry or a re-read title leaves the old verdict behind, which is right —
         it answered a question nobody is asking any more.
+
+        A match a person kept is not a rule's any more (`keep_doubted`), so it leaves this
+        list — otherwise the list would never empty.
         """
         matched = self._rule_matches().subquery()
-        verdict = (
-            select(JudgeVerdict.id)
-            .where(
-                JudgeVerdict.kind == questions.MODEL_MATCH,
-                JudgeVerdict.state["listing_title"].astext == matched.c.title,
-                JudgeVerdict.state["brand"].astext == matched.c.brand,
-                JudgeVerdict.state["entry_model"].astext == matched.c.model,
-                JudgeVerdict.answer["probabilities"][questions.SAME_MODEL].as_float()
-                < settings.judge_doubt_below,
-            )
-            .order_by(JudgeVerdict.created_at.desc(), JudgeVerdict.id.desc())
-            .limit(1)
-            .correlate(matched)
-            .scalar_subquery()
-        )
-        doubted = (
-            select(matched.c.offer_id).where(verdict.is_not(None)).order_by(matched.c.offer_id)
-        )
-        offer_ids, total = await paginated(self.session, doubted, pagination)
-
-        items: list[MatchDoubtRead] = []
-        for offer_id in offer_ids:
-            row = (
-                await self.session.execute(
-                    select(matched, verdict.label("verdict_id")).where(
-                        matched.c.offer_id == offer_id
-                    )
-                )
-            ).one()
-            stored = await self.session.get(JudgeVerdict, row.verdict_id)
-            items.append(
-                MatchDoubtRead(
-                    offer_id=offer_id,
-                    variant_id=row.variant_id,
-                    method=Method(row.method),
-                    listing_title=row.title,
-                    brand=row.brand,
-                    entry_model=row.model,
-                    choice=stored.choice,
-                    same=Decimal(str(stored.answer["probabilities"].get(questions.SAME_MODEL, 0))),
-                    confidence=stored.confidence,
-                    verdict_id=stored.id,
-                )
-            )
-        return items, total
-
-    @staticmethod
-    def _rule_matches():
-        """Every live match a rule made, with the title of the listing's newest full reading.
-
-        The newest reading from a pass that carried the catalogue, as `_reading` chooses it,
-        for all of them in one query rather than one per match. A person's match is theirs
-        and a judge's was already a judgement, so only a rule's is checked.
-        """
-        newest = (
+        same = JudgeVerdict.answer["probabilities"][questions.SAME_MODEL].as_float()
+        # The doubting verdicts, newest per question, joined to the matches by equality —
+        # which the planner hashes. As a subquery correlated to each match it compared
+        # JSON fields of every verdict for every one of 17 thousand matches: 25 s a page.
+        title = JudgeVerdict.state["listing_title"].astext
+        brand = JudgeVerdict.state["brand"].astext
+        model = JudgeVerdict.state["entry_model"].astext
+        doubting = (
             select(
-                RawOffer.offer_id,
-                NormalizedOffer.title,
+                JudgeVerdict.id,
+                title.label("title"),
+                brand.label("brand"),
+                model.label("model"),
                 func.row_number()
                 .over(
-                    partition_by=RawOffer.offer_id,
-                    order_by=(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc()),
+                    partition_by=(title, brand, model),
+                    order_by=(JudgeVerdict.created_at.desc(), JudgeVerdict.id.desc()),
                 )
                 .label("rank"),
             )
-            .join(NormalizedOffer, NormalizedOffer.raw_offer_id == RawOffer.id)
-            .outerjoin(Run, Run.id == RawOffer.run_id)
-            .where(or_(Run.id.is_(None), Run.kind != Kind.QUICK.value))
+            .where(JudgeVerdict.kind == questions.MODEL_MATCH, same < settings.judge_doubt_below)
             .subquery()
         )
+        stmt = (
+            select(
+                matched.c.offer_id,
+                JudgeVerdict,
+                Variant.title_override,
+                Variant.title.label("variant_title"),
+                Offer,
+            )
+            .select_from(matched)
+            .join(
+                doubting,
+                (doubting.c.title == matched.c.title)
+                & (doubting.c.brand == matched.c.brand)
+                & (doubting.c.model == matched.c.model)
+                & (doubting.c.rank == 1),
+            )
+            .join(JudgeVerdict, JudgeVerdict.id == doubting.c.id)
+            .join(Variant, Variant.id == matched.c.variant_id)
+            .join(Offer, Offer.id == matched.c.offer_id)
+            .add_columns(
+                matched.c.variant_id,
+                matched.c.method,
+                matched.c.title,
+                matched.c.brand,
+                matched.c.model,
+            )
+        )
+        stmt = _with_offer(stmt)
+        if methods:
+            stmt = stmt.where(matched.c.method.in_(methods))
+        if shop_ids:
+            stmt = stmt.where(Shop.id.in_(shop_ids))
+        stmt = ordered(
+            stmt,
+            pagination,
+            {"offer_id": matched.c.offer_id, "same": same, "price": Offer.price},
+            matched.c.offer_id,
+        )
+        # Counted over the statement as a subquery: counting it in place drops the entities
+        # from the select list, and the ORM can then no longer tell which side of its joins
+        # is which. There are tens of doubts, not thousands, so the extra columns cost nothing.
+        total = await self.session.scalar(
+            select(func.count()).select_from(stmt.order_by(None).subquery())
+        )
+        rows = (
+            await self.session.execute(stmt.limit(pagination.limit).offset(pagination.offset))
+        ).all()
+        items = [
+            MatchDoubtRead(
+                offer_id=row.offer_id,
+                variant_id=row.variant_id,
+                method=Method(row.method),
+                listing_title=row.title,
+                brand=row.brand,
+                entry_model=row.model,
+                variant_title=row.title_override or row.variant_title,
+                offer=_offer_brief(row),
+                choice=row.JudgeVerdict.choice,
+                same=Decimal(
+                    str(row.JudgeVerdict.answer["probabilities"].get(questions.SAME_MODEL, 0))
+                ),
+                confidence=row.JudgeVerdict.confidence,
+                verdict_id=row.JudgeVerdict.id,
+            )
+            for row in rows
+        ]
+        return items, total or 0
+
+    async def keep_doubted(self, offer_id: int) -> DoubtKept:
+        """A person looked at a doubted match and left it: the same entry, by the same
+        signal, now theirs.
+
+        A new opinion rather than a flag on the old one, as every change of mind here is —
+        the rule's match is superseded and stays in the history, and the one that replaces
+        it names the rung that found it and says who kept it. A person's decision survives
+        the next pass, which is what makes this more than hiding a row.
+        """
+        await self._offer(offer_id)
+        audit.set_target("offer", offer_id)
+        active = await self.session.scalar(
+            select(OfferMatch).where(
+                OfferMatch.offer_id == offer_id, OfferMatch.superseded_at.is_(None)
+            )
+        )
+        if active is None:
+            raise NotFoundError(f"Offer {offer_id} has no active match")
+        if active.decided_by != DecidedBy.RULE.value:
+            raise ConflictError(
+                f"Offer {offer_id} was placed by a {active.decided_by}, not a rule",
+                code="not_a_rule_match",
+            )
+        variant_id, method = active.variant_id, Method(active.method)
+        evidence = {**(active.evidence or {}), "kept_by": "human", "kept_rule_match": active.id}
+        offer = await self._offer(offer_id)
+        await self._link(offer, variant_id, method, evidence, decided_by=DecidedBy.HUMAN)
+        audit.record_changes(kept_variant_id=variant_id, method=method.value)
+        return DoubtKept(
+            offer_id=offer_id, variant_id=variant_id, method=method, decided_by=DecidedBy.HUMAN
+        )
+
+    @staticmethod
+    def _rule_matches():
+        """Every live match a rule made, with the listing's title.
+
+        The title on the offer, which is the newest reading of a pass that carried the
+        catalogue — the same one `_reading` chooses — copied there when it was applied. This
+        used to be picked out of every observation with a window over all the readings, and
+        took 7.5 s a page; the two agreed on all 18486 listings when it was changed.
+
+        A person's match is theirs and a judge's was already a judgement, so only a rule's
+        is checked.
+        """
         return (
             select(
                 OfferMatch.offer_id,
                 OfferMatch.variant_id,
-                newest.c.title,
+                Offer.title,
                 Brand.canonical_name.label("brand"),
                 Variant.model,
                 OfferMatch.method,
             )
-            .join(newest, (newest.c.offer_id == OfferMatch.offer_id) & (newest.c.rank == 1))
+            .join(Offer, Offer.id == OfferMatch.offer_id)
             .join(Variant, Variant.id == OfferMatch.variant_id)
             .join(Brand, Brand.id == Variant.brand_id)
             .where(
                 OfferMatch.superseded_at.is_(None),
                 OfferMatch.decided_by == DecidedBy.RULE.value,
-                newest.c.title.is_not(None),
+                Offer.title.is_not(None),
             )
         )
 
@@ -1992,13 +2163,231 @@ class MatchingService:
         return [OfferMatchRead.model_validate(row) for row in rows]
 
     async def queue(
-        self, pagination: Pagination, *, reason: Reason | None = None
+        self,
+        pagination: Pagination,
+        *,
+        reasons: list[str] | None = None,
+        shop_ids: list[int] | None = None,
+        brand_ids: list[int] | None = None,
+        category_ids: list[int] | None = None,
+        search: str | None = None,
+        include_snoozed: bool = False,
     ) -> tuple[list[MatchQueueRead], int]:
-        stmt = select(MatchQueue)
-        if reason is not None:
-            stmt = stmt.where(MatchQueue.reason == reason.value)
-        rows, total = await paginated(self.session, stmt.order_by(MatchQueue.offer_id), pagination)
-        return [MatchQueueRead.model_validate(row) for row in rows], total
+        """The queue, each row with its listing and its candidates compared as they are now.
+
+        Snoozed rows are left out unless asked for: that is what snoozing one is for.
+        """
+        stmt = _queue_rows()
+        if reasons:
+            stmt = stmt.where(MatchQueue.reason.in_(reasons))
+        if shop_ids:
+            stmt = stmt.where(Shop.id.in_(shop_ids))
+        if brand_ids:
+            stmt = stmt.where(MatchQueue.brand_id.in_(brand_ids))
+        if category_ids:
+            stmt = stmt.where(Offer.category_id.in_(category_ids))
+        if search and search.strip():
+            stmt = stmt.where(_offer_search(search.strip()))
+        if not include_snoozed:
+            stmt = stmt.where(
+                or_(MatchQueue.snoozed_until.is_(None), MatchQueue.snoozed_until <= func.now())
+            )
+        columns = {c.name: c for c in stmt.selected_columns}
+        stmt = ordered(
+            stmt,
+            pagination,
+            {
+                "offer_id": MatchQueue.offer_id,
+                "attempts": MatchQueue.attempts,
+                "last_attempt_at": MatchQueue.last_attempt_at,
+                "siblings": columns["siblings"],
+                "title": Offer.title,
+                "price": Offer.price,
+            },
+            MatchQueue.offer_id,
+        )
+        rows, total = await paginated_rows(self.session, stmt, pagination)
+        return [await self._queue_read(row) for row in rows], total
+
+    async def queue_row(self, offer_id: int) -> MatchQueueRead:
+        row = (
+            await self.session.execute(_queue_rows().where(MatchQueue.offer_id == offer_id))
+        ).first()
+        if row is None:
+            raise NotFoundError(f"Offer {offer_id} is not queued")
+        return await self._queue_read(row)
+
+    async def snooze(self, offer_id: int, payload: Snooze) -> MatchQueueRead:
+        """Looked at, cannot be decided yet: hidden from the queue until then. The matcher
+        still retries it — the catalogue may grow the entry it needed — and a sweep that
+        makes entries leaves it alone, because a person has said not now."""
+        row = await self.session.get(MatchQueue, offer_id)
+        audit.set_target("offer", offer_id)
+        if row is None:
+            raise NotFoundError(f"Offer {offer_id} is not queued")
+        if payload.until <= datetime.now(UTC):
+            raise ValidationError("A snooze ends in the future", code="snooze_in_the_past")
+        row.snoozed_until = payload.until
+        await self.session.flush()
+        audit.record_changes(snoozed_until=payload.until.isoformat())
+        return await self.queue_row(offer_id)
+
+    async def unsnooze(self, offer_id: int) -> MatchQueueRead:
+        row = await self.session.get(MatchQueue, offer_id)
+        audit.set_target("offer", offer_id)
+        if row is None:
+            raise NotFoundError(f"Offer {offer_id} is not queued")
+        row.snoozed_until = None
+        await self.session.flush()
+        audit.record_changes(snoozed_until=None)
+        return await self.queue_row(offer_id)
+
+    async def _queue_read(self, row: Any) -> MatchQueueRead:
+        queued = row[0]
+        return MatchQueueRead(
+            offer_id=queued.offer_id,
+            reason=Reason(queued.reason),
+            candidates=await self._candidates(queued.offer_id, queued.candidates),
+            attempts=queued.attempts,
+            last_attempt_at=queued.last_attempt_at,
+            snoozed_until=queued.snoozed_until,
+            offer=_offer_brief(row),
+            brand=NamedRef(id=row.brand_id, name=row.brand_name) if row.brand_id else None,
+            model_key=queued.model_key,
+            siblings=row.siblings,
+        )
+
+    async def _candidates(self, offer_id: int, stored: list[dict]) -> list[Candidate]:
+        """The stored near misses, named, and compared axis by axis with the listing.
+
+        Compared now rather than read off the row: an entry may have gained a colour since
+        the row was written, and what a person chooses from has to be the catalogue as it
+        is. The values are the same the ladder compares — the reading's identity, and a
+        colour the judge was asked for where the reading had none.
+        """
+        variant_ids = [entry["variant_id"] for entry in stored if entry.get("variant_id")]
+        brand_ids = [entry["brand_id"] for entry in stored if entry.get("brand_id")]
+        variants: dict[int, Any] = {}
+        if variant_ids:
+            placed = (
+                select(func.count())
+                .select_from(OfferMatch)
+                .where(OfferMatch.variant_id == Variant.id, OfferMatch.superseded_at.is_(None))
+                .correlate(Variant)
+                .scalar_subquery()
+            )
+            for variant in (
+                await self.session.execute(
+                    select(Variant, Brand.canonical_name, placed.label("placed"))
+                    .join(Brand, Brand.id == Variant.brand_id)
+                    .where(Variant.id.in_(variant_ids))
+                )
+            ).all():
+                variants[variant[0].id] = variant
+        brands = {
+            brand.id: brand.canonical_name
+            for brand in await self.session.scalars(select(Brand).where(Brand.id.in_(brand_ids)))
+        }
+        axes = await self._axes_compared(offer_id, variant_ids) if variant_ids else {}
+
+        out: list[Candidate] = []
+        for entry in stored:
+            variant_id, brand_id = entry.get("variant_id"), entry.get("brand_id")
+            found = variants.get(variant_id) if variant_id else None
+            if found is not None:
+                variant = found[0]
+                out.append(
+                    Candidate(
+                        why=entry.get("why", ""),
+                        variant_id=variant_id,
+                        variant_title=variant.title_override or variant.title,
+                        model=variant.model,
+                        brand=NamedRef(id=variant.brand_id, name=found.canonical_name),
+                        offers_count=found.placed,
+                        axes=axes.get(variant_id, []),
+                    )
+                )
+            elif brand_id is not None:
+                name = brands.get(brand_id)
+                out.append(
+                    Candidate(
+                        why=entry.get("why", ""),
+                        brand_id=brand_id,
+                        brand=NamedRef(id=brand_id, name=name) if name else None,
+                    )
+                )
+            else:
+                # An entry since merged away or deleted: still named, so the row does not
+                # silently lose a candidate it was written with.
+                out.append(Candidate(why=entry.get("why", ""), variant_id=variant_id))
+        return out
+
+    async def _axes_compared(
+        self, offer_id: int, variant_ids: list[int]
+    ) -> dict[int, list[AxisCompare]]:
+        reading = await self._reading(offer_id)
+        if reading is None:
+            return {}
+        offer = await self._offer(offer_id)
+        identity = await self._identity(offer, reading)
+        rows = await self.session.execute(
+            select(
+                VariantAttribute.variant_id,
+                Attribute.key,
+                VariantAttribute.value_num,
+                AttributeValue.canonical,
+            )
+            .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+            .outerjoin(AttributeValue, AttributeValue.id == VariantAttribute.value_id)
+            .where(VariantAttribute.variant_id.in_(variant_ids))
+        )
+        held: dict[int, dict[str, Any]] = {}
+        for variant_id, key, number, canonical in rows.all():
+            value = number if number is not None else canonical
+            if value is not None:
+                held.setdefault(variant_id, {})[key] = value
+        required = await self._identity_axes(variant_ids)
+        keys = set().union(*required.values()) if required else set()
+        units = dict(
+            (
+                await self.session.execute(
+                    select(Attribute.key, Attribute.unit_dimension).where(
+                        Attribute.key.in_(
+                            keys | set(identity) | set().union(*map(set, held.values()))
+                        )
+                    )
+                )
+            ).all()
+        )
+
+        def shown(key: str, value: Any) -> str | None:
+            if value is None or isinstance(value, bool):
+                return None
+            if isinstance(value, int | float | Decimal):
+                return display_number(Decimal(str(value)), units.get(key))
+            return str(value) or None
+
+        out: dict[int, list[AxisCompare]] = {}
+        for variant_id in variant_ids:
+            theirs = held.get(variant_id, {})
+            wanted = {k: v for k, v in identity.items() if shown(k, v) is not None}
+            axes = required.get(variant_id) or (set(wanted) | set(theirs))
+            compared = []
+            for key in sorted(axes):
+                mine, entry = wanted.get(key), theirs.get(key)
+                agrees = None
+                if mine is not None and entry is not None:
+                    if isinstance(entry, Decimal) or isinstance(mine, int | float | Decimal):
+                        agrees = Decimal(str(mine)) == Decimal(str(entry))
+                    else:
+                        agrees = mine == entry
+                compared.append(
+                    AxisCompare(
+                        key=key, listing=shown(key, mine), entry=shown(key, entry), agrees=agrees
+                    )
+                )
+            out[variant_id] = compared
+        return out
 
     async def summary(self) -> QueueSummary:
         """What is actually in the way, counted.
@@ -2062,3 +2451,87 @@ class MatchingService:
             .order_by(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc())
             .limit(1)
         )
+
+
+def _queue_rows() -> Any:
+    """Each queue row with its listing, shop and category named, the brand it was looked
+    for under, and how many queued listings were looked for under the same brand and model.
+    """
+    sibling = aliased(MatchQueue)
+    siblings = case(
+        (
+            MatchQueue.brand_id.is_(None) | MatchQueue.model_key.is_(None),
+            1,
+        ),
+        else_=(
+            select(func.count())
+            .select_from(sibling)
+            .where(
+                sibling.brand_id == MatchQueue.brand_id,
+                sibling.model_key == MatchQueue.model_key,
+            )
+            .correlate(MatchQueue)
+            .scalar_subquery()
+        ),
+    )
+    return _with_offer(
+        select(
+            MatchQueue,
+            Offer,
+            Brand.id.label("brand_id"),
+            Brand.canonical_name.label("brand_name"),
+            siblings.label("siblings"),
+        )
+        .join(Offer, Offer.id == MatchQueue.offer_id)
+        .outerjoin(Brand, Brand.id == MatchQueue.brand_id)
+    )
+
+
+def _with_offer(stmt: Any) -> Any:
+    """The shop and category a listing brief names, joined onto a select that has `Offer`.
+    Joined before the columns are added: added first, `shops` stands in the FROM list on its
+    own and `sellers` could join to either side."""
+    return (
+        stmt.join(Seller, Seller.id == Offer.seller_id)
+        .join(Shop, Shop.id == Seller.shop_id)
+        .outerjoin(Category, Category.id == Offer.category_id)
+        .add_columns(
+            Shop.id.label("shop_id"),
+            Shop.name.label("shop_name"),
+            Category.id.label("category_id"),
+            Category.name.label("category_name"),
+        )
+    )
+
+
+def _offer_brief(row: Any) -> OfferBrief:
+    offer = row.Offer
+    return OfferBrief(
+        id=offer.id,
+        title=offer.title,
+        shop=NamedRef(id=row.shop_id, name=row.shop_name),
+        external_id=offer.external_id,
+        url=offer.url,
+        brand_raw=offer.brand_raw,
+        gtin=offer.gtin,
+        price=offer.price,
+        currency_code=offer.currency_code,
+        condition=offer.condition,
+        category=NamedRef(id=row.category_id, name=row.category_name) if row.category_id else None,
+    )
+
+
+def _offer_search(text: str) -> Any:
+    """A fragment of the title or the shop's id, or a whole barcode as it is stored."""
+    pattern = f"%{text}%"
+    matches = [Offer.title.ilike(pattern), Offer.external_id.ilike(pattern)]
+    if barcodes.valid(text):
+        matches.append(Offer.gtin == barcodes.canonical(text))
+    return or_(*matches)
+
+
+def _model_key(reading: NormalizedOffer) -> str | None:
+    """The model a queued listing was looked for by, as the model rung compares it. The
+    stated model only: a title normalized is the whole title, and grouping by it would
+    group nothing."""
+    return (normalize_model(reading.model) or None) if reading.model else None

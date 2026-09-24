@@ -1,6 +1,7 @@
 """The judge behind the admin panel.
 
 GET /api/admin/judge/verdicts   every answer bought, with what it was asked
+GET /api/admin/judge/summary    what it cost over the last day, week and all time
 
 Running the judge is not here. It belongs to whoever owns the work being judged — for
 brands that is `POST /api/admin/matching/judge` — because deciding that a question is
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import JudgeServiceDep
 from app.api.pagination import pagination_params
-from app.features.judge.schemas import VerdictRead
+from app.features.judge.schemas import JudgeSummary, VerdictRead
 from app.schemas.pagination import Page, Pagination
 
 router = APIRouter(prefix="/judge", tags=["admin: judge"])
@@ -35,3 +36,11 @@ async def verdicts(
     """
     items, total = await service.verdicts(pagination, kind=kind)
     return Page[VerdictRead].of(items, total, pagination)
+
+
+@router.get("/summary", response_model=JudgeSummary, summary="What the judge cost")
+async def summary(service: JudgeServiceDep) -> JudgeSummary:
+    """Questions bought and their tokens, and how many were answered from the store
+    instead, over the last day, the last week and all time. Tokens, not money: the price
+    is the provider's and would go stale here."""
+    return await service.summary()

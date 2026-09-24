@@ -13,6 +13,7 @@ made names the right model.
 | | |
 |---|---|
 | `GET /api/admin/judge/verdicts` | every answer bought, with what it was asked, filterable by `kind` |
+| `GET /api/admin/judge/summary` | what it cost over the last day, week and all time |
 
 Running the judge is deliberately **not** here. For brands that is
 `POST /api/admin/matching/judge`, for entries `POST /api/admin/matching/judge/ambiguous`,
@@ -118,6 +119,13 @@ recorded as one rather than filed under the nearest value.
 **A verdict is an input to matching, never a match.** The matcher reads the verdict store
 and cannot reach the network through it, so running the ladder stays offline, deterministic
 and as fast as its indexes. Asking is a separate pass an admin starts.
+
+**What it cost is counted from two places.** `asked` and the tokens are the verdicts
+bought — one stored row each, so they are exact. `cached` is the questions answered from the
+store instead, summed from the passes' own reports in the audit trail, because a cache hit
+writes no verdict and the trail is the one place it is recorded. Tokens, never money: the
+price per token is the provider's and changes, and a figure computed from a stale one would
+be believed.
 
 ## Decisions worth knowing before changing it
 

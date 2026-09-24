@@ -100,3 +100,13 @@ def record_changes(**changes: Any) -> None:
     if context is None:
         return
     context.changes.update(redact(changes))
+
+
+def discard_changes() -> None:
+    """Forget what was recorded, for a request that applied nothing: a dry run computes
+    the same report a real one would and then rolls it back, and the trail says what was
+    done, not what would have been."""
+    context = current_context()
+    if context is None:
+        return
+    context.changes.clear()

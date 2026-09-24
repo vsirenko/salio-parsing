@@ -148,3 +148,28 @@ class JudgeReport(BaseModel):
     # The first failure, named. A pass that reports twenty failures and no reason is a
     # pass nobody can fix.
     error: str | None = None
+
+
+class JudgeWindow(BaseModel):
+    """What the judge cost over one stretch of time.
+
+    `asked` and the tokens are the answers bought — one stored verdict each, so they are
+    exact. `cached` is how many questions were answered from the store instead, summed from
+    the passes' own reports in the audit trail: a cache hit writes no verdict, and the
+    trail is the one place it is recorded. No money: the price per token is the provider's
+    and changes, and a figure computed from a stale one would be believed.
+    """
+
+    since: datetime | None
+    passes: int
+    asked: int
+    cached: int
+    input_tokens: int
+    output_tokens: int
+    by_kind: dict[str, int]
+
+
+class JudgeSummary(BaseModel):
+    day: JudgeWindow
+    week: JudgeWindow
+    all_time: JudgeWindow

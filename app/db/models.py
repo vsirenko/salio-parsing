@@ -1263,6 +1263,11 @@ class MatchQueue(Base):
     last_attempt_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
     # Looked at, cannot be decided yet, do not show it again until then.
     snoozed_until: Mapped[datetime | None] = mapped_column(TimestampTZ)
+    # The brand the matcher settled on and the model it searched for, normalized as the
+    # model rung compares them. Written with the row so the queue can be read by maker and
+    # grouped by what one new entry would place: null where the brand did not resolve.
+    brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id", ondelete="SET NULL"))
+    model_key: Mapped[str | None] = mapped_column(String(200))
 
     __table_args__ = (
         CheckConstraint(
@@ -1271,6 +1276,7 @@ class MatchQueue(Base):
             name="reason_known",
         ),
         Index("ix_match_queue_reason", "reason"),
+        Index("ix_match_queue_brand_model", "brand_id", "model_key"),
     )
 
 

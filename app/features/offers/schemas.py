@@ -310,9 +310,21 @@ class TraceMatch(BaseModel):
     evidence: dict[str, Any]
 
 
+class TraceCandidate(BaseModel):
+    """A near miss as the queue row stored it, named. Compared axis by axis with the
+    listing in `GET /api/admin/match-queue/{offer_id}`, which is where the choosing is."""
+
+    why: str
+    variant_id: int | None = None
+    brand_id: int | None = None
+    variant_title: str | None = None
+    model: str | None = None
+    brand: NamedRef | None = None
+
+
 class TraceQueue(BaseModel):
     reason: str
-    candidates: list[Any]
+    candidates: list[TraceCandidate]
     attempts: int
     last_attempt_at: datetime
 

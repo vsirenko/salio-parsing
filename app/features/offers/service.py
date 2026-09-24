@@ -62,6 +62,7 @@ from app.features.offers.schemas import (
     RawOfferRead,
     SellerRef,
     ShopRef,
+    TraceCandidate,
     TraceEntry,
     TraceMatch,
     TraceObservation,
@@ -394,7 +395,7 @@ class OfferService:
             queue=(
                 TraceQueue(
                     reason=queued.reason,
-                    candidates=queued.candidates or [],
+                    candidates=await self._trace_candidates(queued.candidates or []),
                     attempts=queued.attempts,
                     last_attempt_at=queued.last_attempt_at,
                 )
@@ -730,6 +731,45 @@ class OfferService:
         one run.
         """
         return await self._run_kind(run_id) == Kind.REPARSE.value
+
+    async def _trace_candidates(self, stored: list[dict]) -> list[TraceCandidate]:
+        variant_ids = [entry["variant_id"] for entry in stored if entry.get("variant_id")]
+        brand_ids = [entry["brand_id"] for entry in stored if entry.get("brand_id")]
+        variants = {
+            row.Variant.id: row
+            for row in (
+                await self.session.execute(
+                    select(Variant, Brand.canonical_name)
+                    .join(Brand, Brand.id == Variant.brand_id)
+                    .where(Variant.id.in_(variant_ids))
+                )
+            ).all()
+        }
+        brands = dict(
+            (
+                await self.session.execute(
+                    select(Brand.id, Brand.canonical_name).where(Brand.id.in_(brand_ids))
+                )
+            ).all()
+        )
+        out = []
+        for entry in stored:
+            row = variants.get(entry.get("variant_id"))
+            brand_id = row.Variant.brand_id if row else entry.get("brand_id")
+            name = row.canonical_name if row else brands.get(brand_id)
+            out.append(
+                TraceCandidate(
+                    why=entry.get("why", ""),
+                    variant_id=entry.get("variant_id"),
+                    brand_id=entry.get("brand_id"),
+                    variant_title=(row.Variant.title_override or row.Variant.title)
+                    if row
+                    else None,
+                    model=row.Variant.model if row else None,
+                    brand=NamedRef(id=brand_id, name=name) if brand_id and name else None,
+                )
+            )
+        return out
 
     async def _run_kind(self, run_id: int | None) -> str | None:
         if run_id is None:

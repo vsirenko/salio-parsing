@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Method(StrEnum):
@@ -64,6 +64,77 @@ class Reason(StrEnum):
     LOW_CONFIDENCE = "low_confidence"
 
 
+QUEUE_SORT = ("offer_id", "attempts", "last_attempt_at", "siblings", "title", "price")
+DOUBT_SORT = ("offer_id", "same", "price")
+
+
+class NamedRef(BaseModel):
+    id: int
+    name: str
+
+
+class AxisCompare(BaseModel):
+    """One identity axis, as the listing and the candidate each hold it.
+
+    `agrees` is null when one side has nothing on it: a silence, which the ladder treats
+    differently from a disagreement — and so should whoever is choosing.
+    """
+
+    key: str
+    listing: str | None
+    entry: str | None
+    agrees: bool | None
+
+
+class Candidate(BaseModel):
+    """A near miss the matcher found while failing, and why it was considered.
+
+    A variant for the rungs that search entries; a brand for `brand_ambiguous`, whose
+    question is which maker a string means. `why` is the signal that found it — `gtin`,
+    `mpn`, `model`, `brand_alias` — and `axes` how it compares with the listing now, read
+    against the catalogue as it is rather than as it was when the row was written. There is
+    no score: the ladder does not rank, it agrees or refuses, and a number here would be one
+    invented for the page.
+    """
+
+    why: str
+    variant_id: int | None = None
+    brand_id: int | None = None
+    variant_title: str | None = None
+    model: str | None = None
+    brand: NamedRef | None = None
+    offers_count: int | None = Field(
+        default=None, description="Listings placed on this entry — how settled it is"
+    )
+    axes: list[AxisCompare] = Field(default_factory=list)
+
+
+class OfferBrief(BaseModel):
+    """The listing a queue row or a doubt is about, enough to decide from the row."""
+
+    id: int
+    title: str | None
+    shop: NamedRef
+    external_id: str
+    url: str | None
+    brand_raw: str | None
+    gtin: str | None
+    price: Decimal | None
+    currency_code: str | None
+    condition: str
+    category: NamedRef | None
+
+
+class CreatedVariant(BaseModel):
+    """The entry a promotion makes. `id` is null on a dry run, which made nothing."""
+
+    id: int | None
+    title: str
+    model: str
+    brand: str
+    offer_id: int
+
+
 class OfferMatchRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,6 +162,8 @@ class MatchDoubtRead(BaseModel):
     listing_title: str
     brand: str
     entry_model: str
+    variant_title: str
+    offer: OfferBrief
     # The judge's answer, `same` being the probability the listing names the entry's own
     # model — what the review threshold is on.
     choice: str
@@ -100,14 +173,44 @@ class MatchDoubtRead(BaseModel):
 
 
 class MatchQueueRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """A listing the matcher could not place, with the listing itself and what it found.
+
+    `brand` and `model_key` are what it looked for; `siblings` counts the queued listings
+    looking for the same brand and model — what one new entry would place.
+    """
 
     offer_id: int
     reason: Reason
-    candidates: list
+    candidates: list[Candidate]
     attempts: int
     last_attempt_at: datetime
     snoozed_until: datetime | None
+    offer: OfferBrief
+    brand: NamedRef | None
+    model_key: str | None
+    siblings: int
+
+
+class Snooze(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    until: datetime
+
+    @field_validator("until")
+    @classmethod
+    def _aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("give a time zone: a bare time is a different moment per reader")
+        return value
+
+
+class DoubtKept(BaseModel):
+    """A doubted match a person looked at and left where it was."""
+
+    offer_id: int
+    variant_id: int
+    method: Method
+    decided_by: DecidedBy
 
 
 class ManualMatch(BaseModel):
@@ -127,7 +230,11 @@ class MatchOutcome(BaseModel):
     method: Method | None
     variant_id: int | None
     reason: Reason | None
-    candidates: list
+    candidates: list[Candidate]
+    # A promotion's entry. On a dry run the listing is placed on it as it would be and
+    # none of it is kept, so `variant_id` names nothing afterwards either.
+    created: CreatedVariant | None = None
+    dry_run: bool = False
 
 
 class MergeReport(BaseModel):
@@ -145,6 +252,7 @@ class MergeReport(BaseModel):
     reasons: dict[str, int] = Field(default_factory=dict)
     # The pairs that were folded, newest first, as `from -> into`.
     pairs: list[str] = Field(default_factory=list)
+    dry_run: bool = False
 
 
 class RenameReport(BaseModel):
@@ -183,6 +291,9 @@ class PromotionReport(BaseModel):
     # Why the rest were not promoted, counted. A sweep that reports "48 skipped" and no
     # reason is a sweep nobody can act on.
     reasons: dict[str, int]
+    # The entries made, oldest first. On a dry run, the ones that would be.
+    created: list[CreatedVariant] = Field(default_factory=list)
+    dry_run: bool = False
 
 
 class RunReport(BaseModel):
