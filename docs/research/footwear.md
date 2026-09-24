@@ -103,6 +103,44 @@ about eight products a second; a product is one request, because all its sizes a
 Cheaper still: prices from the listing pages (~2 900 pages at Zalando and eapavi, minutes
 rather than hours), the full product pass every few days for new products and barcodes.
 
+## What a listing page carries, and when the product page is still needed
+
+A barcode and a style code never change, so a product page is needed once, when the product
+first appears. Price, stock and sizes do change — and the question that decides the daily
+cost is whether the listing pages carry them. Checked product by product against the
+product pages' own `ProductGroup`:
+
+| | price | sizes in stock | colour | per request |
+|---|---|---|---|---|
+| **Zalando** | yes, equal to the card's on 6 of 6 | **yes, exactly** — the listing's `simples` equalled the card's in-stock sizes on 6 of 6 | in the name (`… - dark grey`) | 24 products, 0.6 s |
+| **eapavi** | yes (`final`, `regular`, `minimal`) | **only when five or fewer are in stock**; otherwise `Pieejams vairākos izmēros` ("in several sizes") — 44 to 56 of 72 products on four pages, 61–78 % | in the name (`Snīkeri · Balts`) and a hex colour | 72 products, 3.2 s |
+| **About You** | — | — | — | no listing path: the server renders the first 31 products of a category and `?page=`, `?p=`, `?offset=` all return them again; the rest loads over gRPC |
+
+Where a listing does list sizes it lists them in its own spelling: `38.5` on eapavi's listing
+is `38_1_2` on its product page — one size, and a table to reconcile.
+
+So, per day:
+
+- **Zalando**: listing pages only — price and exact size availability for everything, ~2 100
+  pages, minutes — plus the product page of anything new, once, for its barcodes.
+- **eapavi**: listing pages give the price and whether it is in stock for everything, and the
+  exact sizes whenever few are left — which is the case a buyer asking for one size is most
+  often asking about. Which of many sizes are in stock needs the product page; re-reading it
+  weekly, or when the listing's state changes, keeps that honest without reading 40 000
+  cards a day.
+- **About You**: product pages, ~25 000, about an hour, until its gRPC listing is worth
+  taking apart. It is also most of the daily traffic (~22 GB decompressed, against ~2–3 GB
+  for either of the others).
+
+Zalando's GraphQL (`POST /api/graphql/`) was looked at as a faster way in and is not one. It
+accepts only persisted queries by hash — ad-hoc queries and introspection are refused with
+`not accepting GraphQL and no id found` — and none of the hashes its front end uses returns a
+barcode: the product page loads its data server-side, and its only GraphQL call is the
+wishlist. The hashes that exist return a product card (price, sizes in stock) and a product's
+whole family of colourways with prices, a batch of ~30 per request, from a plain request with
+a Chrome TLS fingerprint and the `frsx` cookie as `x-xsrf-token`. They change when Zalando
+ships a new front end, which is why the listing HTML is the path to build on.
+
 ## What an offer should be
 
 Recommended: **an offer is a shop's model in one colourway; its sizes are availability inside
