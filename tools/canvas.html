@@ -61,6 +61,7 @@ details summary { cursor:pointer; color:var(--muted); font-size:12px; }
 .run-btn { font:inherit; font-size:11.5px; padding:2px 8px; border-radius:6px; border:1px solid var(--line);
   background:var(--card); color:var(--accent); cursor:pointer; margin-left:3px; }
 .run-btn:hover { border-color:var(--accent); }
+.run-btn:disabled { color:var(--muted); opacity:.45; cursor:not-allowed; border-color:var(--line); }
 .live { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; background:var(--ok); color:#fff; }
 .toast { position:fixed; right:18px; bottom:18px; background:var(--card); border:1px solid var(--line);
   border-radius:10px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,.15); font-size:13px; max-width:420px; }
@@ -170,7 +171,12 @@ function sources(p) {
       <td>${f.with_model}</td><td>${f.with_gtin}</td><td>${f.all_axes}</td>
       <td>${f.placed}</td><td class="${f.queued ? "warn" : "muted"}">${f.queued}</td>
       <td><span class="bar" style="width:${Math.round(share * 60)}px"></span> ${pct(f.placed, f.listed)}</td>
-      ${D.live ? `<td>${["full", "quick", "reparse"].map(k => `<button class="run-btn" data-id="${f.source_id}" data-kind="${k}">${k}</button>`).join("")}</td>` : ""}</tr>`;
+      ${D.live ? `<td>${["full", "quick", "reparse"].map(k => {
+        const quick = (S.channels.find(c => c.source_id === f.source_id) || {}).has_quick;
+        return k === "quick" && !quick
+          ? `<button class="run-btn" disabled title="This channel has no cheap pass: its source delivers nothing without opening every product">${k}</button>`
+          : `<button class="run-btn" data-id="${f.source_id}" data-kind="${k}">${k}</button>`;
+      }).join("")}</td>` : ""}</tr>`;
   }).join("");
   document.getElementById("sources").innerHTML = `<thead><tr><th>Shop</th><th>Channel</th><th>Scheduled</th>
     <th>Last run</th><th>Collected</th><th>Listed</th><th>Delisted</th><th>Model</th><th>Barcode</th>
@@ -178,7 +184,7 @@ function sources(p) {
   document.querySelectorAll("#sources tr.pick").forEach(tr => tr.onclick = e => {
     if (e.target.closest && e.target.closest(".run-btn")) return;
     SOURCE = SOURCE === tr.dataset.s ? null : tr.dataset.s; draw(); });
-  document.querySelectorAll("#sources .run-btn").forEach(b => b.onclick = () => ask(b.dataset.id, b.dataset.kind));
+  document.querySelectorAll("#sources .run-btn:not([disabled])").forEach(b => b.onclick = () => ask(b.dataset.id, b.dataset.kind));
 }
 
 let VIEW = "";

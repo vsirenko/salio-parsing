@@ -234,3 +234,26 @@ async def _one_tick_waiting() -> None:
         await sched.reap()
     finally:
         await sched.release()
+
+
+def test_a_channel_says_whether_it_has_a_cheap_pass(client):
+    """A panel offers a quick run only where there is one to run."""
+    token = admin_token(client)
+    with_quick = channel(client, token, slug="rd-site")
+    without = post(
+        client,
+        token,
+        f"/api/admin/shops/{with_quick['shop_id']}/sources",
+        {
+            "slug": "rd-index",
+            "access": "wholesale",
+            "decode": "private_api",
+            "delivers_full": ["catalogue", "price", "availability"],
+        },
+    )
+    rows = {
+        c["source_id"]: c
+        for c in client.get("/api/admin/scheduler", headers=auth(token)).json()["channels"]
+    }
+    assert rows[with_quick["id"]]["has_quick"] is True
+    assert rows[without["id"]]["has_quick"] is False

@@ -124,6 +124,9 @@ class ChannelSchedule(BaseModel):
     shop: str
     category: str | None
     is_enabled: bool
+    # Whether the channel has a cheap pass at all. One that delivers nothing cheaply — 1a's
+    # index, bm's GraphQL — refuses a `quick` run, and a panel should not offer one.
+    has_quick: bool
     cron_full: str | None
     cron_quick: str | None
     next_full_at: datetime | None

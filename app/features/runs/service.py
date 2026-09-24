@@ -329,6 +329,7 @@ class RunService:
                 shop=shop,
                 category=category,
                 is_enabled=source.is_enabled,
+                has_quick=bool(source.delivers_quick),
                 cron_full=source.cron_full,
                 cron_quick=source.cron_quick,
                 next_full_at=_next(source.cron_full, now) if source.is_enabled else None,
