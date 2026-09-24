@@ -30,7 +30,7 @@ from sqlalchemy import select, text
 
 from app.core.security import Audience, create_access_token
 from app.db.models import User
-from app.db.session import session_factory
+from app.db.session import engine, session_factory
 
 API = "http://localhost:8080/api/admin"
 OUT = Path(__file__).resolve().parent.parent / "var" / "preview" / "canvas.html"
@@ -56,16 +56,25 @@ order by l.source_id, l.offer_id
 
 
 async def mint() -> str:
-    async with session_factory() as session:
-        admin = await session.scalar(select(User).where(User.role == "admin").limit(1))
-        return create_access_token(admin.id, admin.token_epoch, Audience.ADMIN)
+    try:
+        async with session_factory() as session:
+            admin = await session.scalar(select(User).where(User.role == "admin").limit(1))
+            return create_access_token(admin.id, admin.token_epoch, Audience.ADMIN)
+    finally:
+        # Every call runs in an event loop of its own, and a pooled connection belongs to
+        # the loop that opened it: the second page load failed with "attached to a
+        # different loop" until the pool was let go each time.
+        await engine.dispose()
 
 
 async def token_and_samples() -> tuple[str, list[int]]:
-    async with session_factory() as session:
-        admin = await session.scalar(select(User).where(User.role == "admin").limit(1))
-        token = create_access_token(admin.id, admin.token_epoch, Audience.ADMIN)
-        rows = (await session.execute(text(SAMPLES))).mappings().all()
+    try:
+        async with session_factory() as session:
+            admin = await session.scalar(select(User).where(User.role == "admin").limit(1))
+            token = create_access_token(admin.id, admin.token_epoch, Audience.ADMIN)
+            rows = (await session.execute(text(SAMPLES))).mappings().all()
+    finally:
+        await engine.dispose()
     placed_seen: dict[int, int] = defaultdict(int)
     chosen: list[int] = []
     for row in rows:

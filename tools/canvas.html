@@ -31,6 +31,11 @@ svg text { fill:var(--fg); font-family:inherit; }
 .node .label { font-size:12px; fill:var(--muted); }
 .node .part { font-size:11px; fill:var(--muted); }
 .edge { stroke:var(--muted); stroke-width:1.4; fill:none; }
+svg.moving .edge { stroke:var(--accent); stroke-dasharray:6 5; animation:flow .8s linear infinite; }
+@keyframes flow { to { stroke-dashoffset:-11; } }
+tr.busy td { background:var(--soft); }
+.busy-tag { font-size:11px; padding:1px 7px; border-radius:10px; margin-left:6px; color:#fff; background:var(--accent); }
+.busy-tag.queued { background:var(--warn); }
 .edge-label { font-size:11px; fill:var(--muted); }
 .drop { font-size:11px; fill:var(--bad); }
 table { border-collapse:collapse; width:100%; font-size:13px; }
@@ -126,13 +131,16 @@ function canvas(p) {
   const W = 190, H = 118, GX = 60, GY = 34, X0 = 10, Y0 = 10;
   const stage = Object.fromEntries(p.stages.map(s => [s.key, s]));
   stage.scheduler = { key: "scheduler", label: "Scheduler", count: scheduled,
-    parts: { alive: S.alive ? 1 : 0, running: S.running.length, due: S.due.length, of: S.channels.length } };
+    parts: { queued: (S.queued || []).length, running: S.running.length, due: S.due.length, "of channels": S.channels.length } };
   const pos = {};
   NODES.forEach(([k, col, row]) => pos[k] = { x: X0 + col * (W + GX), y: Y0 + row * (H + GY) / 1.4 + (row === 1 ? 0 : 0) });
   pos.placed.y = Y0; pos.queued.y = Y0 + 2 * (H + GY) / 1.4; pos.catalogue.y = Y0;
   const edges = [{ source: "scheduler", target: "channels", count: stage.channels.count }, ...p.edges];
   const width = X0 * 2 + 7 * W + 6 * GX, height = Y0 * 2 + 2 * (H + GY) / 1.4 + H;
-  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+  // Moving while anything is queued or running — for this view's channels, or at all.
+  const inView = new Set(p.sources.map(f => f.source_id));
+  const busy = [...(S.queued || []), ...S.running].some(r => inView.has(r.source_id));
+  let svg = `<svg class="${busy ? "moving" : ""}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
   svg += `<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--muted)"/></marker></defs>`;
   for (const e of edges) {
     const a = pos[e.source], b = pos[e.target]; if (!a || !b) continue;
@@ -163,8 +171,10 @@ function sources(p) {
   const rows = p.sources.map(f => {
     const share = f.listed ? f.placed / f.listed : 0;
     const status = f.last_run_status === "ok" ? "ok" : f.last_run_status ? "bad" : "muted";
-    return `<tr class="pick ${SOURCE === f.source ? "on" : ""}" data-s="${esc(f.source)}">
-      <td>${esc(f.shop)}</td><td>${esc(f.source)}</td>
+    const live = [...(S.queued || []), ...S.running].find(r => r.source_id === f.source_id);
+    const badge = live ? `<span class="busy-tag ${esc(live.status)}">${esc(live.status)} ${esc(live.kind)}</span>` : "";
+    return `<tr class="pick ${SOURCE === f.source ? "on" : ""} ${live ? "busy" : ""}" data-s="${esc(f.source)}">
+      <td>${esc(f.shop)}</td><td>${esc(f.source)}${badge}</td>
       <td class="${f.scheduled ? "ok" : "warn"}">${f.scheduled ? "yes" : "no"}</td>
       <td class="${status}">${esc(f.last_run_status || "never")}</td>
       <td>${f.collected}</td><td>${f.listed}</td><td class="muted">${f.delisted}</td>
