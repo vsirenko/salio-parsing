@@ -191,7 +191,8 @@ function where(f) {
   if (f.status === "running") return { done: ["queued", "discovered"], active: ["fetched", "handed_over", "read"], bad };
   const collected = ["queued", "discovered", "fetched", "handed_over", "read"];
   if (bad) return { done: collected, active: [], bad };
-  if (f.phase === "settled") return { done: RUN_NODES.map(n => n[0]), active: [], bad };
+  if (f.phase === "settled" || f.phase === "done") return { done: RUN_NODES.map(n => n[0]), active: [], bad };
+  if (f.phase === "unsettled") return { done: collected, active: [], bad: true };
   // Finished, and the scheduler is placing what it brought (or is about to).
   return { done: collected, active: ["placed", "waiting", "new_entries"], bad };
 }
@@ -230,7 +231,9 @@ function runView() {
   const f = FLOW, t = v => esc((v || "").replace("T", " ").slice(0, 19));
   const phase = { queued: "waiting for the scheduler's next tick", running: "the worker is finding the shop's products",
     reading: "the worker is reading product pages and handing them over", ok: "collected; waiting to be placed",
-    settling: "the scheduler is placing what it brought", settled: "placed — done" }[f.phase] || f.phase;
+    settling: "the scheduler is placing what it brought", settled: "placed — done",
+    done: "done — a quick pass brings prices and has nothing to place",
+    unsettled: "collected, but placing it failed: " + ((f.progress || {}).settle_error || "") }[f.phase] || f.phase;
   document.getElementById("canvas-title").textContent = `Run ${f.run_id} — ${f.source} · ${f.kind}`;
   box.innerHTML = `<div class="run-head"><button class="chip" id="run-close">← back to the pipeline</button>
     <b class="status-${esc(f.status)}">${esc(f.status)}</b><span>${esc(phase)}</span>

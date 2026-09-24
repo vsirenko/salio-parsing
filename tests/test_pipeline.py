@@ -101,3 +101,21 @@ def test_one_run_is_drawn_from_what_its_worker_said_and_what_its_listings_became
     assert done["discovered"]["count"] == 3 and done["fetched"]["count"] == 2
 
     assert client.get("/api/admin/pipeline/runs/999999", headers=auth(admin)).status_code == 404
+
+
+def test_a_quick_run_is_done_once_it_ends_ok(client, event_loop):
+    """Nothing settles a quick pass, so waiting for it kept run 316's canvas moving."""
+    from tests.test_runs import channel, start
+    from tests.test_worker import taken, worker_token
+
+    admin = admin_token(client)
+    source = channel(client, admin, cron_full=None, cron_quick=None)
+    run = start(client, admin, source["id"], "quick")
+    taken(event_loop, run["id"])
+    client.post(
+        f"/api/worker/runs/{run['id']}/finish",
+        headers=auth(worker_token(client)),
+        json={"items_seen": 1, "items_ingested": 1, "coverage": {"price": 1.0}},
+    )
+    body = client.get(f"/api/admin/pipeline/runs/{run['id']}", headers=auth(admin)).json()
+    assert (body["status"], body["phase"]) == ("ok", "done")

@@ -247,6 +247,15 @@ class RunService:
             run.progress = {**(run.progress or {}), "phase": "settled", "settled": settled}
         await self.session.flush()
 
+    async def record_unsettled(self, run_id: int, error: str) -> None:
+        """Settling a finished run failed; its listings wait in the queue, and anybody
+        watching the run should see that it stopped rather than wait for it."""
+        run = await self.session.get(Run, run_id)
+        if run is None:
+            return
+        run.progress = {**(run.progress or {}), "phase": "unsettled", "settle_error": error[:500]}
+        await self.session.flush()
+
     async def queued(self) -> list[int]:
         """The runs asked for by hand, oldest first."""
         rows = await self.session.scalars(

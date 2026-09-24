@@ -303,3 +303,23 @@ def test_settling_writes_what_it_placed_onto_the_run(client, event_loop):
     progress = client.get(f"/api/admin/runs/{run['id']}", headers=auth(token)).json()["progress"]
     assert progress["phase"] == "settled"
     assert set(progress["settled"]) == {"renamed", "matched", "promoted", "matched_after"}
+
+
+def test_a_settling_that_fails_says_so_on_the_run(client, event_loop, monkeypatch):
+    """Otherwise the run reads "waiting to be placed" for ever."""
+    from app.features.matching.service import MatchingService
+    from tests.test_runs import channel, start
+
+    async def broken(self, *, limit):
+        raise RuntimeError("the matcher fell over")
+
+    monkeypatch.setattr(MatchingService, "rebuild_named_from_a_stale_reading", broken)
+    token = admin_token(client)
+    source = channel(client, token, cron_full=None, cron_quick=None)
+    run = start(client, token, source["id"])
+
+    event_loop.run_until_complete(scheduler().settle(run_id=run["id"]))
+
+    progress = client.get(f"/api/admin/runs/{run['id']}", headers=auth(token)).json()["progress"]
+    assert progress["phase"] == "unsettled"
+    assert "the matcher fell over" in progress["settle_error"]

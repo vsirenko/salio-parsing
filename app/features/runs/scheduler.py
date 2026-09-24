@@ -263,6 +263,14 @@ class Scheduler:
             )
         except Exception as error:  # noqa: BLE001 - see the docstring
             log.warning("run %d could not be settled: %s", run_id, error)
+            try:
+                async with session_factory() as session:
+                    await RunService(session).record_unsettled(
+                        run_id, f"{type(error).__name__}: {error}"
+                    )
+                    await session.commit()
+            except Exception as again:  # noqa: BLE001 - the log line above already says it
+                log.warning("run %d: could not record that: %s", run_id, again)
 
     async def _finish(self, run_id: int, error: str) -> None:
         """Close a run its worker never closed.

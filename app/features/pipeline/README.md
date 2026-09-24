@@ -35,7 +35,9 @@ counts once it has finished; the rest are counted from the listings whose stored
 run delivered, changed or not, between its start and its finish — an unchanged page only
 moves `last_seen_at`, and it was seen all the same. What settling did (`renamed`, `matched`,
 `promoted`, `matched_after`) rides on the last node. A placement is "by this run" when it
-was decided after the run began, and an entry is new when it was created after that.
+was decided after the run began, and an entry is new when it was created after that. Only a
+full pass and a reparse are settled: a quick pass that ended ok reads `phase: done`, and a
+settling that failed reads `unsettled` with its error, so nothing watching waits forever.
 
 **The path of one listing is not here.** It is `GET /api/admin/offers/{id}/trace`, in
 `offers`: the reading recomputed rule by rule, the match and the entry. This is the same

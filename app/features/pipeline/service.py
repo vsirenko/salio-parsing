@@ -308,6 +308,11 @@ class PipelineService:
         phase = progress.get("phase") or run["status"]
         if finished and phase == "reading":
             phase = run["status"]
+        # Only a full pass or a reparse is settled; a quick one carries prices and nothing to
+        # place, so once it has ended ok it is done. Run 316 waited for a settling that was
+        # never coming, and its canvas kept moving.
+        if phase == "ok" and run["kind"] == "quick":
+            phase = "done"
 
         stages = [
             Stage(key="queued", label="Asked for", count=1, parts={}),
