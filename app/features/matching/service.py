@@ -70,10 +70,12 @@ from app.features.matching.schemas import (
     CreatedVariant,
     DecidedBy,
     DoubtKept,
+    EntrySnapshot,
     ManualMatch,
     MatchDoubtRead,
     MatchOutcome,
     MatchQueueRead,
+    MergePair,
     MergeReport,
     Method,
     NamedRef,
@@ -1197,10 +1199,16 @@ class MatchingService:
 
     async def _merge_pairs(self, *, limit: int, dry_run: bool) -> MergeReport:
         pairs = await self._barcode_duplicates(limit=limit)
-        merged, reasons, folded = 0, Counter(), []
+        merged, reasons, tried = 0, Counter(), []
         catalog = CatalogService(self.session)
         for gtin, first, second in pairs:
             survivor, loser = await self._which_survives(gtin, first, second)
+            # Taken before the merge, which empties one side: what a person checks is what
+            # was about to be folded, not what is left.
+            before = await self._snapshots([loser, survivor])
+            outcome = MergePair(
+                gtin=gtin, from_=before[loser], into=before[survivor], outcome="merged"
+            )
             try:
                 async with self.session.begin_nested():
                     await catalog.merge_variants(
@@ -1211,12 +1219,17 @@ class MatchingService:
                     )
             except AppError as error:
                 reasons[error.code] += 1
-                continue
+                outcome.outcome, outcome.reason, outcome.detail = (
+                    "refused",
+                    error.code,
+                    error.message,
+                )
             except IntegrityError:
                 reasons["conflict"] += 1
-                continue
-            merged += 1
-            folded.append(f"{loser} -> {survivor}")
+                outcome.outcome, outcome.reason = "refused", "conflict"
+            else:
+                merged += 1
+            tried.append(outcome)
 
         audit.record_changes(found=len(pairs), merged=merged, **dict(reasons))
         return MergeReport(
@@ -1224,9 +1237,38 @@ class MatchingService:
             merged=merged,
             refused=sum(reasons.values()),
             reasons=dict(reasons),
-            pairs=folded,
+            pairs=tried,
             dry_run=dry_run,
         )
+
+    async def _snapshots(self, variant_ids: list[int]) -> dict[int, EntrySnapshot]:
+        placed = (
+            select(func.count())
+            .select_from(OfferMatch)
+            .where(OfferMatch.variant_id == Variant.id, OfferMatch.superseded_at.is_(None))
+            .correlate(Variant)
+            .scalar_subquery()
+        )
+        rows = await self.session.execute(
+            select(Variant, Brand.canonical_name, placed.label("placed"))
+            .join(Brand, Brand.id == Variant.brand_id)
+            .where(Variant.id.in_(variant_ids))
+        )
+        found = {
+            row.Variant.id: EntrySnapshot(
+                id=row.Variant.id,
+                title=row.Variant.title_override or row.Variant.title,
+                model=row.Variant.model,
+                brand=row.canonical_name,
+                offers_count=row.placed,
+            )
+            for row in rows.all()
+        }
+        return {
+            variant_id: found.get(variant_id)
+            or EntrySnapshot(id=variant_id, title=None, model=None, brand=None, offers_count=0)
+            for variant_id in variant_ids
+        }
 
     async def rebuild_named_from_a_stale_reading(self, *, limit: int = 100) -> RenameReport:
         """Rename the entries whose only listing no longer reads the way they were named.

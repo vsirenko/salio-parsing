@@ -3,6 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -250,9 +251,38 @@ class MergeReport(BaseModel):
     refused: int
     # Why a pair was left alone, counted.
     reasons: dict[str, int] = Field(default_factory=dict)
-    # The pairs that were folded, newest first, as `from -> into`.
-    pairs: list[str] = Field(default_factory=list)
+    # Every pair the barcode named, folded or refused, in the order they were tried.
+    pairs: list["MergePair"] = Field(default_factory=list)
     dry_run: bool = False
+
+
+class EntrySnapshot(BaseModel):
+    """A catalogue entry as it stood before the pair was tried. Null fields mean it was
+    already gone — folded into another by an earlier pair of the same pass."""
+
+    id: int
+    title: str | None
+    model: str | None
+    brand: str | None
+    offers_count: int
+
+
+class MergePair(BaseModel):
+    """Two entries one barcode named, and what became of them.
+
+    `from` is folded in and disappears, `into` survives. A refused pair is the one worth
+    reading: one barcode on two brands or two categories is more often an error in a shop's
+    data than two products.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    gtin: str
+    from_: EntrySnapshot = Field(alias="from")
+    into: EntrySnapshot
+    outcome: Literal["merged", "refused"]
+    reason: str | None = None
+    detail: str | None = Field(default=None, description="What the refusal said")
 
 
 class RenameReport(BaseModel):

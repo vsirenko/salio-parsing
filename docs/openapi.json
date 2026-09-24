@@ -2240,6 +2240,61 @@
         "title": "Edge",
         "type": "object"
       },
+      "EntrySnapshot": {
+        "description": "A catalogue entry as it stood before the pair was tried. Null fields mean it was\nalready gone — folded into another by an earlier pair of the same pass.",
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "offers_count": {
+            "title": "Offers Count",
+            "type": "integer"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "model",
+          "brand",
+          "offers_count"
+        ],
+        "title": "EntrySnapshot",
+        "type": "object"
+      },
       "ErrorDetail": {
         "properties": {
           "code": {
@@ -3098,6 +3153,60 @@
         "title": "MatchState",
         "type": "string"
       },
+      "MergePair": {
+        "description": "Two entries one barcode named, and what became of them.\n\n`from` is folded in and disappears, `into` survives. A refused pair is the one worth\nreading: one barcode on two brands or two categories is more often an error in a shop's\ndata than two products.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the refusal said",
+            "title": "Detail"
+          },
+          "from": {
+            "$ref": "#/components/schemas/EntrySnapshot"
+          },
+          "gtin": {
+            "title": "Gtin",
+            "type": "string"
+          },
+          "into": {
+            "$ref": "#/components/schemas/EntrySnapshot"
+          },
+          "outcome": {
+            "enum": [
+              "merged",
+              "refused"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "gtin",
+          "from",
+          "into",
+          "outcome"
+        ],
+        "title": "MergePair",
+        "type": "object"
+      },
       "MergeReport": {
         "description": "What a pass of merges did.\n\nA barcode is the strongest thing this system has, so two catalogue entries both holding\nlistings that carry one and the same barcode are not two products. `refused` is the\ninteresting number: a pair the barcode named and something else contradicted.",
         "properties": {
@@ -3116,7 +3225,7 @@
           },
           "pairs": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/MergePair"
             },
             "title": "Pairs",
             "type": "array"

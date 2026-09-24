@@ -317,9 +317,53 @@ def test_a_merge_can_be_previewed(client):
         "/api/admin/matching/merge", headers=auth(token), params={"dry_run": True}
     ).json()
     assert (preview["dry_run"], preview["found"], preview["merged"]) == (True, 1, 1)
-    assert len(preview["pairs"]) == 1
+    [pair] = preview["pairs"]
+    assert pair["gtin"] == "04006381333931"
+    assert (pair["outcome"], pair["reason"]) == ("merged", None)
+    # The entry that held the barcode survives; the one placed by hand is folded into it.
+    assert pair["from"]["id"] == other["id"]
+    assert (pair["from"]["model"], pair["from"]["brand"], pair["from"]["offers_count"]) == (
+        "Wave 7C",
+        "Apple",
+        1,
+    )
+    assert pair["into"]["model"] == "PHONE WAVE 7C" and pair["into"]["offers_count"] == 1
     real = client.post("/api/admin/matching/merge", headers=auth(token)).json()
     assert (real["dry_run"], real["merged"], real["pairs"]) == (False, 1, preview["pairs"])
+
+
+def test_a_refused_pair_is_listed_with_its_reason(client):
+    """One barcode on two makers is an error in somebody's data more often than one
+    product, and it is the pair a person should look at."""
+    token = admin_token(client)
+    _, source, category, apple = a_shop_we_can_build_from(client, token)
+    samsung = post(
+        client, token, "/api/admin/brands", {"slug": "samsung", "canonical_name": "Samsung"}
+    )
+    body = {"name": "Phone 256 GB", "brand": "Apple", "model": "Wave 7C", "ean": "4006381333931"}
+    promote(client, token, offer_from(client, token, source["id"], body, external_id="M-1"))
+    elsewhere = post(
+        client,
+        token,
+        "/api/admin/variants",
+        {"brand_id": samsung["id"], "category_id": category["id"], "model": "Galaxy X"},
+    )
+    second = offer_from(client, token, source["id"], body, external_id="M-2")
+    placed = client.put(
+        f"/api/admin/offers/{second}/match",
+        headers=auth(token),
+        json={"variant_id": elsewhere["id"]},
+    )
+    assert placed.status_code == 200, placed.text
+
+    report = client.post(
+        "/api/admin/matching/merge", headers=auth(token), params={"dry_run": True}
+    ).json()
+    assert (report["found"], report["merged"], report["refused"]) == (1, 0, 1)
+    [pair] = report["pairs"]
+    assert pair["outcome"] == "refused" and pair["reason"] and pair["detail"]
+    assert {pair["from"]["brand"], pair["into"]["brand"]} == {"Apple", "Samsung"}
+    assert report["reasons"] == {pair["reason"]: 1}
 
 
 def test_the_judge_summary_counts_what_was_bought_and_what_was_not(judged):

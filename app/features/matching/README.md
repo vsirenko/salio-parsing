@@ -221,9 +221,17 @@ column, so the question asked and the doubt looked up cannot name different titl
 
 `promote` (one or the sweep) and `merge` take `dry_run=true`. The preview is the real code
 inside a savepoint that is then rolled back, so it cannot drift from what a real run does:
-`created` lists the entries a promotion makes (their `id` null on a dry run), `pairs` the
-merges. A preview leaves the trail with its envelope and no changes — the trail says what
-was done, not what would have been.
+`created` lists the entries a promotion makes (their `id` null on a dry run). A preview
+leaves the trail with its envelope and no changes — the trail says what was done, not what
+would have been.
+
+**A merge lists every pair it tried, refused ones too.** Each carries the `gtin` that joined
+them, `from` (folded in, disappears) and `into` (survives) with title, model, brand and how
+many listings sit on each, and `outcome` with the refusal's `reason` and `detail`. The
+refused pairs are the ones to read: one barcode on two makers or two categories is more
+often a shop's data error than one product. The entries are taken as they stood before the
+pair was tried; an entry an earlier pair of the same pass already folded away shows its id
+and nothing else, beside `not_found`.
 
 **How long a pass takes**, measured from the trail's own durations on 24.09.2026, so a
 caller can choose a `limit` that answers inside a request (about 30 s):
