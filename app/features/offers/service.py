@@ -487,8 +487,42 @@ class OfferService:
         price_min: Decimal | None = None,
         price_max: Decimal | None = None,
         search: str | None = None,
+        source_ids: list[int] | None = None,
+        has_gtin: bool | None = None,
+        has_model: bool | None = None,
+        has_all_axes: bool | None = None,
+        missing_axis: str | None = None,
     ) -> tuple[list[OfferRead], int]:
         stmt = _offer_rows()
+        if source_ids:
+            # A listing is any channel's that has observed it — two channels of one shop
+            # converge on one offer.
+            stmt = stmt.where(
+                Offer.id.in_(select(RawOffer.offer_id).where(RawOffer.source_id.in_(source_ids)))
+            )
+        if has_gtin is not None:
+            stmt = stmt.where(Offer.gtin.is_not(None) if has_gtin else Offer.gtin.is_(None))
+        if has_model is not None:
+            with_model = func.coalesce(Offer.model, "") != ""
+            stmt = stmt.where(with_model if has_model else ~with_model)
+        if has_all_axes is not None:
+            # The same test the pipeline's "read" node counts by: every axis the category
+            # names identity-bearing is on the reading.
+            complete = func.coalesce(Offer.identity.has_all(_required_axes()), False)
+            stmt = stmt.where(complete if has_all_axes else ~complete)
+        if missing_axis:
+            required = (
+                select(CategoryAttribute.category_id)
+                .join(Attribute, Attribute.id == CategoryAttribute.attribute_id)
+                .where(
+                    CategoryAttribute.category_id == Offer.category_id,
+                    CategoryAttribute.identity_bearing.is_(True),
+                    Attribute.key == missing_axis,
+                )
+                .correlate(Offer)
+                .exists()
+            )
+            stmt = stmt.where(required, ~Offer.identity.has_key(missing_axis))
         if match_states:
             stmt = stmt.where(_match_state().in_(match_states))
         if queue_reasons:
@@ -729,11 +763,34 @@ class OfferService:
         offer.price = reading.price
         offer.currency_code = reading.currency_code
         offer.availability = reading.availability
-        if await self._run_kind(raw.run_id) != Kind.QUICK.value:
+        if await self._run_kind(raw.run_id) != Kind.QUICK.value and await self._is_newest(raw):
             offer.title = reading.title
             offer.brand_raw = reading.brand_raw
             offer.gtin = reading.gtin
+            offer.model = reading.model
+            offer.identity = dict(reading.identity or {})
             offer.category_id = reading.category_id
+
+    async def _is_newest(self, raw: RawOffer) -> bool:
+        """Whether no observation of this listing from a pass that carried the catalogue is
+        newer than this one — the order `MatchingService._reading` and the pipeline read by.
+        A re-read of an older observation would otherwise put its reading on the listing
+        over the newer one's: 18 tablets carried the axes of the observation before theirs."""
+        newer = await self.session.scalar(
+            select(RawOffer.id)
+            .outerjoin(Run, Run.id == RawOffer.run_id)
+            .where(
+                RawOffer.offer_id == raw.offer_id,
+                RawOffer.id != raw.id,
+                or_(Run.id.is_(None), Run.kind != Kind.QUICK.value),
+                or_(
+                    RawOffer.fetched_at > raw.fetched_at,
+                    (RawOffer.fetched_at == raw.fetched_at) & (RawOffer.id > raw.id),
+                ),
+            )
+            .limit(1)
+        )
+        return newer is None
 
     async def _is_reparse(self, run_id: int | None) -> bool:
         """Whether this batch is a re-reading of what is already stored.
@@ -1123,6 +1180,20 @@ def _trace_match(match: OfferMatch) -> TraceMatch:
 
 def _axis(number: Decimal | None) -> str:
     return _number(number) if number is not None else ""
+
+
+def _required_axes() -> Any:
+    """The axes the listing's category names identity-bearing, as an array, correlated."""
+    return (
+        select(func.array_agg(Attribute.key))
+        .join(CategoryAttribute, CategoryAttribute.attribute_id == Attribute.id)
+        .where(
+            CategoryAttribute.category_id == Offer.category_id,
+            CategoryAttribute.identity_bearing.is_(True),
+        )
+        .correlate(Offer)
+        .scalar_subquery()
+    )
 
 
 def _match_state() -> Any:

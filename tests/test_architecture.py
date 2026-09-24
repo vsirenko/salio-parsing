@@ -66,6 +66,10 @@ ALLOWED_CROSS_FEATURE = {
     # the worker is done, the way a person did.
     ("runs", "matching"): "the scheduler places what a finished run collected",
     ("runs", "judge"): "the matcher is built with its judge, which only reads stored verdicts here",
+    # Everything the pipeline shows is counted from the tables as they are now, so yesterday
+    # cannot be recomputed. The scheduler is the one process that is always running, so it
+    # keeps the day's numbers — the only write the pipeline has, and nothing reads it back.
+    ("runs", "pipeline"): "the scheduler keeps the pipeline's numbers once a day",
 }
 
 

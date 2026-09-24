@@ -17,7 +17,7 @@ import logging
 import os
 import shlex
 import signal
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -27,6 +27,7 @@ from app.core.exceptions import AppError
 from app.db.session import engine, session_factory
 from app.features.judge.service import JudgeService
 from app.features.matching.service import MatchingService
+from app.features.pipeline.service import PipelineService
 from app.features.runs.schemas import Kind, RunResult
 from app.features.runs.service import RunService
 
@@ -78,6 +79,8 @@ class Scheduler:
         self.stopping = False
         self._lock: AsyncConnection | None = None
         self.started_at = datetime.now(UTC)
+        # The day the pipeline was last kept, so a tick asks the database once a day.
+        self._kept_day: date | None = None
 
     # --- being the only one ---
 
@@ -119,6 +122,7 @@ class Scheduler:
                 await self.reap()
                 started = await self.tick()
                 await self.beat(started)
+                await self.keep_the_day()
                 if once:
                     return
                 await asyncio.sleep(settings.scheduler_tick_seconds)
@@ -158,6 +162,22 @@ class Scheduler:
             run = await service.get(run_id)
             await session.commit()
         return await self._worker_for(run.id, run.source_id, Kind(run.kind))
+
+    async def keep_the_day(self) -> None:
+        """The pipeline's numbers for today, once: everything else it shows is counted as it
+        is now, so a day not kept is a day nobody can look back at. Logged, never fatal."""
+        today = datetime.now(UTC).date()
+        if self._kept_day == today:
+            return
+        try:
+            async with session_factory() as session:
+                written = await PipelineService(session).take_snapshot(today)
+                await session.commit()
+            self._kept_day = today
+            if written:
+                log.info("kept the pipeline for %s: %d scope(s)", today, written)
+        except Exception as error:  # noqa: BLE001 - see the docstring
+            log.warning("could not keep the pipeline for %s: %s", today, error)
 
     async def beat(self, started: int) -> None:
         """Say this scheduler is alive. A failure to say so is logged and never fatal: the

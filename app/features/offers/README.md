@@ -82,13 +82,21 @@ nothing and so cannot go stale; the one thing kept is a word marked as none of t
 (`attribute_value_dismissals`, in `attributes`). On 24.09.2026 it was 105 listings: `Black`
 at dateks was never a language problem, it sat beside `zils` in a second field.
 
+**What a reading found is filterable on the list** — `source_id` (a channel that observed
+it), `has_gtin`, `has_model`, `has_all_axes` (every axis its category names identity-bearing),
+`missing_axis=color` — the same tests the pipeline's read node counts by, so a node leads to
+exactly the listings behind its number. `model` and the canonical `identity` are copied onto
+the offer for it, beside the title.
+
 **Those names are copied onto `offers`, like the price.** Picked out of the observations per
 row, a page sorted by title took 0.4 s over 18660 listings, before counting its total. They
 are written wherever a reading is applied to its offer, and **not by a quick pass**: it
 carries a price and a stock flag, no title and no barcode, and taken as current it would
 blank both — the matcher passes over it for the same reason (`MatchingService._reading`).
 A listing only ever seen by a quick pass therefore has no title, which is true: nobody has
-read its card. No picture yet: nothing reads one out of a payload, and the shops write it
+read its card. And only from the listing's **newest** such observation, the order
+the matcher and the pipeline read by: re-reading an older one used to put its reading over
+the newer one's, and 18 tablets carried the axes of the observation before theirs. No picture yet: nothing reads one out of a payload, and the shops write it
 five ways (relative paths, icons in the list) — see `TODO.md`.
 
 **`run_id` is carried through to `raw_offers`.** Null when a sample is loaded by hand. It

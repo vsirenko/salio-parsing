@@ -161,6 +161,23 @@ async def list_offers(
         str | None,
         Query(max_length=200, description="Title or the shop's id contains; barcode equals"),
     ] = None,
+    source_id: Annotated[
+        list[int] | None,
+        Query(description="Observed by this channel. Repeat for several"),
+    ] = None,
+    has_gtin: Annotated[bool | None, Query(description="Its reading accepted a barcode")] = None,
+    has_model: Annotated[bool | None, Query(description="Its reading found a model")] = None,
+    has_all_axes: Annotated[
+        bool | None,
+        Query(description="Every axis its category names identity-bearing was read"),
+    ] = None,
+    missing_axis: Annotated[
+        str | None,
+        Query(
+            max_length=64,
+            description="An axis its category requires and its reading lacks, `color`",
+        ),
+    ] = None,
 ) -> Page[OfferRead]:
     """A product card asks `product_id=…&listed=true&condition=new&sort=price`: who sells the
     thing new today, cheapest first. Review asks `match_state=queued&queue_reason=ambiguous`,
@@ -183,6 +200,11 @@ async def list_offers(
         price_min=price_min,
         price_max=price_max,
         search=search,
+        source_ids=source_id,
+        has_gtin=has_gtin,
+        has_model=has_model,
+        has_all_axes=has_all_axes,
+        missing_axis=missing_axis,
     )
     return Page[OfferRead].of(items, total, pagination)
 

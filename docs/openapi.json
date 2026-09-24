@@ -5466,6 +5466,105 @@
         "title": "Pipeline",
         "type": "object"
       },
+      "PipelineDay": {
+        "description": "The pipeline's key numbers as they stood on one day. Missing days were not kept —\nthe scheduler was not running — and cannot be recomputed.",
+        "properties": {
+          "all_axes": {
+            "title": "All Axes",
+            "type": "integer"
+          },
+          "collected": {
+            "title": "Collected",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "delisted": {
+            "title": "Delisted",
+            "type": "integer"
+          },
+          "families": {
+            "title": "Families",
+            "type": "integer"
+          },
+          "listed": {
+            "title": "Listed",
+            "type": "integer"
+          },
+          "missing_axes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Missing Axes",
+            "type": "object"
+          },
+          "placed": {
+            "title": "Placed",
+            "type": "integer"
+          },
+          "placed_by_method": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Placed By Method",
+            "type": "object"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "queued_by_reason": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Queued By Reason",
+            "type": "object"
+          },
+          "read": {
+            "title": "Read",
+            "type": "integer"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "variants": {
+            "title": "Variants",
+            "type": "integer"
+          },
+          "with_gtin": {
+            "title": "With Gtin",
+            "type": "integer"
+          },
+          "with_model": {
+            "title": "With Model",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "scope",
+          "listed",
+          "delisted",
+          "read",
+          "with_model",
+          "with_gtin",
+          "all_axes",
+          "missing_axes",
+          "placed",
+          "placed_by_method",
+          "queued",
+          "queued_by_reason",
+          "collected",
+          "variants",
+          "families"
+        ],
+        "title": "PipelineDay",
+        "type": "object"
+      },
       "PlacedOn": {
         "description": "The catalogue entry a listing is placed on, and by what signal.",
         "properties": {
@@ -7615,6 +7714,39 @@
             ],
             "title": "Category"
           },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "category_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Name"
+          },
+          "category_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Slug"
+          },
           "collected": {
             "title": "Collected",
             "type": "integer"
@@ -7622,6 +7754,17 @@
           "delisted": {
             "title": "Delisted",
             "type": "integer"
+          },
+          "last_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Id"
           },
           "last_run_status": {
             "anyOf": [
@@ -7637,6 +7780,13 @@
           "listed": {
             "title": "Listed",
             "type": "integer"
+          },
+          "missing_axes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Missing Axes",
+            "type": "object"
           },
           "placed": {
             "title": "Placed",
@@ -7658,6 +7808,10 @@
             "title": "Shop",
             "type": "string"
           },
+          "shop_id": {
+            "title": "Shop Id",
+            "type": "integer"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -7678,8 +7832,13 @@
         "required": [
           "source_id",
           "source",
+          "shop_id",
           "shop",
           "category",
+          "category_id",
+          "category_slug",
+          "category_name",
+          "last_run_id",
           "scheduled",
           "last_run_status",
           "collected",
@@ -8083,6 +8242,13 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "missing_axes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Missing Axes",
+            "type": "object"
           },
           "parts": {
             "additionalProperties": {
@@ -16101,6 +16267,100 @@
             }
           },
           {
+            "description": "Observed by this channel. Repeat for several",
+            "in": "query",
+            "name": "source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Observed by this channel. Repeat for several",
+              "title": "Source Id"
+            }
+          },
+          {
+            "description": "Its reading accepted a barcode",
+            "in": "query",
+            "name": "has_gtin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Its reading accepted a barcode",
+              "title": "Has Gtin"
+            }
+          },
+          {
+            "description": "Its reading found a model",
+            "in": "query",
+            "name": "has_model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Its reading found a model",
+              "title": "Has Model"
+            }
+          },
+          {
+            "description": "Every axis its category names identity-bearing was read",
+            "in": "query",
+            "name": "has_all_axes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Every axis its category names identity-bearing was read",
+              "title": "Has All Axes"
+            }
+          },
+          {
+            "description": "An axis its category requires and its reading lacks, `color`",
+            "in": "query",
+            "name": "missing_axis",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "An axis its category requires and its reading lacks, `color`",
+              "title": "Missing Axis"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -16861,6 +17121,74 @@
           }
         ],
         "summary": "Every step from a channel to the catalogue, counted",
+        "tags": [
+          "admin: pipeline"
+        ]
+      }
+    },
+    "/api/admin/pipeline/history": {
+      "get": {
+        "description": "One row a day, kept by the scheduler — everything else here is counted as it is now,\nand yesterday cannot be recomputed. Days it was not running are missing, not zero.",
+        "operationId": "history_api_admin_pipeline_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "`all`, or a category slug",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "`all`, or a category slug",
+              "maxLength": 64,
+              "title": "Scope",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineDay"
+                  },
+                  "title": "Response History Api Admin Pipeline History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The key numbers as they stood, day by day",
         "tags": [
           "admin: pipeline"
         ]

@@ -45,7 +45,7 @@ def upgrade() -> None:
               join raw_offers ro on ro.id = n.raw_offer_id
               left join runs ru on ru.id = ro.run_id
              where ru.id is null or ru.kind <> 'quick'
-             order by ro.offer_id, n.id desc
+             order by ro.offer_id, ro.fetched_at desc, ro.id desc, n.id desc
           ) r
          where r.offer_id = o.id
         """

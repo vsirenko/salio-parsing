@@ -6,12 +6,21 @@ Read-only, and only over tables other features own: every model lives in
 """
 
 from collections import Counter
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.features.pipeline.schemas import Edge, Pipeline, RunFlow, SourceFlow, Stage
+from app.db.models import PipelineSnapshot
+from app.features.pipeline.schemas import (
+    Edge,
+    Pipeline,
+    PipelineDay,
+    RunFlow,
+    SourceFlow,
+    Stage,
+)
 
 # One row per listing: its channel, whether the shop still lists it, its newest reading
 # from a pass that carried the catalogue — the rule the matcher reads by — and where it
@@ -48,6 +57,12 @@ select l.source_id,
        coalesce(rd.model, '') <> '' as with_model,
        rd.gtin is not null as with_gtin,
        coalesce(rd.identity ?& req.axes, false) as all_axes,
+       -- Which of the required axes the reading lacks, each by name: one count of "not
+       -- every axis" does not say whether it is the colour or the capacity that is missing.
+       array(
+           select axis from unnest(req.axes) as axis
+           where rd.raw_offer_id is not null and not (rd.identity ? axis)
+       ) as missing_axes,
        m.method,
        q.reason
 from latest l
@@ -61,10 +76,13 @@ left join match_queue q on q.offer_id = l.offer_id
 """
 
 CHANNELS = """
-select s.id, s.slug, sh.name as shop, c.slug as category, s.category_id,
+select s.id, s.slug, sh.id as shop_id, sh.name as shop, c.slug as category,
+       c.name as category_name, s.category_id,
        (s.cron_full is not null or s.cron_quick is not null) as scheduled,
        (select ru.status from runs ru where ru.source_id = s.id and ru.kind = 'full'
         order by ru.started_at desc, ru.id desc limit 1) as last_status,
+       (select ru.id from runs ru where ru.source_id = s.id and ru.kind = 'full'
+        order by ru.started_at desc, ru.id desc limit 1) as last_run_id,
        (select ru.items_seen from runs ru where ru.source_id = s.id and ru.kind = 'full'
         order by ru.started_at desc, ru.id desc limit 1) as last_seen
 from sources s
@@ -166,6 +184,7 @@ class PipelineService:
         flows = {c["id"]: _flow(c) for c in chosen}
         methods: Counter[str] = Counter()
         reasons: Counter[str] = Counter()
+        missing: Counter[str] = Counter()
         delisted = 0
         for row in rows:
             flow = flows[row["source_id"]]
@@ -178,6 +197,9 @@ class PipelineService:
             flow.with_model += row["with_model"]
             flow.with_gtin += row["with_gtin"]
             flow.all_axes += row["all_axes"]
+            for axis in row["missing_axes"] or []:
+                flow.missing_axes[axis] = flow.missing_axes.get(axis, 0) + 1
+                missing[axis] += 1
             if row["method"]:
                 flow.placed += 1
                 methods[row["method"]] += 1
@@ -233,6 +255,7 @@ class PipelineService:
                     "with_gtin": total("with_gtin"),
                     "all_axes": total("all_axes"),
                 },
+                missing_axes=dict(missing.most_common()),
             ),
             Stage(key="placed", label="Placed", count=placed, parts=dict(methods.most_common())),
             Stage(key="queued", label="Queued", count=queued, parts=dict(reasons.most_common())),
@@ -258,6 +281,33 @@ class PipelineService:
             edges=edges,
             sources=sorted(flows.values(), key=lambda f: (f.shop, f.source)),
         )
+
+    async def take_snapshot(self, day: date) -> int:
+        """Keep today's numbers for everything and for each category, once. Returns how many
+        scopes were written; nothing if the day is already kept."""
+        kept = await self.session.scalar(
+            select(func.count())
+            .select_from(PipelineSnapshot)
+            .where(PipelineSnapshot.day == day, PipelineSnapshot.scope == "all")
+        )
+        if kept:
+            return 0
+        channels = (await self.session.execute(text(CHANNELS))).mappings().all()
+        scopes = [None, *sorted({c["category"] for c in channels if c["category"]})]
+        for scope in scopes:
+            flow = await self.summary(category=scope)
+            self.session.add(PipelineSnapshot(day=day, scope=scope or "all", counts=_counts(flow)))
+        await self.session.flush()
+        return len(scopes)
+
+    async def history(self, *, days: int, scope: str = "all") -> list[PipelineDay]:
+        since = datetime.now(UTC).date() - timedelta(days=days - 1)
+        rows = await self.session.scalars(
+            select(PipelineSnapshot)
+            .where(PipelineSnapshot.scope == scope, PipelineSnapshot.day >= since)
+            .order_by(PipelineSnapshot.day)
+        )
+        return [PipelineDay(day=row.day, scope=row.scope, **row.counts) for row in rows]
 
     async def run(self, run_id: int) -> RunFlow:
         """One run's own pass, from the worker's counts to what settling it placed."""
@@ -382,8 +432,13 @@ def _flow(channel) -> SourceFlow:
     return SourceFlow(
         source_id=channel["id"],
         source=channel["slug"],
+        shop_id=channel["shop_id"],
         shop=channel["shop"],
         category=channel["category"],
+        category_id=channel["category_id"],
+        category_slug=channel["category"],
+        category_name=channel["category_name"],
+        last_run_id=channel["last_run_id"],
         scheduled=channel["scheduled"],
         last_run_status=channel["last_status"],
         collected=channel["last_seen"] or 0,
@@ -396,3 +451,24 @@ def _flow(channel) -> SourceFlow:
         placed=0,
         queued=0,
     )
+
+
+def _counts(flow: Pipeline) -> dict:
+    stages = {stage.key: stage for stage in flow.stages}
+    read, placed, queued = stages["read"], stages["placed"], stages["queued"]
+    return {
+        "collected": stages["collected"].count,
+        "listed": stages["listed"].count,
+        "delisted": stages["listed"].parts.get("delisted", 0),
+        "read": read.count,
+        "with_model": read.parts.get("with_model", 0),
+        "with_gtin": read.parts.get("with_gtin", 0),
+        "all_axes": read.parts.get("all_axes", 0),
+        "missing_axes": read.missing_axes,
+        "placed": placed.count,
+        "placed_by_method": placed.parts,
+        "queued": queued.count,
+        "queued_by_reason": queued.parts,
+        "variants": stages["catalogue"].count,
+        "families": stages["catalogue"].parts.get("families", 0),
+    }

@@ -8,6 +8,7 @@ The path from a channel to the catalogue, counted — what a canvas in the admin
 |---|---|
 | `GET /api/admin/pipeline` | every step from a channel to the catalogue, with what reached it; `?category=` or `?source=` narrows it |
 | `GET /api/admin/pipeline/runs/{run_id}` | one run through the same steps, filling in while it runs |
+| `GET /api/admin/pipeline/history` | the key numbers as they stood, day by day — `?days=`, `?scope=` all or a category |
 
 ## How it works
 
@@ -17,6 +18,20 @@ entries the placed ones are on. Each node carries its parts — the runs by thei
 the readings with a model, a barcode and every axis their category requires, the placements
 by method, the queue by reason — and each edge the count that passed, so what stopped at a
 node is the difference.
+
+**The read node says which axis is missing, by name**: `missing_axes: {color: 300,
+storage_mb: 40}` beside `parts`, and on every channel's row. One count of "not every axis"
+did not say whether the colour or the capacity was in the way. Each node leads to its
+listings: `GET /api/admin/offers` takes `source_id`, `has_gtin`, `has_model`, `has_all_axes`
+and `missing_axis`, counted by the same test as here. A channel's row carries `shop_id`,
+`category_id`, `category_slug` and `last_run_id` — its last full pass — to link to.
+
+**Yesterday is kept, because it cannot be recomputed.** Everything else here is counted from
+the tables as they are now: a listing read, placed or taken down since has moved. So the
+scheduler keeps the key numbers once a day, for everything and for each category, in
+`pipeline_snapshots` — the only write this feature has — and `GET /history` reads them back.
+A day the scheduler was not running is missing, not zero. The whole count answers in about
+0.2 s on 18 660 listings, so nothing else is cached.
 
 **A listing is counted by its newest full observation**, the rule the matcher reads by: a
 cheap pass carries a price and nothing else. **Listed means seen by its channel's newest

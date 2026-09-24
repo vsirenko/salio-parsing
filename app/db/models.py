@@ -1,6 +1,6 @@
 """ORM models. One table per entity, no inheritance tricks."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -8,6 +8,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -1028,6 +1029,10 @@ class Offer(Base):
     title: Mapped[str | None] = mapped_column(String(1000))
     brand_raw: Mapped[str | None] = mapped_column(String(200))
     gtin: Mapped[str | None] = mapped_column(String(14))
+    model: Mapped[str | None] = mapped_column(String(200))
+    # The reading's canonical axes, `{"storage_mb": 262144, "color": "black"}` — copied so
+    # "read, without its colour" is a filter over the listings rather than over every reading.
+    identity: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
     first_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
     # A shop taking a listing down stops this moving. The offer stays, and so does every
@@ -1466,6 +1471,24 @@ class Run(Base):
         # Both "when did this last run" and "the last one that ended ok" read from here.
         Index("ix_runs_source_kind_started", "source_id", "kind", desc("started_at")),
     )
+
+
+class PipelineSnapshot(Base):
+    """The pipeline's key numbers as they stood on one day, for one scope.
+
+    Everything the pipeline shows is counted from the tables as they are now, so yesterday
+    cannot be recomputed: a listing read since, placed since or taken down since has moved.
+    Whether a day's aliases, entries or judge answers moved anything is only answerable
+    against numbers kept at the time — so the scheduler keeps them, once a day.
+    """
+
+    __tablename__ = "pipeline_snapshots"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    # `all`, or a category's slug.
+    scope: Mapped[str] = mapped_column(String(64), primary_key=True)
+    counts: Mapped[dict] = mapped_column(JSONB)
+    taken_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
 
 class SchedulerHeartbeat(Base):
