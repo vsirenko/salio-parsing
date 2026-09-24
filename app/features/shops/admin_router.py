@@ -5,23 +5,28 @@
     /api/admin/shops/{id}/markets       where its offers are shown
     /api/admin/shops/{id}/sources       how we read it
     /api/admin/shops/{id}/sellers       who is actually selling inside it
+    /api/admin/sources/{id}             one channel, its last run and next slot
+    /api/admin/sellers/{id}             rename a seller
 
 No delete on a shop: offers and price history will point at it, and the way to retire one
 is to switch its markets off — which keeps the history instead of losing it.
 """
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import ShopServiceDep
 from app.api.pagination import pagination_params
 from app.features.shops.schemas import (
+    SHOP_SORT,
     SellerCreate,
     SellerRead,
+    SellerUpdate,
     ShopCreate,
     ShopGroupCreate,
     ShopGroupRead,
+    ShopGroupUpdate,
     ShopMarketRead,
     ShopMarketSet,
     ShopRead,
@@ -36,8 +41,12 @@ from app.schemas.pagination import Page, Pagination
 groups_router = APIRouter(prefix="/shop-groups", tags=["admin: shops"])
 router = APIRouter(prefix="/shops", tags=["admin: shops"])
 sources_router = APIRouter(prefix="/sources", tags=["admin: shops"])
+sellers_router = APIRouter(prefix="/sellers", tags=["admin: shops"])
 
 PageParams = Annotated[Pagination, Depends(pagination_params())]
+ShopPageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=SHOP_SORT, default_sort="name"))
+]
 
 
 @groups_router.get("", response_model=Page[ShopGroupRead], summary="List shop groups")
@@ -59,13 +68,38 @@ async def create_group(payload: ShopGroupCreate, service: ShopServiceDep) -> Sho
     return await service.create_group(payload)
 
 
+@groups_router.get(
+    "/{group_id}",
+    response_model=ShopGroupRead,
+    summary="Get a shop group",
+    responses={404: {"model": ErrorResponse, "description": "Group not found"}},
+)
+async def get_group(group_id: int, service: ShopServiceDep) -> ShopGroupRead:
+    return await service.get_group(group_id)
+
+
+@groups_router.patch(
+    "/{group_id}",
+    response_model=ShopGroupRead,
+    summary="Update a shop group",
+    responses={
+        404: {"model": ErrorResponse, "description": "Group not found"},
+        409: {"model": ErrorResponse, "description": "Slug already taken"},
+    },
+)
+async def update_group(
+    group_id: int, payload: ShopGroupUpdate, service: ShopServiceDep
+) -> ShopGroupRead:
+    return await service.update_group(group_id, payload)
+
+
 # --- shops ---
 
 
 @router.get("", response_model=Page[ShopRead], summary="List shops")
 async def list_shops(
     service: ShopServiceDep,
-    pagination: PageParams,
+    pagination: ShopPageParams,
     country_code: Annotated[
         str | None, Query(max_length=2, description="Where it is based")
     ] = None,
@@ -73,12 +107,33 @@ async def list_shops(
         str | None, Query(max_length=2, description="Shown in this market")
     ] = None,
     is_marketplace: Annotated[bool | None, Query()] = None,
+    search: Annotated[
+        str | None, Query(max_length=200, description="Name, slug or website contains")
+    ] = None,
+    ids: Annotated[
+        list[int] | None,
+        Query(
+            description="Only these shops — the ones a filter in a URL names. Repeat for several."
+        ),
+    ] = None,
+    health: Annotated[
+        Literal["ok", "failing", "never"] | None,
+        Query(
+            description="`failing`: an enabled channel's newest full pass broke; `never`: no"
+            " enabled channel has a sound full pass; `ok`: the rest"
+        ),
+    ] = None,
 ) -> Page[ShopRead]:
+    """Each row counts what the shop holds — channels, sellers, listings on sale, the
+    products they are placed on — and says how its collection is going."""
     items, total = await service.list_shops(
         pagination,
         country_code=country_code,
         market_code=market_code,
         is_marketplace=is_marketplace,
+        search=search,
+        ids=ids,
+        health=health,
     )
     return Page[ShopRead].of(items, total, pagination)
 
@@ -185,6 +240,32 @@ async def add_source(shop_id: int, payload: SourceCreate, service: ShopServiceDe
     return await service.add_source(shop_id, payload)
 
 
+@sources_router.get(
+    "/{source_id}",
+    response_model=SourceRead,
+    summary="Get a source",
+    responses={404: {"model": ErrorResponse, "description": "Source not found"}},
+)
+async def get_source(source_id: int, service: ShopServiceDep) -> SourceRead:
+    return await service.get_source(source_id)
+
+
+@sources_router.delete(
+    "/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a source that has collected nothing",
+    responses={
+        404: {"model": ErrorResponse, "description": "Source not found"},
+        409: {"model": ErrorResponse, "description": "It has history; disable it instead"},
+    },
+)
+async def remove_source(source_id: int, service: ShopServiceDep) -> Response:
+    """For one added by mistake. A channel that has run is retired with `is_enabled=false`:
+    its observations and runs are the listings' history, and a delete would take them."""
+    await service.remove_source(source_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @sources_router.patch(
     "/{source_id}",
     response_model=SourceRead,
@@ -222,3 +303,17 @@ async def add_seller(shop_id: int, payload: SellerCreate, service: ShopServiceDe
     a marketplace itself as the seller would draw one price line through forty independent
     traders."""
     return await service.add_seller(shop_id, payload)
+
+
+@sellers_router.patch(
+    "/{seller_id}",
+    response_model=SellerRead,
+    summary="Rename a seller",
+    responses={404: {"model": ErrorResponse, "description": "Seller not found"}},
+)
+async def update_seller(
+    seller_id: int, payload: SellerUpdate, service: ShopServiceDep
+) -> SellerRead:
+    """The name only. `external_id` is how the marketplace names the trader in its feed,
+    and changing it would detach every listing already filed under them."""
+    return await service.update_seller(seller_id, payload)

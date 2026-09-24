@@ -37,7 +37,7 @@ from app.features.runs.admin_router import scheduler_router
 from app.features.runs.admin_router import sources_router as source_runs_router
 from app.features.shops.admin_router import groups_router as shop_groups_router
 from app.features.shops.admin_router import router as shops_router
-from app.features.shops.admin_router import sources_router
+from app.features.shops.admin_router import sellers_router, sources_router
 from app.features.users.admin_router import auth_public_router, auth_router, users_router
 
 admin_router = APIRouter(prefix="/admin", dependencies=[Depends(get_current_admin)])
@@ -55,6 +55,7 @@ admin_router.include_router(variants_router)
 admin_router.include_router(shop_groups_router)
 admin_router.include_router(shops_router)
 admin_router.include_router(sources_router)
+admin_router.include_router(sellers_router)
 admin_router.include_router(offers_router)
 admin_router.include_router(source_offers_router)
 admin_router.include_router(raw_offers_router)

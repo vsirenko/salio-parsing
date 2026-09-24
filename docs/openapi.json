@@ -1679,6 +1679,46 @@
         "title": "ChannelSchedule",
         "type": "object"
       },
+      "CollectionHealth": {
+        "description": "Whether a shop's collection is working, from its enabled channels' full passes.\n\n`failing` when an enabled channel's newest full pass did not end ok — failed, rejected by\nits contract, or interrupted; `never` when no enabled channel has finished one ok yet;\n`ok` otherwise. A channel that is disabled says nothing about the shop's health.",
+        "properties": {
+          "enabled_sources": {
+            "title": "Enabled Sources",
+            "type": "integer"
+          },
+          "failing_sources": {
+            "description": "Enabled channels whose newest full pass did not end ok",
+            "title": "Failing Sources",
+            "type": "integer"
+          },
+          "last_full_ok_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the newest full pass that ended ok, on any channel, finished",
+            "title": "Last Full Ok At"
+          },
+          "status": {
+            "description": "`ok`, `failing` or `never`",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "last_full_ok_at",
+          "enabled_sources",
+          "failing_sources"
+        ],
+        "title": "CollectionHealth",
+        "type": "object"
+      },
       "Condition": {
         "enum": [
           "new",
@@ -2050,6 +2090,24 @@
         ],
         "title": "Fact",
         "type": "string"
+      },
+      "GroupRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "GroupRef",
+        "type": "object"
       },
       "HTTPValidationError": {
         "properties": {
@@ -5094,6 +5152,66 @@
         "title": "Role",
         "type": "string"
       },
+      "RunBrief": {
+        "description": "A channel's newest run, as a list row shows it.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "items_seen": {
+            "title": "Items Seen",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "started_at",
+          "finished_at",
+          "items_seen",
+          "error"
+        ],
+        "title": "RunBrief",
+        "type": "object"
+      },
       "RunFlow": {
         "description": "One run through the same nodes, filling in while it runs.\n\nThe first half is what the worker reported (`progress`): how many product pages it found,\nread and handed over. The second half is counted from the tables: what became of the\nlistings this run saw, and what settling it placed. Both are there as the run goes, so a\npage polling this watches the nodes fill in order.",
         "properties": {
@@ -5538,6 +5656,12 @@
             "title": "Name",
             "type": "string"
           },
+          "offers_count": {
+            "default": 0,
+            "description": "Its listings on sale now",
+            "title": "Offers Count",
+            "type": "integer"
+          },
           "shop_id": {
             "title": "Shop Id",
             "type": "integer"
@@ -5571,6 +5695,22 @@
         "title": "SellerRef",
         "type": "object"
       },
+      "SellerUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SellerUpdate",
+        "type": "object"
+      },
       "ShopCreate": {
         "additionalProperties": false,
         "properties": {
@@ -5584,6 +5724,18 @@
             "default": false,
             "title": "Is Marketplace",
             "type": "boolean"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
           },
           "name": {
             "maxLength": 200,
@@ -5679,6 +5831,11 @@
             "title": "Name",
             "type": "string"
           },
+          "shops_count": {
+            "default": 0,
+            "title": "Shops Count",
+            "type": "integer"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -5690,6 +5847,39 @@
           "name"
         ],
         "title": "ShopGroupRead",
+        "type": "object"
+      },
+      "ShopGroupUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "title": "ShopGroupUpdate",
         "type": "object"
       },
       "ShopMarketRead": {
@@ -5728,6 +5918,7 @@
         "type": "object"
       },
       "ShopRead": {
+        "description": "A shop, with where it is shown, what it holds and whether its collection works.",
         "properties": {
           "country_code": {
             "title": "Country Code",
@@ -5738,6 +5929,19 @@
             "title": "Created At",
             "type": "string"
           },
+          "group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroupRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "health": {
+            "$ref": "#/components/schemas/CollectionHealth"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -5746,9 +5950,38 @@
             "title": "Is Marketplace",
             "type": "boolean"
           },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "markets": {
+            "description": "The markets it is shown in",
+            "items": {
+              "type": "string"
+            },
+            "title": "Markets",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "offers_count": {
+            "description": "Its listings on sale now, of any condition",
+            "title": "Offers Count",
+            "type": "integer"
+          },
+          "products_count": {
+            "description": "Families it sells new today",
+            "title": "Products Count",
+            "type": "integer"
           },
           "rating": {
             "anyOf": [
@@ -5762,20 +5995,17 @@
             ],
             "title": "Rating"
           },
-          "shop_group_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Shop Group Id"
+          "sellers_count": {
+            "title": "Sellers Count",
+            "type": "integer"
           },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "sources_count": {
+            "title": "Sources Count",
+            "type": "integer"
           },
           "website": {
             "anyOf": [
@@ -5794,11 +6024,18 @@
           "slug",
           "name",
           "country_code",
-          "shop_group_id",
+          "group",
           "website",
+          "logo_url",
           "is_marketplace",
           "rating",
-          "created_at"
+          "created_at",
+          "markets",
+          "sources_count",
+          "sellers_count",
+          "offers_count",
+          "products_count",
+          "health"
         ],
         "title": "ShopRead",
         "type": "object"
@@ -5836,6 +6073,18 @@
               }
             ],
             "title": "Country Code"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
           },
           "name": {
             "anyOf": [
@@ -6144,6 +6393,7 @@
         "type": "string"
       },
       "SourceRead": {
+        "description": "A channel, with its newest run, its next slots and what it has on sale now.",
         "properties": {
           "access": {
             "$ref": "#/components/schemas/Access"
@@ -6217,6 +6467,29 @@
             "title": "Is Enabled",
             "type": "boolean"
           },
+          "last_full_ok_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its newest full pass that ended ok finished",
+            "title": "Last Full Ok At"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "max_drop_pct": {
             "title": "Max Drop Pct",
             "type": "integer"
@@ -6236,6 +6509,37 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Min Price Coverage",
             "type": "string"
+          },
+          "next_full_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its next scheduled full pass; none while disabled",
+            "title": "Next Full At"
+          },
+          "next_quick_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Quick At"
+          },
+          "offers_count": {
+            "default": 0,
+            "description": "Its listings on sale now",
+            "title": "Offers Count",
+            "type": "integer"
           },
           "shop_id": {
             "title": "Shop Id",
@@ -14215,6 +14519,74 @@
         ]
       }
     },
+    "/api/admin/sellers/{seller_id}": {
+      "patch": {
+        "description": "The name only. `external_id` is how the marketplace names the trader in its feed,\nand changing it would detach every listing already filed under them.",
+        "operationId": "update_seller_api_admin_sellers__seller_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "seller_id",
+            "required": true,
+            "schema": {
+              "title": "Seller Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellerUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Seller not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rename a seller",
+        "tags": [
+          "admin: shops"
+        ]
+      }
+    },
     "/api/admin/shop-groups": {
       "get": {
         "operationId": "list_groups_api_admin_shop_groups_get",
@@ -14331,8 +14703,141 @@
         ]
       }
     },
+    "/api/admin/shop-groups/{group_id}": {
+      "get": {
+        "operationId": "get_group_api_admin_shop_groups__group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopGroupRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Group not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get a shop group",
+        "tags": [
+          "admin: shops"
+        ]
+      },
+      "patch": {
+        "operationId": "update_group_api_admin_shop_groups__group_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopGroupUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopGroupRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Group not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Slug already taken"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update a shop group",
+        "tags": [
+          "admin: shops"
+        ]
+      }
+    },
     "/api/admin/shops": {
       "get": {
+        "description": "Each row counts what the shop holds — channels, sellers, listings on sale, the\nproducts they are placed on — and says how its collection is going.",
         "operationId": "list_shops_api_admin_shops_get",
         "parameters": [
           {
@@ -14390,6 +14895,69 @@
             }
           },
           {
+            "description": "Name, slug or website contains",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Name, slug or website contains",
+              "title": "Search"
+            }
+          },
+          {
+            "description": "Only these shops — the ones a filter in a URL names. Repeat for several.",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these shops — the ones a filter in a URL names. Repeat for several.",
+              "title": "Ids"
+            }
+          },
+          {
+            "description": "`failing`: an enabled channel's newest full pass broke; `never`: no enabled channel has a sound full pass; `ok`: the rest",
+            "in": "query",
+            "name": "health",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ok",
+                    "failing",
+                    "never"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`failing`: an enabled channel's newest full pass broke; `never`: no enabled channel has a sound full pass; `ok`: the rest",
+              "title": "Health"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -14410,6 +14978,28 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, name, slug, created_at, sources_count, offers_count, products_count, last_full_ok_at.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, name, slug, created_at, sources_count, offers_count, products_count, last_full_ok_at.",
+              "examples": [
+                "name"
+              ],
+              "title": "Sort"
             }
           }
         ],
@@ -15054,6 +15644,120 @@
       }
     },
     "/api/admin/sources/{source_id}": {
+      "delete": {
+        "description": "For one added by mistake. A channel that has run is retired with `is_enabled=false`:\nits observations and runs are the listings' history, and a delete would take them.",
+        "operationId": "remove_source_api_admin_sources__source_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Source not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "It has history; disable it instead"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove a source that has collected nothing",
+        "tags": [
+          "admin: shops"
+        ]
+      },
+      "get": {
+        "operationId": "get_source_api_admin_sources__source_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Source not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get a source",
+        "tags": [
+          "admin: shops"
+        ]
+      },
       "patch": {
         "description": "`trust` is the channel's, not the shop's: a feed carrying barcodes is worth more\nthan a title scraped out of markup, whatever buyers think of the shop.",
         "operationId": "update_source_api_admin_sources__source_id__patch",

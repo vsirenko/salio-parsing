@@ -103,6 +103,24 @@ class ShopGroupRead(BaseModel):
     id: int
     slug: str
     name: str
+    shops_count: int = 0
+
+
+class ShopGroupUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    slug: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("slug")
+    @classmethod
+    def _check(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_slug(value)
+
+
+class GroupRef(BaseModel):
+    id: int
+    name: str
 
 
 # --- shops ---
@@ -118,6 +136,7 @@ class ShopCreate(BaseModel):
     country_code: str = Field(min_length=2, max_length=2)
     shop_group_id: int | None = None
     website: str | None = Field(default=None, max_length=1000)
+    logo_url: str | None = Field(default=None, max_length=1000)
     is_marketplace: bool = False
     rating: Decimal | None = Field(default=None, ge=0, le=5)
 
@@ -140,6 +159,7 @@ class ShopUpdate(BaseModel):
     country_code: str | None = Field(default=None, min_length=2, max_length=2)
     shop_group_id: int | None = None
     website: str | None = Field(default=None, max_length=1000)
+    logo_url: str | None = Field(default=None, max_length=1000)
     rating: Decimal | None = Field(default=None, ge=0, le=5)
 
     @field_validator("slug")
@@ -153,18 +173,56 @@ class ShopUpdate(BaseModel):
         return None if value is None else value.upper()
 
 
+# What a list of shops may be sorted by, `?sort=`.
+SHOP_SORT = (
+    "id",
+    "name",
+    "slug",
+    "created_at",
+    "sources_count",
+    "offers_count",
+    "products_count",
+    "last_full_ok_at",
+)
+
+
+class CollectionHealth(BaseModel):
+    """Whether a shop's collection is working, from its enabled channels' full passes.
+
+    `failing` when an enabled channel's newest full pass did not end ok — failed, rejected by
+    its contract, or interrupted; `never` when no enabled channel has finished one ok yet;
+    `ok` otherwise. A channel that is disabled says nothing about the shop's health.
+    """
+
+    status: str = Field(description="`ok`, `failing` or `never`")
+    last_full_ok_at: datetime | None = Field(
+        description="When the newest full pass that ended ok, on any channel, finished"
+    )
+    enabled_sources: int
+    failing_sources: int = Field(
+        description="Enabled channels whose newest full pass did not end ok"
+    )
+
+
 class ShopRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """A shop, with where it is shown, what it holds and whether its collection works."""
 
     id: int
     slug: str
     name: str
     country_code: str
-    shop_group_id: int | None
+    group: GroupRef | None
     website: str | None
+    logo_url: str | None
     is_marketplace: bool
     rating: Decimal | None
     created_at: datetime
+    markets: list[str] = Field(description="The markets it is shown in")
+    sources_count: int
+    sellers_count: int
+    offers_count: int = Field(description="Its listings on sale now, of any condition")
+    products_count: int = Field(description="Families it sells new today")
+    health: CollectionHealth
 
 
 # --- where its offers are shown ---
@@ -240,7 +298,21 @@ class SourceUpdate(BaseModel):
         return _validate_cron(value)
 
 
+class RunBrief(BaseModel):
+    """A channel's newest run, as a list row shows it."""
+
+    id: int
+    kind: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    items_seen: int
+    error: str | None
+
+
 class SourceRead(BaseModel):
+    """A channel, with its newest run, its next slots and what it has on sale now."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -259,6 +331,15 @@ class SourceRead(BaseModel):
     min_items: int | None
     max_drop_pct: int
     min_price_coverage: Decimal
+    last_run: RunBrief | None = None
+    last_full_ok_at: datetime | None = Field(
+        default=None, description="When its newest full pass that ended ok finished"
+    )
+    next_full_at: datetime | None = Field(
+        default=None, description="Its next scheduled full pass; none while disabled"
+    )
+    next_quick_at: datetime | None = None
+    offers_count: int = Field(default=0, description="Its listings on sale now")
 
 
 # --- who is selling ---
@@ -271,6 +352,12 @@ class SellerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
 
+class SellerUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+
+
 class SellerRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -278,3 +365,4 @@ class SellerRead(BaseModel):
     shop_id: int
     external_id: str
     name: str
+    offers_count: int = Field(default=0, description="Its listings on sale now")

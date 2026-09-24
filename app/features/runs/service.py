@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import audit
 from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.schedule import next_slot
 from app.db.models import (
     Category,
     Offer,
@@ -370,8 +371,8 @@ class RunService:
                 has_quick=bool(source.delivers_quick),
                 cron_full=source.cron_full,
                 cron_quick=source.cron_quick,
-                next_full_at=_next(source.cron_full, now) if source.is_enabled else None,
-                next_quick_at=_next(source.cron_quick, now) if source.is_enabled else None,
+                next_full_at=next_slot(source.cron_full, now) if source.is_enabled else None,
+                next_quick_at=next_slot(source.cron_quick, now) if source.is_enabled else None,
                 last_run=RunRead.model_validate(runs[run_id]) if run_id in runs else None,
             )
             for source, shop, category, run_id in rows
@@ -463,13 +464,3 @@ class RunService:
         if source is None:
             raise NotFoundError(f"Source {source_id} not found")
         return source
-
-
-def _next(expression: str | None, now: datetime) -> datetime | None:
-    """The next slot of a cron, or nothing for no schedule or one that does not parse."""
-    if not expression:
-        return None
-    try:
-        return croniter(expression, now).get_next(datetime)
-    except (CroniterBadCronError, ValueError):
-        return None

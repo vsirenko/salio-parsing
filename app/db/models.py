@@ -813,6 +813,9 @@ class Shop(Base):
     slug: Mapped[str] = mapped_column(String(64), unique=True)
     name: Mapped[str] = mapped_column(String(200))
     website: Mapped[str | None] = mapped_column(String(1000))
+    # Where the shop's logo is, for a page to show it by. A URL, not a file: the shop hosts
+    # its own, and a copy here would go stale when it rebrands.
+    logo_url: Mapped[str | None] = mapped_column(String(1000))
     # A marketplace holds many sellers behind one shop. An ordinary shop holds exactly one,
     # which is itself — created with it, because otherwise every shop needs a second call
     # that somebody will forget.

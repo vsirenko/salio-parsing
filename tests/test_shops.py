@@ -394,7 +394,7 @@ def test_one_brand_over_two_countries(client):
         country_code="DE",
         shop_group_id=group["id"],
     )
-    assert lv["shop_group_id"] == de["shop_group_id"] == group["id"]
+    assert lv["group"] == de["group"] == {"id": group["id"], "name": group["name"]}
     assert lv["country_code"] != de["country_code"]
 
 

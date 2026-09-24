@@ -6,14 +6,16 @@ Who the buyer deals with, how we read their offers, and who is actually selling.
 
 | | |
 |---|---|
-| `GET · POST /api/admin/shop-groups` | one retail brand across countries, optional |
-| `GET · POST /api/admin/shops` | list and create — filter by `country_code`, `market_code`, `is_marketplace` |
+| `GET · POST /api/admin/shop-groups` | one retail brand across countries, optional; rows count their shops |
+| `GET · PATCH /api/admin/shop-groups/{group_id}` | read or rename one |
+| `GET · POST /api/admin/shops` | list with counts and health — filter by `country_code`, `market_code`, `is_marketplace`, `search`, `ids`, `health`; `?sort=` |
 | `GET · PATCH /api/admin/shops/{shop_id}` | read or edit one |
 | `GET /api/admin/shops/{shop_id}/markets` | where its offers are shown |
 | `PUT · DELETE /api/admin/shops/{shop_id}/markets/{market_code}` | attach, enable, detach |
 | `GET · POST /api/admin/shops/{shop_id}/sources` | how we read it |
-| `PATCH /api/admin/sources/{source_id}` | edit a source |
+| `GET · PATCH · DELETE /api/admin/sources/{source_id}` | one channel, its last run and next slot; delete only one that collected nothing |
 | `GET · POST /api/admin/shops/{shop_id}/sellers` | who is selling inside it |
+| `PATCH /api/admin/sellers/{seller_id}` | rename a seller |
 
 No delete on a shop: offers and price history will point at it, and retiring one means
 switching its markets off — which keeps the history instead of losing it.
@@ -75,8 +77,36 @@ being touched in Latvia, and it is attached disabled by default.
 keyed by seller, so an offer cannot attach to anything without one — leaving it to a second
 call means somebody forgets and the first crawl has nowhere to put its prices.
 
+**A shop row says what it holds.** `sources_count`, `sellers_count`; `offers_count` is its
+listings **on sale** — the same test as everywhere (`offer_is_listed`: no ok full pass of the
+listing's channel began after it was last seen); `products_count` is the products its new,
+on-sale, placed listings sit on, which is what a buyer would find it on. `markets` are the
+enabled ones, `group` is `{id, name}` so a table prints it without a second request.
+
+**Health is about the catalogue, so only full passes count.** Per enabled channel the
+newest full pass that ended `ok` or broke (`failed`, `rejected`, `interrupted`) decides —
+a run still going, or one that was skipped, says nothing yet. The shop is `failing` when any
+enabled channel's newest such pass broke, `never` when none has a sound one (a new shop, or
+every channel disabled), and `ok` otherwise. `last_full_ok_at` is the newest good full pass
+across its channels and is kept while a later one fails: "broken since" is what a person
+reading the row needs. A quick pass breaking does not make a shop failing — prices go
+stale, the catalogue does not.
+
+**A channel shows its last run and its next slot.** `last_run` is the newest run of any
+kind; `next_full_at` and `next_quick_at` are computed from the cron with the scheduler's own
+function (`app/core/schedule.py`), and are null on a disabled channel, because nothing will
+run it. `offers_count` is the on-sale listings this channel has observed; with two channels
+into one shop the two counts overlap, and the shop's count is not their sum.
+
 ## Decisions worth knowing before changing it
 
+- **A channel is deleted only while it has collected nothing** — no observations, no runs;
+  otherwise 409 `source_has_history`. One that has run is retired with
+  `is_enabled=false`: its observations are the listings' history and their readings, and a
+  delete would take them with it. The delete is for a channel added by mistake.
+- **A seller's name is editable, its `external_id` is not.** That is how a marketplace
+  names the trader in its feed, and changing it would file the next crawl's listings under
+  a new seller.
 - **`is_marketplace` is not editable.** Turning it off would strand the traders a
   marketplace has; turning it on would leave an ordinary shop's single seller looking like
   a trader. Either way the price history stops meaning what it says.
