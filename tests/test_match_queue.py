@@ -67,9 +67,8 @@ def test_a_queue_row_names_its_listing_and_compares_its_candidates(client):
     source, category, brand, silent = two_capacities_and_a_silent_listing(client, token)
     [row] = queue(client, token)["items"]
     assert row["offer_id"] == silent
-    # Which of the two it is, is the matcher's business (TODO.md: a numeric axis is not
-    # yet seen as one the candidates are split on); the row is what is under test.
-    assert row["reason"] in ("ambiguous", "axis_unpublished")
+    # Split on a capacity the listing does not state: nobody can choose, so not `ambiguous`.
+    assert row["reason"] == "axis_unpublished"
     assert row["offer"]["title"] == "Apple iPhone 15"
     assert row["offer"]["shop"]["id"] == source["shop_id"]
     assert (row["offer"]["brand_raw"], row["offer"]["price"]) == ("Apple", "700.00")
@@ -337,3 +336,32 @@ def test_the_judge_summary_counts_what_was_bought_and_what_was_not(judged):
         assert summary[window]["cached"] == 1
         assert summary[window]["by_kind"] == {"model_match": 1}
     assert summary["all_time"]["since"] is None
+
+
+def test_repeated_passes_reach_every_queued_listing(client):
+    """A pass takes the least recently tried first. In id order it took the same first
+    `limit` every time, and the rest of the queue was never retried."""
+    token = admin_token(client)
+    _, source, _, _ = a_shop_we_can_build_from(client, token)
+    offers = [
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {"name": f"Apple iPhone {n}", "brand": "Apple", "model": f"iPhone {n}"},
+            external_id=f"R-{n}",
+        )
+        for n in (90, 91, 92)
+    ]
+
+    def attempts():
+        rows = queue(client, token)["items"]
+        return {row["offer_id"]: row["attempts"] for row in rows}
+
+    for _ in range(3):
+        report = client.post(
+            "/api/admin/matching/run", headers=auth(token), params={"limit": 2}
+        ).json()
+        assert report["attempted"] == 2
+    # Six attempts over three listings: every one of them twice, none left behind.
+    assert attempts() == {offer: 2 for offer in offers}

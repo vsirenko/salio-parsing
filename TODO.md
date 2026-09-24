@@ -86,10 +86,19 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **Images are hotlinked.** `variant.image_url` points at a shop's CDN, so it rots
       when that shop removes the file and we serve it from someone else's server in the
       meantime. The answer is to store the image, and there is no file storage.
-- [ ] **A numeric axis does not make candidates `axis_unpublished`.** `_why_several` counts
+- [x] **A numeric axis did not make candidates `axis_unpublished`.** `_why_several` counted
       the distinct `value_id`s the candidates hold, and a number has none — so two entries at
-      128 and 256 GB and a listing that names no capacity come out `ambiguous`, and the judge
-      is asked a question nobody can answer. Count `value_num` as well; re-run the matcher.
+      128 and 256 GB and a listing that names no capacity came out `ambiguous`, and the judge
+      was asked a question nobody can answer. It counts `value_num` as well now.
+- [ ] **Duplicate entries with no barcode between them.** Of 56 `ambiguous` rows on
+      24.09.2026, 40-odd are laptops whose candidates are the same entry written twice or
+      three times — `Dell 16 Intel Core 5 120U 16 GB 512 GB 16" integrated english black`
+      three times — or the same one with and without a keyboard layout. `merge` folds only
+      what a barcode joins, so nothing folds these; they need a merge by complete identity,
+      and the rung that made them should have found the first.
+- [x] **`matching/run` never reached the end of the queue.** It took unplaced listings in id
+      order, so with 1422 of them and a limit of 1000 every pass retried the same first
+      thousand. It takes the least recently tried first now.
 - [ ] **Matching passes are synchronous.** `run`, `promote`, `merge`, `rebuild` and the judge
       passes answer inside the request; the matching README has the measured cost per item
       and a safe `limit` for each. A pass the size of the queue wants a background job with

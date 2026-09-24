@@ -195,6 +195,10 @@ Essential` configurations share one on 24.09.2026, and they are nineteen entries
 A row queued before the columns existed has neither until the matcher next retries it, which
 every pass does.
 
+**A pass takes the least recently tried first**, the never tried before anything. In id
+order every pass took the same first `limit`: with 1422 unplaced listings and a limit of
+1000, the last 422 were never retried, whatever the catalogue had learned since.
+
 **Snoozing hides a row until a time**, and the promotion sweep leaves it alone — a person
 said not now, and making an entry of it is exactly what they deferred. The matcher still
 retries it: the catalogue may grow the entry it needed. `include_snoozed=true` shows them.

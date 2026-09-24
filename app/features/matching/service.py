@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, NamedTuple
 
-from sqlalchemy import case, func, or_, select, text, update
+from sqlalchemy import String, case, cast, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -201,10 +201,14 @@ class MatchingService:
         not placed at all, rather than placed wrong.
         """
         active = select(OfferMatch.offer_id).where(OfferMatch.superseded_at.is_(None))
+        # Least recently tried first, never tried before anything. In id order a pass took
+        # the same first `limit` every time: with 1422 unplaced and a limit of 1000, the
+        # last 422 were never retried, whatever the catalogue or the matcher had learned.
         pending = await self.session.scalars(
             select(Offer.id)
+            .outerjoin(MatchQueue, MatchQueue.offer_id == Offer.id)
             .where(Offer.id.not_in(active), Offer.condition == NEW)
-            .order_by(Offer.id)
+            .order_by(MatchQueue.last_attempt_at.asc().nulls_first(), Offer.id)
             .limit(limit)
         )
 
@@ -414,8 +418,14 @@ class MatchingService:
         It is not a weaker `ambiguous`, it is a different kind of waiting: for another shop
         to carry the same barcode, or for this one to start publishing the axis.
         """
+        # A value is an enum's id or a number, and both count: counted by `value_id` alone a
+        # capacity had none, so entries at 128 and 256 GB beside a listing that names no
+        # capacity came out `ambiguous`, and the judge was asked what nobody can answer.
+        value = func.coalesce(
+            cast(VariantAttribute.value_id, String), cast(VariantAttribute.value_num, String)
+        )
         rows = await self.session.execute(
-            select(Attribute.key, func.count(func.distinct(VariantAttribute.value_id)))
+            select(Attribute.key, func.count(func.distinct(value)))
             .join(VariantAttribute, VariantAttribute.attribute_id == Attribute.id)
             .join(
                 CategoryAttribute,
