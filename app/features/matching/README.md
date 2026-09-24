@@ -22,6 +22,14 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 
 ## How it works
 
+**Only a new listing is placed.** The catalogue's entries are new products, and a
+refurbished or demo unit on one of them is that product's cheapest price: on 24.09.2026 ten
+of mdata's refurbished tablets and eight of its demo `Galaxy S23 FE` stood on entries —
+seventeen of those entries made from them — because its channel read the condition off the
+name, which did not say it. `run` and `promote_queue` take only `offers.condition = new`,
+so a listing marked otherwise is left alone rather than placed wrong. Where second-hand
+stock should go instead is still open (TODO.md); a person can still place one by hand.
+
 **A ladder of signals, strongest first.** Each rung is an index lookup rather than a scan;
 one hit is a match, several are `ambiguous`, none moves down a rung.
 

@@ -2115,3 +2115,30 @@ def test_an_entry_two_shops_share_is_left_alone(client):
 
     report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
     assert report["found"] == 0
+
+
+def test_a_second_hand_listing_is_not_placed_on_a_new_product(client, event_loop):
+    """10 refurbished tablets and 8 demo phones stood on entries for new ones on 24.09.2026,
+    each the cheapest price of its entry."""
+    from sqlalchemy import update
+
+    from app.db.models import Offer
+    from app.db.session import session_factory
+
+    token = admin_token(client)
+    _, source = setup_source(client, token)
+    catalogue(client, token)
+    offer = offer_from(client, token, source["id"], {"name": "whatever", "ean": "194253000001"})
+
+    async def refurbished() -> None:
+        async with session_factory() as session:
+            await session.execute(
+                update(Offer).where(Offer.id == offer).values(condition="refurbished")
+            )
+            await session.commit()
+
+    event_loop.run_until_complete(refurbished())
+    report = client.post("/api/admin/matching/run", headers=auth(token)).json()
+    assert report["attempted"] == 0
+    promoted = client.post("/api/admin/matching/promote", headers=auth(token)).json()
+    assert promoted["promoted"] == 0

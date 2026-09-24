@@ -83,6 +83,10 @@ from app.schemas.pagination import Pagination
 # that landed, and the gap between them is what `method` exists to preserve.
 log = logging.getLogger(__name__)
 
+# The one condition the catalogue's entries are about; `offers.condition` is checked against
+# `new`, `refurbished` and `used` by the database.
+NEW = "new"
+
 CONFIDENCE = {
     Method.GTIN: Decimal("1.000"),
     Method.BRAND_MPN: Decimal("0.950"),
@@ -163,10 +167,19 @@ class MatchingService:
 
         Offers with a live match are skipped; a queued one is retried, because the
         catalogue it failed against changes underneath it.
+
+        Only a new listing is placed. The catalogue's entries are new products, and a
+        refurbished or demo unit on one is that product's cheapest price — which is how 10
+        of mdata's refurbished tablets and 8 of its demo phones read on 24.09.2026. Where a
+        second-hand listing belongs is still to be decided (TODO.md); until it is, it is
+        not placed at all, rather than placed wrong.
         """
         active = select(OfferMatch.offer_id).where(OfferMatch.superseded_at.is_(None))
         pending = await self.session.scalars(
-            select(Offer.id).where(Offer.id.not_in(active)).order_by(Offer.id).limit(limit)
+            select(Offer.id)
+            .where(Offer.id.not_in(active), Offer.condition == NEW)
+            .order_by(Offer.id)
+            .limit(limit)
         )
 
         matched = queued = 0
@@ -973,7 +986,8 @@ class MatchingService:
         rows = (
             await self.session.scalars(
                 select(MatchQueue)
-                .where(MatchQueue.reason == Reason.SIGNALS_UNMATCHED.value)
+                .join(Offer, Offer.id == MatchQueue.offer_id)
+                .where(MatchQueue.reason == Reason.SIGNALS_UNMATCHED.value, Offer.condition == NEW)
                 .order_by(MatchQueue.offer_id)
                 .limit(limit)
             )
