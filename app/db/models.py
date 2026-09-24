@@ -237,6 +237,14 @@ class Category(Base):
     # has to be a boolean on an index rather than a recursion.
     is_visible_effective: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     identity_ready: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Whether the model rung may place a listing on an entry that agrees with it only on the
+    # axes both happen to carry. A phone has two axes and a model names few of them; a
+    # laptop has seven and a model names dozens of configurations, and on bigbox's first
+    # laptop run 234 of 392 model matches were made on an incomplete identity — a
+    # ThinkBook whose chip was not read placed on the one with `7 240H`.
+    model_match_needs_full_identity: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         TimestampTZ, server_default=func.now(), onupdate=func.now()

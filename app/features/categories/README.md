@@ -26,6 +26,15 @@ nothing is deleted. `identity_ready` is technical: whether the parser can pull t
 category's variant axes out of an offer. A category can be created and shown long before it
 is ready — its variants simply take the slow path through the matcher.
 
+**`model_match_needs_full_identity` is a matching setting, and it is the category's to
+make** because what a model string names depends on the kind of thing. A phone's model
+covers a handful of capacities and colours, and the model rung may place a listing on the one
+entry that agrees on the axes both happen to carry. A laptop's covers dozens of
+configurations: on bigbox's first laptop run, 234 of 392 model matches were made that way and
+some were plainly wrong. With the flag on, the rung places by model only when every identity
+axis is known on both sides and equal; what is left goes on as unmatched, and a listing with
+a barcode becomes an entry of its own. Off by default, on for laptops.
+
 **Visibility cascades.** Hiding a parent hides everything under it without editing a single
 child, and unhiding restores the branch with its history rather than a hole in it.
 

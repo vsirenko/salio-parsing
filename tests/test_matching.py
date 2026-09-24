@@ -1482,6 +1482,51 @@ def test_a_silent_axis_is_not_agreement(client):
     assert gtins_of(client, token, variant_id) == {"04006381333931"}, "the barcode was not kept"
 
 
+def test_a_category_can_refuse_to_place_by_model_on_a_partial_identity(client):
+    """A laptop's model names dozens of configurations: on bigbox's first laptop run 234 of
+    392 model matches were made on an incomplete identity. Such a category places by model
+    only on every axis, and the listing goes on as unmatched instead."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+    client.patch(
+        f"/api/admin/categories/{category['id']}",
+        headers=auth(token),
+        json={"model_match_needs_full_identity": True},
+    )
+
+    silent = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    promote(client, token, silent)
+    also_silent = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "5902983617747",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-2",
+    )
+    outcome = run_on(client, token, also_silent)
+    assert (outcome["matched"], outcome["reason"]) == (False, "signals_unmatched")
+
+
 def test_a_category_with_no_declared_axes_keeps_the_older_bar(client):
     """Requiring nothing would make every match complete, which is the opposite of the
     intent. Where a category declares no identity axes, what the listing carried stands."""

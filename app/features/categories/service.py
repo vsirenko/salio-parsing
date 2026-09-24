@@ -120,6 +120,8 @@ class CategoryService:
             category.is_visible = payload.is_visible
         if payload.identity_ready is not None:
             category.identity_ready = payload.identity_ready
+        if payload.model_match_needs_full_identity is not None:
+            category.model_match_needs_full_identity = payload.model_match_needs_full_identity
 
         try:
             await self.session.flush()

@@ -26,6 +26,8 @@ class CategoryBase(BaseModel):
     parent_id: int | None = None
     is_visible: bool = True
     identity_ready: bool = False
+    # The model rung places a listing only on an entry that agrees on every identity axis.
+    model_match_needs_full_identity: bool = False
 
 
 class CategoryCreate(CategoryBase):
@@ -98,6 +100,7 @@ class CategoryUpdate(BaseModel):
     slug: str | None = Field(default=None, min_length=1, max_length=64)
     parent_id: int | None = None
     is_visible: bool | None = None
+    model_match_needs_full_identity: bool | None = None
     identity_ready: bool | None = None
 
     @field_validator("slug")

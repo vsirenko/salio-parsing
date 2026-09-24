@@ -19,6 +19,7 @@ from app.db.models import (
     AvailabilityEvent,
     Brand,
     BrandAlias,
+    Category,
     CategoryAttribute,
     JudgeVerdict,
     MatchQueue,
@@ -142,6 +143,8 @@ class MatchingService:
         # offline, deterministic and as fast as its indexes — asking is a separate pass
         # an admin starts.
         self.judge = judge
+        # Which categories place by model only on a complete identity, by category id.
+        self._strict: dict[int, bool] = {}
 
     # --- running it ---
 
@@ -303,6 +306,13 @@ class MatchingService:
                 # accepted.
                 check = await self._identity_agrees(found, identity)
                 agreed, unverifiable = check.agreed, check.unverifiable
+                if await self._needs_full_identity(offer):
+                    # A category whose model names dozens of configurations: agreeing on the
+                    # axes both sides happen to carry is not enough, and a candidate nothing
+                    # could check is not one at all. What is left goes on as unmatched, and a
+                    # listing with a barcode becomes an entry of its own.
+                    agreed = [variant_id for variant_id in agreed if variant_id in check.complete]
+                    unverifiable = []
                 if len(agreed) > 1:
                     # An entry that records no colour agrees with every colour, because it
                     # has nothing to disagree with — and one of those sitting beside a real
@@ -1535,6 +1545,21 @@ class MatchingService:
                     ),
                     only_if_absent=only_if_absent,
                 )
+
+    async def _needs_full_identity(self, offer: Offer) -> bool:
+        """Whether the listing's category places by model only on a complete identity."""
+        source = await self._source_of(offer)
+        if source is None or source.category_id is None:
+            return False
+        if source.category_id not in self._strict:
+            self._strict[source.category_id] = bool(
+                await self.session.scalar(
+                    select(Category.model_match_needs_full_identity).where(
+                        Category.id == source.category_id
+                    )
+                )
+            )
+        return self._strict[source.category_id]
 
     async def _source_of(self, offer: Offer) -> Source | None:
         return await self.session.scalar(

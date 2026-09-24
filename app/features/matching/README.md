@@ -60,6 +60,13 @@ category whose axes nobody has written yet.
 That is the whole of the difference: below, nothing is believed until something confirms it;
 here, everything is believed until something contradicts it.
 
+**Where the category says so, agreeing on the axes both sides carry is not enough.** A
+category with `model_match_needs_full_identity` places by model only on a complete identity,
+and a candidate nothing could check is no candidate at all; the listing goes on as unmatched
+and, carrying a barcode, is promoted to an entry of its own. Laptops need it — a model is
+dozens of configurations there — and phones and tablets do not, which is why it is the
+category's setting and not the rung's (see `categories`).
+
 **The brand is a hard filter, and has to be resolved first.** That is the blocking step —
 it turns matching from a scan into a lookup in a small drawer. It is also where it goes
 quietly wrong: a brand resolved to the wrong row means searching the wrong drawer and
