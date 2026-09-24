@@ -1,0 +1,30 @@
+"""The pipeline, counted, behind the admin panel.
+
+GET /api/admin/pipeline    every step from a channel to the catalogue, with what reached it
+"""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Query
+
+from app.api.deps import PipelineServiceDep
+from app.features.pipeline.schemas import Pipeline
+from app.schemas.common import ErrorResponse
+
+router = APIRouter(prefix="/pipeline", tags=["admin: pipeline"])
+
+
+@router.get(
+    "",
+    response_model=Pipeline,
+    summary="Every step from a channel to the catalogue, counted",
+    responses={404: {"model": ErrorResponse, "description": "No such category or source"}},
+)
+async def pipeline(
+    service: PipelineServiceDep,
+    category: Annotated[str | None, Query(description="A category slug, `tablets`")] = None,
+    source: Annotated[str | None, Query(description="A source slug, `bigbox-tablets`")] = None,
+) -> Pipeline:
+    """The nodes from the channels to the catalogue with how many listings reached each and
+    what they are made of, the edges between them, and every channel's own pass."""
+    return await service.summary(category=category, source=source)

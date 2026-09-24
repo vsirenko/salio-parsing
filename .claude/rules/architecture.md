@@ -32,6 +32,7 @@
       countries/ currencies/ markets/        reference data
       audit/                router.py  service.py  schemas.py  middleware.py
       rate_limit/           service.py
+      pipeline/             admin_router.py  service.py  schemas.py  (read-only counts)
       health/               router.py
   ```
 

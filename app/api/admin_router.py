@@ -29,6 +29,7 @@ from app.features.matching.admin_router import router as matching_router
 from app.features.offers.admin_router import raw_router as raw_offers_router
 from app.features.offers.admin_router import router as offers_router
 from app.features.offers.admin_router import sources_router as source_offers_router
+from app.features.pipeline.admin_router import router as pipeline_router
 from app.features.prices.admin_router import availability_router
 from app.features.prices.admin_router import router as prices_router
 from app.features.runs.admin_router import router as runs_router
@@ -66,6 +67,7 @@ admin_router.include_router(judge_router)
 admin_router.include_router(runs_router)
 admin_router.include_router(source_runs_router)
 admin_router.include_router(scheduler_router)
+admin_router.include_router(pipeline_router)
 admin_router.include_router(category_attributes_router)
 
 # Sign-in cannot require a token. Keep this router to the routes that mint one.

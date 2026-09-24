@@ -22,6 +22,7 @@ from app.features.judge.service import JudgeService
 from app.features.markets.service import MarketService
 from app.features.matching.service import MatchingService
 from app.features.offers.service import OfferService
+from app.features.pipeline.service import PipelineService
 from app.features.prices.service import PriceService
 from app.features.rate_limit.service import LoginRateLimiter
 from app.features.runs.service import RunService
@@ -107,6 +108,10 @@ def get_run_service(session: SessionDep) -> RunService:
     return RunService(session)
 
 
+def get_pipeline_service(session: SessionDep) -> PipelineService:
+    return PipelineService(session)
+
+
 def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
@@ -125,6 +130,7 @@ OfferServiceDep = Annotated[OfferService, Depends(get_offer_service)]
 PriceServiceDep = Annotated[PriceService, Depends(get_price_service)]
 MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+PipelineServiceDep = Annotated[PipelineService, Depends(get_pipeline_service)]
 ClientIP = Annotated[str | None, Depends(get_client_ip)]
 
 
