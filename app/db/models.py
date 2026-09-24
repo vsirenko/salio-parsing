@@ -1435,11 +1435,16 @@ class Run(Base):
     # hands over, then what settling it placed. `items_*` above are the verdict at the end;
     # this is how a person watches one run fill in, step by step.
     progress: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    # A sample of the products that did not make it, each with its stage and reason: the
+    # count said "12 failed" and nobody could say which twelve. The worker's log had them
+    # and the log does not outlive the container.
+    failures: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
 
     __table_args__ = (
         CheckConstraint("kind in ('full', 'quick', 'reparse')", name="kind_known"),
         CheckConstraint(
-            "status in ('queued', 'running', 'ok', 'rejected', 'failed', 'interrupted')",
+            "status in ('queued', 'running', 'ok', 'rejected', 'failed', 'interrupted',"
+            " 'cancelled')",
             name="status_known",
         ),
         # A live run — waiting or working — is exactly a row without finished_at. Without

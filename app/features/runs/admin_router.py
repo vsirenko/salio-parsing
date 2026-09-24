@@ -3,18 +3,30 @@
 GET  /api/admin/runs                    what has been collected, newest first
 GET  /api/admin/runs/due                what the scheduler would start right now
 GET  /api/admin/runs/{run_id}           one run, with its coverage and verdict
+GET  /api/admin/runs/{run_id}/failures  the products it could not bring in, and why
+POST /api/admin/runs/{run_id}/cancel    stop one that is queued or working
 POST /api/admin/sources/{id}/runs       start one by hand
 POST /api/admin/runs/{run_id}/finish    a worker reporting back
 GET  /api/admin/scheduler               alive or not, what runs, what is due, every next slot
 """
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import RunServiceDep
 from app.api.pagination import pagination_params
-from app.features.runs.schemas import Due, Kind, RunRead, RunResult, SchedulerStatus, Status
+from app.features.runs.schemas import (
+    RUN_SORT,
+    Due,
+    Kind,
+    RunFailures,
+    RunRead,
+    RunResult,
+    SchedulerStatus,
+    Status,
+)
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
 
@@ -22,17 +34,36 @@ router = APIRouter(prefix="/runs", tags=["admin: runs"])
 sources_router = APIRouter(prefix="/sources", tags=["admin: runs"])
 scheduler_router = APIRouter(prefix="/scheduler", tags=["admin: runs"])
 
-PageParams = Annotated[Pagination, Depends(pagination_params())]
+RunPageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=RUN_SORT, default_sort="-started_at"))
+]
 
 
 @router.get("", response_model=Page[RunRead], summary="What has been collected")
 async def runs(
     service: RunServiceDep,
-    pagination: PageParams,
-    source_id: Annotated[int | None, Query(description="One channel")] = None,
-    run_status: Annotated[Status | None, Query(alias="status")] = None,
+    pagination: RunPageParams,
+    source_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    shop_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    kind: Annotated[list[Kind] | None, Query(description="Repeat for several")] = None,
+    run_status: Annotated[
+        list[Status] | None, Query(alias="status", description="Repeat for several")
+    ] = None,
+    started_from: Annotated[datetime | None, Query()] = None,
+    started_to: Annotated[datetime | None, Query(description="Before this moment")] = None,
 ) -> Page[RunRead]:
-    items, total = await service.runs(pagination, source_id=source_id, status=run_status)
+    """Newest first by default; `sort=-duration` or `sort=-items_seen` for the others. A
+    channel's history to compare is `source_id=…&kind=full&limit=20`: each row carries its
+    coverage, its counts and its verdict."""
+    items, total = await service.runs(
+        pagination,
+        source_ids=source_id,
+        shop_ids=shop_id,
+        kinds=[value.value for value in kind or []],
+        statuses=[value.value for value in run_status or []],
+        started_from=started_from,
+        started_to=started_to,
+    )
     return Page[RunRead].of(items, total, pagination)
 
 
@@ -44,6 +75,40 @@ async def due(service: RunServiceDep) -> list[Due]:
     can be read — and asserted — without starting a process.
     """
     return await service.due()
+
+
+@router.get(
+    "/{run_id}/failures",
+    response_model=RunFailures,
+    summary="The products a run could not bring in, and why",
+    responses={404: {"model": ErrorResponse, "description": "Run not found"}},
+)
+async def failures(
+    run_id: int,
+    service: RunServiceDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> RunFailures:
+    """A sample the worker kept — up to two hundred — each with its stage (`fetch`,
+    `parse`, `ingest`), the shop's id for the product, its link and the reason, beside the
+    full count. A `parse` failure's bytes are in the snapshot store's `failed/` area. A run
+    killed rather than finished, and runs from before the sample was kept, have none."""
+    return await service.failures(run_id, limit=limit)
+
+
+@router.post(
+    "/{run_id}/cancel",
+    response_model=RunRead,
+    summary="Stop a run that is queued or working",
+    responses={
+        404: {"model": ErrorResponse, "description": "Run not found"},
+        409: {"model": ErrorResponse, "description": "Already finished"},
+    },
+)
+async def cancel(run_id: int, service: RunServiceDep) -> RunRead:
+    """Closed at once as `cancelled`, which frees the channel's slot; the scheduler kills
+    the worker behind it on its next tick, and anything that worker hands over meanwhile is
+    refused. Like every end but `ok`, it concludes nothing about what it did not see."""
+    return await service.cancel(run_id)
 
 
 @router.get(

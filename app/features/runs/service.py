@@ -26,17 +26,21 @@ from app.db.models import (
     ShopMarket,
     Source,
 )
-from app.db.query import paginated
+from app.db.query import ordered, paginated
 from app.features.runs.schemas import (
     ChannelSchedule,
     Check,
     Due,
+    ItemFailure,
     Job,
     Kind,
+    Named,
+    RunFailures,
     RunProgress,
     RunRead,
     RunResult,
     SchedulerStatus,
+    SourceRef,
     Status,
 )
 from app.schemas.pagination import Pagination
@@ -81,7 +85,7 @@ class RunService:
 
         await self.session.refresh(run)
         audit.record_changes(started_run=run.id, kind=kind.value)
-        return RunRead.model_validate(run)
+        return await self._one(run)
 
     async def job(self, run_id: int) -> Job:
         """What a collector is being asked to do.
@@ -136,6 +140,7 @@ class RunService:
         run.items_ingested = result.items_ingested
         run.items_failed = result.items_failed
         run.coverage = dict(result.coverage)
+        run.failures = [failure.model_dump(mode="json") for failure in result.failures]
         run.error = result.error
         run.finished_at = datetime.now(UTC)
 
@@ -157,7 +162,7 @@ class RunService:
         audit.record_changes(
             finished_run=run.id, status=run.status, verdict=run.contract.get("verdict")
         )
-        return RunRead.model_validate(run)
+        return await self._one(run)
 
     async def _contract(self, source: Source, run: Run) -> list[Check]:
         """What this channel's own numbers have to look like for its absences to be believed.
@@ -359,7 +364,9 @@ class RunService:
         last_ids = [run_id for *_, run_id in rows if run_id is not None]
         runs = {
             run.id: run
-            for run in (await self.session.scalars(select(Run).where(Run.id.in_(last_ids)))).all()
+            for run in await self._named(
+                (await self.session.scalars(select(Run).where(Run.id.in_(last_ids)))).all()
+            )
         }
         channels = [
             ChannelSchedule(
@@ -373,7 +380,7 @@ class RunService:
                 cron_quick=source.cron_quick,
                 next_full_at=next_slot(source.cron_full, now) if source.is_enabled else None,
                 next_quick_at=next_slot(source.cron_quick, now) if source.is_enabled else None,
-                last_run=RunRead.model_validate(runs[run_id]) if run_id in runs else None,
+                last_run=runs.get(run_id),
             )
             for source, shop, category, run_id in rows
         ]
@@ -388,8 +395,8 @@ class RunService:
                 for r in live
                 if r.status == Status.RUNNING.value
             },
-            queued=[RunRead.model_validate(r) for r in live if r.status == Status.QUEUED.value],
-            running=[RunRead.model_validate(r) for r in live if r.status == Status.RUNNING.value],
+            queued=await self._named([r for r in live if r.status == Status.QUEUED.value]),
+            running=await self._named([r for r in live if r.status == Status.RUNNING.value]),
             due=await self.due(now=now),
             channels=channels,
         )
@@ -437,21 +444,124 @@ class RunService:
         self,
         pagination: Pagination,
         *,
-        source_id: int | None = None,
-        status: Status | None = None,
+        source_ids: list[int] | None = None,
+        shop_ids: list[int] | None = None,
+        kinds: list[str] | None = None,
+        statuses: list[str] | None = None,
+        started_from: datetime | None = None,
+        started_to: datetime | None = None,
     ) -> tuple[list[RunRead], int]:
         stmt = select(Run)
-        if source_id is not None:
-            stmt = stmt.where(Run.source_id == source_id)
-        if status is not None:
-            stmt = stmt.where(Run.status == status.value)
-        rows, total = await paginated(
-            self.session, stmt.order_by(Run.started_at.desc(), Run.id.desc()), pagination
+        if source_ids:
+            stmt = stmt.where(Run.source_id.in_(source_ids))
+        if shop_ids:
+            stmt = stmt.where(
+                Run.source_id.in_(select(Source.id).where(Source.shop_id.in_(shop_ids)))
+            )
+        if kinds:
+            stmt = stmt.where(Run.kind.in_(kinds))
+        if statuses:
+            stmt = stmt.where(Run.status.in_(statuses))
+        if started_from is not None:
+            stmt = stmt.where(Run.started_at >= started_from)
+        if started_to is not None:
+            stmt = stmt.where(Run.started_at < started_to)
+        stmt = ordered(
+            stmt,
+            pagination,
+            {
+                "id": Run.id,
+                "started_at": Run.started_at,
+                # A live run has no length yet; it sorts as the longest, which is where one
+                # that is stuck belongs.
+                "duration": func.coalesce(Run.finished_at, func.now()) - Run.started_at,
+                "items_seen": Run.items_seen,
+            },
+            Run.id,
         )
-        return [RunRead.model_validate(row) for row in rows], total
+        rows, total = await paginated(self.session, stmt, pagination)
+        return await self._named(list(rows)), total
 
     async def get(self, run_id: int) -> RunRead:
-        return RunRead.model_validate(await self._run(run_id))
+        return await self._one(await self._run(run_id))
+
+    async def failures(self, run_id: int, *, limit: int) -> RunFailures:
+        run = await self._run(run_id)
+        sample = [ItemFailure.model_validate(item) for item in run.failures or []]
+        return RunFailures(
+            run_id=run.id,
+            items_failed=run.items_failed,
+            sampled=len(sample),
+            items=sample[:limit],
+        )
+
+    async def cancel(self, run_id: int) -> RunRead:
+        """Stop a run that is queued or working, from the panel.
+
+        Closed here and now, which frees the channel's live slot at once; the scheduler
+        sees the row closed on its next tick and kills the worker behind it. A worker still
+        talking in between is refused — its hand-overs and its own finish — so nothing it
+        reads after the cancel lands under this run. Like every end but `ok`, it concludes
+        nothing about what it did not see.
+        """
+        run = await self._run(run_id)
+        audit.set_target("source", run.source_id)
+        if run.finished_at is not None:
+            raise ConflictError(
+                f"Run {run_id} already finished as '{run.status}'", code="run_finished"
+            )
+        was = run.status
+        run.status = Status.CANCELLED.value
+        run.finished_at = datetime.now(UTC)
+        run.contract = {"verdict": "not_evaluated", "checks": []}
+        run.error = f"cancelled while {was}"
+        await self.session.flush()
+        audit.record_changes(cancelled_run=run.id, was=was)
+        return await self._one(run)
+
+    async def cancelled_among(self, run_ids: list[int]) -> set[int]:
+        """Which of these runs a person cancelled — what the scheduler asks of the workers
+        it holds. Cancelled only, not closed: a worker that just reported its own finish is
+        closed too, and killing it before it exits would skip settling what it collected."""
+        if not run_ids:
+            return set()
+        return set(
+            await self.session.scalars(
+                select(Run.id).where(Run.id.in_(run_ids), Run.status == Status.CANCELLED.value)
+            )
+        )
+
+    async def _one(self, run: Run) -> RunRead:
+        [read] = await self._named([run])
+        return read
+
+    async def _named(self, runs: list[Run]) -> list[RunRead]:
+        """Runs with their channel, shop and category named, in one query for all of them."""
+        source_ids = {run.source_id for run in runs}
+        names = {
+            source_id: (slug, shop_id, shop, category_id, category)
+            for source_id, slug, shop_id, shop, category_id, category in (
+                await self.session.execute(
+                    select(Source.id, Source.slug, Shop.id, Shop.name, Category.id, Category.name)
+                    .join(Shop, Shop.id == Source.shop_id)
+                    .outerjoin(Category, Category.id == Source.category_id)
+                    .where(Source.id.in_(source_ids))
+                )
+            ).all()
+        }
+        out = []
+        for run in runs:
+            read = RunRead.model_validate(run)
+            named = names.get(run.source_id)
+            if named is not None:
+                slug, shop_id, shop, category_id, category = named
+                read.source = SourceRef(id=run.source_id, slug=slug)
+                read.shop = Named(id=shop_id, name=shop)
+                read.category = Named(id=category_id, name=category) if category_id else None
+            if run.finished_at is not None:
+                read.duration_seconds = round((run.finished_at - run.started_at).total_seconds(), 1)
+            out.append(read)
+        return out
 
     async def _run(self, run_id: int) -> Run:
         run = await self.session.get(Run, run_id)

@@ -510,6 +510,9 @@ def test_a_collector_says_how_far_it_has_got_while_it_runs(client, event_loop):
         "read": 10,
         "failed": 0,
         "handed_over": 9,
+        # Typed now: what settling fills in later is there, and empty, while it reads.
+        "settled": None,
+        "settle_error": None,
     }
 
     client.post(

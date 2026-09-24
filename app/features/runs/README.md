@@ -6,9 +6,11 @@ One execution of one channel: starting it, judging it, and deciding what is due.
 
 | | |
 |---|---|
-| `GET /api/admin/runs` | what has been collected, newest first, filterable by `source_id` and `status` |
+| `GET /api/admin/runs` | what has been collected, named — by `source_id`, `shop_id`, `kind`, `status` (each several), `started_from`/`started_to`; `?sort=` by start, duration, items seen |
 | `GET /api/admin/runs/due` | what the scheduler would start right now |
 | `GET /api/admin/runs/{run_id}` | one run, with its coverage and verdict |
+| `GET /api/admin/runs/{run_id}/failures` | a sample of the products it could not bring in, and why |
+| `POST /api/admin/runs/{run_id}/cancel` | stop one that is queued or working |
 | `POST /api/admin/sources/{source_id}/runs` | ask for one by hand — `full`, `quick` or `reparse`; queued for the next tick |
 | `POST /api/admin/runs/{run_id}/finish` | a worker reporting back |
 | `GET /api/admin/scheduler` | alive or not, what runs, what is due, and every channel's schedule, last run and next slot |
@@ -61,6 +63,29 @@ has never run, or was off for a week, computes its next slot from a point so far
 it is permanently outside the catch-up window and never starts at all. A slot missed by more
 than six hours is let go rather than caught up: a crawl that late answers a question nobody
 is asking, and the next one is along shortly.
+
+**A run row is named** — `source {id, slug}`, `shop {id, name}`, `category` — and typed:
+`coverage` is `{field: share}`, `contract` is `{verdict, checks: [{name, passed, got,
+limit, note}]}`, `progress` the worker's counts and then what settling placed.
+`duration_seconds` is null while it is live, and a live run sorts as the longest, which is
+where a stuck one belongs.
+
+**A run can be cancelled**, queued or working, which used to take a scheduler restart. The
+row closes at once as `cancelled`, which frees the channel's live slot; the scheduler, on its
+next tick, kills the worker of a run it finds cancelled — cancelled, not merely closed: a
+worker that has just reported its own finish is closed too, and killing it before it exits
+would skip settling what it collected. Whatever the worker still sends is refused — its
+hand-overs with `run_cancelled`, its finish as already finished — so nothing it reads after
+the cancel lands under the run. Like every end but `ok`, it concludes nothing about what it
+did not see.
+
+**A run keeps a sample of what did not make it**: up to two hundred products, each with its
+stage — `fetch` (the page could not be read), `parse` (it was read and the parser raised;
+the bytes are in `failed/`), `ingest` (refused when handed over) — the shop's id, the link
+and the reason. The count said "12 failed" and nobody could say which twelve: the reasons
+were in the worker's log, which does not outlive the container. They travel on the worker's
+own `finish`, not on a route of their own, which keeps the collector's routes the few they
+are; a run killed rather than finished has none.
 
 ## Decisions worth knowing before changing it
 

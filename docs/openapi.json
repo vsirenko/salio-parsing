@@ -1894,6 +1894,58 @@
         "title": "ChannelSchedule",
         "type": "object"
       },
+      "Check": {
+        "description": "One contract test and what it found.",
+        "properties": {
+          "got": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Got"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "passed"
+        ],
+        "title": "Check",
+        "type": "object"
+      },
       "CollectionHealth": {
         "description": "Whether a shop's collection is working, from its enabled channels' full passes.\n\n`failing` when an enabled channel's newest full pass did not end ok — failed, rejected by\nits contract, or interrupted; `never` when no enabled channel has finished one ok yet;\n`ok` otherwise. A channel that is disabled says nothing about the shop's health.",
         "properties": {
@@ -2633,6 +2685,56 @@
           "stored"
         ],
         "title": "IngestResult",
+        "type": "object"
+      },
+      "ItemFailure": {
+        "additionalProperties": false,
+        "description": "One product that did not make it into the run, and where it broke.\n\n`fetch`: its page could not be read. `parse`: the page was read and the channel's parser\nraised on it — the bytes are in the snapshot store's `failed/` area, which is what makes\nit a five-minute fix. `ingest`: parsed, and refused by the service when handed over.",
+        "properties": {
+          "error": {
+            "maxLength": 500,
+            "title": "Error",
+            "type": "string"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "stage": {
+            "enum": [
+              "fetch",
+              "parse",
+              "ingest"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "stage",
+          "error"
+        ],
+        "title": "ItemFailure",
         "type": "object"
       },
       "Job": {
@@ -6189,6 +6291,63 @@
         "title": "RunBrief",
         "type": "object"
       },
+      "RunContract": {
+        "description": "The contract's verdict and every check behind it. `not_evaluated` for a run that\nbroke, or has not finished: judging the counts of a crash is judging nothing.",
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/Check"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          }
+        },
+        "title": "RunContract",
+        "type": "object"
+      },
+      "RunFailures": {
+        "description": "The sample a run kept of what did not make it, beside how many did not.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemFailure"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "items_failed": {
+            "title": "Items Failed",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "sampled": {
+            "title": "Sampled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "items_failed",
+          "sampled",
+          "items"
+        ],
+        "title": "RunFailures",
+        "type": "object"
+      },
       "RunFlow": {
         "description": "One run through the same nodes, filling in while it runs.\n\nThe first half is what the worker reported (`progress`): how many product pages it found,\nread and handed over. The second half is counted from the tables: what became of the\nlistings this run saw, and what settling it placed. Both are there as the run goes, so a\npage polling this watches the nodes fill in order.",
         "properties": {
@@ -6339,17 +6498,124 @@
         "title": "RunProgress",
         "type": "object"
       },
-      "RunRead": {
+      "RunProgressRead": {
+        "description": "What a run has done so far: the worker's counts while it reads, then what settling\nit placed. `phase` walks `reading` → `settling` → `settled` (or `unsettled`, with the\nreason); a quick pass ends at `done`.",
         "properties": {
+          "discovered": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovered"
+          },
+          "failed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed"
+          },
+          "handed_over": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handed Over"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "read": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read"
+          },
+          "settle_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settle Error"
+          },
+          "settled": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettledCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "RunProgressRead",
+        "type": "object"
+      },
+      "RunRead": {
+        "description": "One run, named: which channel, of which shop, collecting what.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Named"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "contract": {
-            "additionalProperties": true,
-            "title": "Contract",
-            "type": "object"
+            "$ref": "#/components/schemas/RunContract"
           },
           "coverage": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Share of handed-over listings carrying each field: {field: 0..1}",
             "title": "Coverage",
             "type": "object"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From start to finish; null while it is live",
+            "title": "Duration Seconds"
           },
           "error": {
             "anyOf": [
@@ -6394,9 +6660,27 @@
             "$ref": "#/components/schemas/app__features__runs__schemas__Kind"
           },
           "progress": {
-            "additionalProperties": true,
-            "title": "Progress",
-            "type": "object"
+            "$ref": "#/components/schemas/RunProgressRead"
+          },
+          "shop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Named"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_id": {
             "title": "Source Id",
@@ -6475,6 +6759,14 @@
             ],
             "title": "Error"
           },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/ItemFailure"
+            },
+            "maxItems": 200,
+            "title": "Failures",
+            "type": "array"
+          },
           "items_failed": {
             "default": 0,
             "minimum": 0.0,
@@ -6535,6 +6827,7 @@
             "additionalProperties": {
               "type": "integer"
             },
+            "description": "Running run id → listings of its channel seen since it started",
             "title": "Progress",
             "type": "object"
           },
@@ -6686,6 +6979,32 @@
           "name"
         ],
         "title": "SellerUpdate",
+        "type": "object"
+      },
+      "SettledCounts": {
+        "properties": {
+          "matched": {
+            "default": 0,
+            "title": "Matched",
+            "type": "integer"
+          },
+          "matched_after": {
+            "default": 0,
+            "title": "Matched After",
+            "type": "integer"
+          },
+          "promoted": {
+            "default": 0,
+            "title": "Promoted",
+            "type": "integer"
+          },
+          "renamed": {
+            "default": 0,
+            "title": "Renamed",
+            "type": "integer"
+          }
+        },
+        "title": "SettledCounts",
         "type": "object"
       },
       "ShopCreate": {
@@ -7566,6 +7885,24 @@
         "title": "SourceRead",
         "type": "object"
       },
+      "SourceRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug"
+        ],
+        "title": "SourceRef",
+        "type": "object"
+      },
       "SourceUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -7771,7 +8108,8 @@
           "ok",
           "rejected",
           "failed",
-          "interrupted"
+          "interrupted",
+          "cancelled"
         ],
         "title": "Status",
         "type": "string"
@@ -17248,40 +17586,127 @@
     },
     "/api/admin/runs": {
       "get": {
+        "description": "Newest first by default; `sort=-duration` or `sort=-items_seen` for the others. A\nchannel's history to compare is `source_id=…&kind=full&limit=20`: each row carries its\ncoverage, its counts and its verdict.",
         "operationId": "runs_api_admin_runs_get",
         "parameters": [
           {
-            "description": "One channel",
+            "description": "Repeat for several",
             "in": "query",
             "name": "source_id",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "One channel",
+              "description": "Repeat for several",
               "title": "Source Id"
             }
           },
           {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "shop_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Shop Id"
+            }
+          },
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/app__features__runs__schemas__Kind"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Kind"
+            }
+          },
+          {
+            "description": "Repeat for several",
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Status"
+                  "items": {
+                    "$ref": "#/components/schemas/Status"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Repeat for several",
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "started_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started From"
+            }
+          },
+          {
+            "description": "Before this moment",
+            "in": "query",
+            "name": "started_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Before this moment",
+              "title": "Started To"
             }
           },
           {
@@ -17305,6 +17730,28 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, started_at, duration, items_seen.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, started_at, duration, items_seen.",
+              "examples": [
+                "-started_at"
+              ],
+              "title": "Sort"
             }
           }
         ],
@@ -17424,6 +17871,144 @@
           }
         ],
         "summary": "One run",
+        "tags": [
+          "admin: runs"
+        ]
+      }
+    },
+    "/api/admin/runs/{run_id}/cancel": {
+      "post": {
+        "description": "Closed at once as `cancelled`, which frees the channel's slot; the scheduler kills\nthe worker behind it on its next tick, and anything that worker hands over meanwhile is\nrefused. Like every end but `ok`, it concludes nothing about what it did not see.",
+        "operationId": "cancel_api_admin_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Run not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Already finished"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop a run that is queued or working",
+        "tags": [
+          "admin: runs"
+        ]
+      }
+    },
+    "/api/admin/runs/{run_id}/failures": {
+      "get": {
+        "description": "A sample the worker kept — up to two hundred — each with its stage (`fetch`,\n`parse`, `ingest`), the shop's id for the product, its link and the reason, beside the\nfull count. A `parse` failure's bytes are in the snapshot store's `failed/` area. A run\nkilled rather than finished, and runs from before the sample was kept, have none.",
+        "operationId": "failures_api_admin_runs__run_id__failures_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunFailures"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Run not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The products a run could not bring in, and why",
         "tags": [
           "admin: runs"
         ]

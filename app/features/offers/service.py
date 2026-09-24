@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.config import settings
-from app.core.exceptions import AppError, NotFoundError, ValidationError
+from app.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from app.db.models import (
     Attribute,
     AttributeAlias,
@@ -143,8 +143,13 @@ class OfferService:
         source = await self._source(source_id)
         shop = await self._shop(source.shop_id)
         await self._market(batch.market_code)
-        if batch.run_id is not None and await self.session.get(Run, batch.run_id) is None:
-            raise NotFoundError(f"Run {batch.run_id} not found")
+        if batch.run_id is not None:
+            run = await self.session.get(Run, batch.run_id)
+            if run is None:
+                raise NotFoundError(f"Run {batch.run_id} not found")
+            # A person stopped it: what its worker reads after that is not the run's.
+            if run.status == "cancelled":
+                raise ConflictError(f"Run {batch.run_id} was cancelled", code="run_cancelled")
 
         accepted = stored = created = 0
         present: Counter[str] = Counter()

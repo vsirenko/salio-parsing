@@ -206,7 +206,19 @@ class Scheduler:
         return True
 
     async def reap(self) -> None:
-        """Collect finished workers, and kill the ones that stopped answering."""
+        """Collect finished workers, and kill the ones that stopped answering — or whose
+        run a person cancelled, which closed the row under a process still working."""
+        alive = [
+            worker.run_id for worker in self.workers.values() if worker.process.returncode is None
+        ]
+        if alive:
+            async with session_factory() as session:
+                cancelled = await RunService(session).cancelled_among(alive)
+            for run_id in cancelled:
+                worker = self.workers.pop(run_id)
+                log.info("run %d was cancelled, killing its worker", run_id)
+                worker.process.kill()
+                await worker.process.wait()
         for worker in list(self.workers.values()):
             if worker.process.returncode is None:
                 if worker.overdue:

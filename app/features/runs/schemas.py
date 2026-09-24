@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,24 +40,69 @@ class Status(StrEnum):
     # Swept at scheduler startup rather than timed out: the scheduler is single by
     # construction, so anything still running when it starts is dead by definition.
     INTERRUPTED = "interrupted"
+    # A person stopped it from the panel, queued or running. Like every end but `ok`, it
+    # concludes nothing about what it did not see.
+    CANCELLED = "cancelled"
+
+
+RUN_SORT = ("id", "started_at", "duration", "items_seen")
+
+
+class Named(BaseModel):
+    id: int
+    name: str
+
+
+class SourceRef(BaseModel):
+    id: int
+    slug: str
 
 
 class RunRead(BaseModel):
+    """One run, named: which channel, of which shop, collecting what."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     source_id: int
+    source: SourceRef | None = None
+    shop: Named | None = None
+    category: Named | None = None
     kind: Kind
     status: Status
     started_at: datetime
     finished_at: datetime | None
+    duration_seconds: float | None = Field(
+        default=None, description="From start to finish; null while it is live"
+    )
     items_seen: int
     items_ingested: int
     items_failed: int
-    coverage: dict
-    contract: dict
+    coverage: dict[str, float] = Field(
+        description="Share of handed-over listings carrying each field: {field: 0..1}"
+    )
+    contract: "RunContract"
     error: str | None
-    progress: dict
+    progress: "RunProgressRead"
+
+
+FAILURE_SAMPLE = 200
+
+
+class ItemFailure(BaseModel):
+    """One product that did not make it into the run, and where it broke.
+
+    `fetch`: its page could not be read. `parse`: the page was read and the channel's parser
+    raised on it — the bytes are in the snapshot store's `failed/` area, which is what makes
+    it a five-minute fix. `ingest`: parsed, and refused by the service when handed over.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal["fetch", "parse", "ingest"]
+    external_id: str | None = Field(default=None, max_length=200)
+    url: str | None = Field(default=None, max_length=1000)
+    error: str = Field(max_length=500)
 
 
 class RunResult(BaseModel):
@@ -72,6 +118,9 @@ class RunResult(BaseModel):
     coverage: dict[str, float] = Field(default_factory=dict)
     # Set when the worker itself failed rather than the site being difficult.
     error: str | None = Field(default=None, max_length=4000)
+    # A sample of what did not make it, each with its reason. Bounded: a run where every
+    # product failed says so with its count, and two hundred reasons tell the story.
+    failures: list["ItemFailure"] = Field(default_factory=list, max_length=FAILURE_SAMPLE)
 
 
 class Check(BaseModel):
@@ -151,7 +200,9 @@ class SchedulerStatus(BaseModel):
     running: list[RunRead]
     # For each running run, the listings of its channel seen since it started. A worker
     # hands over a slice at a time, so this grows while the run works.
-    progress: dict[int, int]
+    progress: dict[int, int] = Field(
+        description="Running run id → listings of its channel seen since it started"
+    )
     due: list[Due]
     channels: list[ChannelSchedule]
 
@@ -166,3 +217,45 @@ class RunProgress(BaseModel):
     read: int = Field(default=0, ge=0)
     failed: int = Field(default=0, ge=0)
     handed_over: int = Field(default=0, ge=0)
+
+
+class RunContract(BaseModel):
+    """The contract's verdict and every check behind it. `not_evaluated` for a run that
+    broke, or has not finished: judging the counts of a crash is judging nothing."""
+
+    verdict: str | None = None
+    checks: list[Check] = Field(default_factory=list)
+
+
+class SettledCounts(BaseModel):
+    renamed: int = 0
+    matched: int = 0
+    promoted: int = 0
+    matched_after: int = 0
+
+
+class RunProgressRead(BaseModel):
+    """What a run has done so far: the worker's counts while it reads, then what settling
+    it placed. `phase` walks `reading` → `settling` → `settled` (or `unsettled`, with the
+    reason); a quick pass ends at `done`."""
+
+    phase: str | None = None
+    discovered: int | None = None
+    read: int | None = None
+    failed: int | None = None
+    handed_over: int | None = None
+    settled: SettledCounts | None = None
+    settle_error: str | None = None
+
+
+class RunFailures(BaseModel):
+    """The sample a run kept of what did not make it, beside how many did not."""
+
+    run_id: int
+    items_failed: int
+    sampled: int
+    items: list[ItemFailure]
+
+
+RunRead.model_rebuild()
+RunResult.model_rebuild()

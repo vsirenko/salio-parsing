@@ -23,10 +23,46 @@ from app.features.runs import channels as _registered  # noqa: F401 - registers 
 from app.features.runs.channel import Channel, Listing
 from app.features.runs.client import Collector, CollectorError
 from app.features.runs.fetching import Fetcher
-from app.features.runs.schemas import Job, Kind, RunProgress, RunResult
+from app.features.runs.schemas import (
+    FAILURE_SAMPLE,
+    ItemFailure,
+    Job,
+    Kind,
+    RunProgress,
+    RunResult,
+)
 from app.features.runs.snapshots import SnapshotStore, SnapshotStoreError
 
 log = logging.getLogger(__name__)
+
+
+class Failures:
+    """The products a run could not bring in, and why — a sample, kept for the run's row.
+
+    The count alone said "12 failed" and nobody could say which twelve: the reasons were in
+    this process's log, and the log does not outlive the container.
+    """
+
+    def __init__(self) -> None:
+        self.items: list[ItemFailure] = []
+
+    def note(self, stage: str, external_id: object, url: str | None, error: object) -> None:
+        if len(self.items) >= FAILURE_SAMPLE:
+            return
+        if isinstance(error, BaseException):
+            error = f"{type(error).__name__}: {error}"
+        self.items.append(
+            ItemFailure(
+                stage=stage,
+                external_id=str(external_id)[:200] if external_id else None,
+                url=url[:1000] if url else None,
+                error=str(error)[:500] or "unknown",
+            )
+        )
+
+
+class _ParseFailed(Exception):
+    """A page that was read and would not parse, apart from one that could not be read."""
 
 
 async def collect(
@@ -51,6 +87,7 @@ async def collect(
         )
 
     store = store or SnapshotStore()
+    failures = Failures()
     if job.kind is not Kind.REPARSE:
         # Before a single request: a store that cannot be written to would otherwise be
         # discovered once per product, and a run of 1400 permission errors reads as a shop
@@ -63,7 +100,7 @@ async def collect(
     if job.kind is Kind.REPARSE:
         # No network at all. That is the whole point: a parser is judged against the bytes
         # that were already served, not against the site as it is today.
-        seen, payloads, failed = _reparse(job, channel, store)
+        seen, payloads, failed = _reparse(job, channel, store, failures)
     else:
         # A channel may ask for less than the default: a shop whose pages sit behind a
         # rate limiter answers 429 at the pace its index is happy with.
@@ -86,15 +123,18 @@ async def collect(
             await collector.progress(
                 job.run_id, RunProgress(phase="reading", discovered=len(listings))
             )
-            return await _read_and_hand_over(job, channel, collector, session, store, listings)
+            return await _read_and_hand_over(
+                job, channel, collector, session, store, listings, failures
+            )
 
-    ingested, coverage, handover_error = await _hand_over(job, collector, payloads)
+    ingested, coverage, handover_error = await _hand_over(job, collector, payloads, failures)
     return RunResult(
         items_seen=seen,
         items_ingested=ingested,
         items_failed=failed,
         coverage=coverage,
         error=handover_error,
+        failures=failures.items,
     )
 
 
@@ -105,6 +145,7 @@ async def _read_and_hand_over(
     fetcher: Fetcher,
     store: SnapshotStore,
     listings: list[Listing],
+    failures: Failures | None = None,
 ) -> RunResult:
     """Read the listings a slice at a time and hand each slice over as it is read.
 
@@ -113,15 +154,16 @@ async def _read_and_hand_over(
     all of it. A slice keeps the shop's order — each one is read side by side and handed
     over in listing order — so a run can still be compared with the one before it.
     """
+    failures = failures or Failures()
     every = settings.worker_handover_every
     ingested = failed = 0
     weighted: Counter[str] = Counter()
     for start in range(0, len(listings), every):
         payloads, broken = await _read_all(
-            job, channel, fetcher, store, listings[start : start + every]
+            job, channel, fetcher, store, listings[start : start + every], failures
         )
         failed += broken
-        accepted, coverage, error = await _hand_over(job, collector, payloads)
+        accepted, coverage, error = await _hand_over(job, collector, payloads, failures)
         ingested += accepted
         for field, share in coverage.items():
             weighted[field] += share * accepted
@@ -132,6 +174,7 @@ async def _read_and_hand_over(
                 items_failed=failed,
                 coverage=_share(weighted, ingested),
                 error=error,
+                failures=failures.items,
             )
         log.info("run %d: %d of %d handed over", job.run_id, ingested, len(listings))
         await collector.progress(
@@ -149,16 +192,20 @@ async def _read_and_hand_over(
         items_ingested=ingested,
         items_failed=failed,
         coverage=_share(weighted, ingested),
+        failures=failures.items,
     )
 
 
-def _reparse(job: Job, channel: Channel, store: SnapshotStore) -> tuple[int, list[dict], int]:
+def _reparse(
+    job: Job, channel: Channel, store: SnapshotStore, failures: Failures | None = None
+) -> tuple[int, list[dict], int]:
     """Read every snapshot this channel has with the parser as it is now.
 
     Both areas, and the failed one is the reason to run this at all: a product that would
     not parse last time is exactly what a fix was for, and one that parses now stops being
     a broken example.
     """
+    failures = failures or Failures()
     good = store.stored(job.source_slug)
     broken = store.stored(job.source_slug, failed=True)
 
@@ -179,6 +226,7 @@ def _reparse(job: Job, channel: Channel, store: SnapshotStore) -> tuple[int, lis
                 # and the bytes belong with the other broken examples.
                 store.save(job.source_slug, snapshot, failed=True)
             log.warning("run %d: %s: %s", job.run_id, external_id, error)
+            failures.note("parse", snapshot.external_id or external_id, snapshot.url, error)
             continue
 
         if was_broken:
@@ -208,6 +256,7 @@ async def _read_all(
     fetcher: Fetcher,
     store: SnapshotStore,
     listings: list[Listing],
+    failures: Failures | None = None,
 ) -> tuple[list[dict], int]:
     """Turn listings into observations, keeping the bytes that produced each one.
 
@@ -224,31 +273,37 @@ async def _read_all(
     sized to the fetcher's own concurrency, because a product usually costs one request and
     more tasks than slots would only queue against the gate.
     """
+    failures = failures or Failures()
     if job.kind is Kind.QUICK:
         # A cheap pass opens nothing: the listing already carried the facts, so there is no
         # waiting to overlap and a pool would be machinery for its own sake.
-        return _read_cards(job, channel, listings)
+        return _read_cards(job, channel, listings, failures)
 
     # Positional, so the order a run reports is the order the shop listed in however the
     # requests happen to finish. A run that shuffles its own output cannot be diffed
     # against the one before it.
     observations: list[dict | None] = [None] * len(listings)
-    failures = 0
+    failed = 0
     room = asyncio.Semaphore(max(1, settings.fetch_concurrency))
 
     async def read_one(position: int, listing: Listing) -> None:
-        nonlocal failures
+        nonlocal failed
         async with room:
             try:
                 observations[position] = await _observe(job, channel, fetcher, store, listing)
+            except _ParseFailed as error:
+                failed += 1
+                log.warning("run %d: %s: %s", job.run_id, listing.external_id, error.__cause__)
+                failures.note("parse", listing.external_id, listing.url, error.__cause__)
             except Exception as error:  # noqa: BLE001 - a parser may raise anything at all
-                failures += 1
+                failed += 1
                 log.warning("run %d: %s: %s", job.run_id, listing.external_id, error)
+                failures.note("fetch", listing.external_id, listing.url, error)
 
     await asyncio.gather(
         *(read_one(position, listing) for position, listing in enumerate(listings))
     )
-    return [seen for seen in observations if seen is not None], failures
+    return [seen for seen in observations if seen is not None], failed
 
 
 async def _observe(
@@ -269,11 +324,11 @@ async def _observe(
     )
     try:
         fields = channel.parse(snapshot)
-    except Exception:
+    except Exception as error:
         # Kept apart so the parser can be fixed against the exact bytes that broke it,
         # which is a five-minute job rather than another crawl.
         store.save(job.source_slug, snapshot, failed=True)
-        raise
+        raise _ParseFailed(str(error)) from error
 
     store.save(job.source_slug, snapshot)
     store.forget_failure(job.source_slug, listing.external_id)
@@ -285,16 +340,20 @@ async def _observe(
     }
 
 
-def _read_cards(job: Job, channel: Channel, listings: list[Listing]) -> tuple[list[dict], int]:
+def _read_cards(
+    job: Job, channel: Channel, listings: list[Listing], failures: Failures | None = None
+) -> tuple[list[dict], int]:
     """What the listing already told us, for a pass that opens no cards."""
+    failures = failures or Failures()
     payloads: list[dict] = []
-    failures = 0
+    failed = 0
     for listing in listings:
         try:
             fields = channel.read_listing(listing)
         except Exception as error:  # noqa: BLE001 - a parser may raise anything at all
-            failures += 1
+            failed += 1
             log.warning("run %d: %s: %s", job.run_id, listing.external_id, error)
+            failures.note("parse", listing.external_id, listing.url, error)
             continue
         payloads.append(
             {
@@ -304,11 +363,11 @@ def _read_cards(job: Job, channel: Channel, listings: list[Listing]) -> tuple[li
                 "seller_external_id": listing.seller_external_id,
             }
         )
-    return payloads, failures
+    return payloads, failed
 
 
 async def _hand_over(
-    job: Job, collector: Collector, payloads: list[dict]
+    job: Job, collector: Collector, payloads: list[dict], failures: Failures | None = None
 ) -> tuple[int, dict[str, float], str | None]:
     """Post in batches, summing the coverage the service measured.
 
@@ -336,6 +395,15 @@ async def _hand_over(
             return ingested, _share(seen, ingested), f"handing over: {error}"
 
         ingested += result["accepted"]
+        if failures is not None:
+            urls = {item["external_id"]: item.get("url") for item in chunk}
+            for refused in result.get("failures") or []:
+                failures.note(
+                    "ingest",
+                    refused.get("external_id"),
+                    urls.get(refused.get("external_id")),
+                    f"{refused.get('code')}: {refused.get('message')}",
+                )
         for field, share in result.get("coverage", {}).items():
             seen[field] += share * result["accepted"]
 
