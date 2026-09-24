@@ -975,7 +975,19 @@ and the questions that have to be answered with real data first, are written dow
       twin on the model rung, which is the safe way to be wrong.
 - [ ] **rdveikals' laptop category holds a dock** (`ThinkPad OneLink Pro Dock`) and one
       refurbished laptop (`Datora tips: Atjaunots (ReNew)`); its channel has no filter yet.
-- [ ] **More shops' laptops**: dateks, 1a/ksenukai, euronics, bm.
+- [x] **Laptops at seven shops**, 24.09.2026: dateks 94.6% placed, ksenukai 92.2%,
+      euronics 99.6%, rdveikals 99.6%, bigbox 85.9%. 2792 entries, 1192 of them carrying
+      listings from two shops or more. On 3083 pairs of listings sharing an entry the chip
+      disagrees on 42 — a shop's typo, mostly — and the colour on 171.
+- [ ] **1a's and bm's laptops barely place: 37 of 560 and 69 of 396.** 1a publishes no
+      barcode and bm few (69), and neither states a keyboard layout, so no listing of theirs
+      ever carries the full identity the model rung asks for in this category. A 1a laptop is
+      the same product as a ksenukai one by every axis it does state. Whether an axis a shop
+      never publishes should count as unknown rather than as missing is the question.
+- [ ] **A field name that is two attributes in two categories.** dateks' `Atmiņa > Iekšējā
+      atmiņa` is a phone's storage and a laptop's working memory; the registry has no way to
+      say so, and `sources/dateks_laptops.py` works round it for one shop. An alias scoped to
+      a category would be the real answer.
 
 ## Features
 

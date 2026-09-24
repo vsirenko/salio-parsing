@@ -23,12 +23,13 @@ ruleset already reads — and a title in the group's fixed shape:
 
 import contextlib
 import json
+from collections.abc import Callable
 from typing import Any
 
 import lxml.html
 
 from app.features.runs.channel import Listing, Part, Snapshot, register
-from app.features.runs.channels.ksenukai import fields_of
+from app.features.runs.channels.ksenukai import fields_of, keeps_everything, second_hand
 from app.features.runs.fetching import Fetcher, FetchError
 from app.features.runs.schemas import Job
 
@@ -43,6 +44,8 @@ CATEGORIES = ("Mobilie telefoni, viedtālruņi",)
 TABLETS_SLUG = "onea-tablets"
 # The leaf the shop files its tablets under; the same name at both sister shops.
 TABLET_CATEGORIES = ("Planšetdatori",)
+LAPTOPS_SLUG = "onea-laptops"
+LAPTOP_CATEGORIES = ("Portatīvie datori",)
 PAGE = 250
 MAX_PAGES = 40
 
@@ -56,9 +59,15 @@ class Onea:
     # page carries far more than the index (see `fetch`), so this is a gap, in TODO.md.
     read_pages = False
 
-    def __init__(self, slug: str = SLUG, categories: tuple[str, ...] = CATEGORIES) -> None:
+    def __init__(
+        self,
+        slug: str = SLUG,
+        categories: tuple[str, ...] = CATEGORIES,
+        leaves_out: Callable[[dict[str, Any]], bool] = keeps_everything,
+    ) -> None:
         self.slug = slug
         self.categories = categories
+        self.leaves_out = leaves_out
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         listings: list[Listing] = []
@@ -76,7 +85,7 @@ class Onea:
                     card=item,
                 )
                 for item in items
-                if item.get("id") is not None
+                if item.get("id") is not None and not self.leaves_out(fields_of(item, site=SITE))
             ]
             offset += len(items)
             if offset >= int(page.get("total") or 0):
@@ -110,6 +119,9 @@ class Onea:
         if part is None:
             raise ValueError("snapshot has no index record")
         fields = fields_of(json.loads(part.body), site=SITE)
+        # Here as well as in `discover`: a reparse reads the snapshots and never the index.
+        if self.leaves_out(fields):
+            raise ValueError(f"{snapshot.external_id} is not what this channel collects")
         page = snapshot.part("detail")
         if page is not None:
             fields["parameters"] = parameters(page.body)
@@ -161,3 +173,6 @@ def parameters(html: str) -> dict[str, str]:
 
 CHANNEL = register(Onea())
 TABLETS_CHANNEL = register(Onea(slug=TABLETS_SLUG, categories=TABLET_CATEGORIES))
+LAPTOPS_CHANNEL = register(
+    Onea(slug=LAPTOPS_SLUG, categories=LAPTOP_CATEGORIES, leaves_out=second_hand)
+)

@@ -341,3 +341,73 @@ def test_rd_s_part_number_field_is_the_maker_s_code():
         "MDVT4KS/A"
     )
     assert not rd_laptop("portatīvais dators Dell Pro 14", **{field: "Nav informācijas"}).get("mpn")
+
+
+# --- the other shops ---
+
+
+def shop_laptop(record: dict, source: str, shop: str, vocabulary: Vocabulary = VOCABULARY) -> dict:
+    return read(
+        record, source_slug=source, shop_slug=shop, category="laptops", vocabulary=vocabulary
+    )
+
+
+def test_euronics_and_bm_state_the_chip_over_three_fields():
+    euronics = {
+        "name": "Lenovo ThinkPad E14 Gen 7, 14'', WUXGA, Ryzen 5, 16 GB, 512 GB, W11P, ENG, black",
+        "brand": "Lenovo",
+        "specs": {"processor producer": "AMD", "processor type": "Ryzen 5", "processor": "220"},
+    }
+    assert shop_laptop(euronics, "euronics-laptops", "euronics")["identity"]["cpu"] == (
+        "AMD Ryzen 5 220"
+    )
+    bm = {
+        "name": "Lenovo LOQ 15ARP9 15.6-inch FHD 24GB RAM 1TB SSD RTX 4070",
+        "brand": "Lenovo",
+        "attributes": {
+            "bm_procesora_razotajs_213": "AMD",
+            "bm_procesora_serija_165": "AMD Ryzen 7",
+            "bm_procesora_modelis_2400": "7435HS",
+        },
+    }
+    assert shop_laptop(bm, "bm-laptops", "bm")["identity"]["cpu"] == "AMD Ryzen 7 7435HS"
+
+
+def test_dateks_storage_is_its_drives_not_its_phones_internal_memory():
+    """`Atmiņa > Iekšējā atmiņa` is a phone's storage and a laptop's working memory."""
+    vocabulary = Vocabulary(
+        attribute_names={
+            normalize_attribute_name("Atmiņa > Iekšējā atmiņa"): "storage_mb",
+            normalize_attribute_name("SSD"): "storage_mb",
+        }
+    )
+    record = {
+        "title": 'Lenovo IdeaPad Slim 3 15AMN8 Arctic Grey, 15.6" FHD IPS, 16GB, 512GB SSD',
+        "brand": "Lenovo",
+        "specs": {"Atmiņa > Iekšējā atmiņa": "16 GB"},
+        "parameters": {"SSD": "512 GB", "HDD": "Nav"},
+    }
+    fields = shop_laptop(record, "dateks-laptops", "dateks", vocabulary)
+    assert fields["identity"]["storage_mb"] == 524288
+
+
+def test_a_chip_is_known_by_its_number_where_the_registry_knows_it():
+    """1a's index names no family: `…, 226V, 16 GB, …`. A number standing as an item of
+    the title's list is looked up; a bare three digits elsewhere is a name."""
+    vocabulary = Vocabulary(
+        values={"cpu": {"226v": "Intel Core Ultra 5 226V", "250": "AMD Ryzen 7 250"}}
+    )
+    title = 'Portatīvais dators Lenovo ThinkPad T T14 G6, 226V, 16 GB, 512 GB, 14 "'
+    assert shop_laptop({"title": title, "brand": "Lenovo"}, "onea-laptops", "onea", vocabulary)[
+        "identity"
+    ]["cpu"] == ("Intel Core Ultra 5 226V")
+    name = {"title": "HP 250 G10 15.6 FHD 16GB 512GB", "brand": "HP"}
+    assert "cpu" not in shop_laptop(name, "onea-laptops", "onea", vocabulary)["identity"]
+
+
+def test_ksenukai_and_1a_leave_their_refurbished_laptops_out():
+    from app.features.runs.channels.ksenukai import second_hand
+
+    assert second_hand({"title": "Atjaunots portatīvais dators Dell Latitude 5400, atjaunots"})
+    assert second_hand({"title": "Portatīvais dators Dell", "attributes": {"Atjaunots": "Jā"}})
+    assert not second_hand({"title": "Portatīvais dators Dell", "attributes": {"Atjaunots": "Nē"}})

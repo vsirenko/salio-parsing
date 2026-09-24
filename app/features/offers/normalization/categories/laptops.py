@@ -31,7 +31,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "laptops"
-VERSION = "laptops-3"
+VERSION = "laptops-4"
 
 CPU_KEY = "cpu"
 RAM_KEY = "ram_mb"
@@ -85,7 +85,7 @@ _INTEL_CELERON = re.compile(
 # `Ryzen 7 7735HS`, `Ryzen AI 7 350`, `R7-260`, `R7 Ai 350`, Dell's `AR5-8540U`, `9955HX3D`.
 # Not inside a maker's code: ASUS's `FA608UP-R7165W` has an `R7 165W` in it.
 _RYZEN = re.compile(
-    r"(?<![\w-])(?:Ryzen\s?(?:AI\s?)?|(?:AI\s?)?A?R|AI\s)([3579])\s?(?:AI\s?)?[-\s]?\s?(PRO\s)?(?:HX\s?)?"
+    r"(?<![\w-])(?:Ryzen\s?(?:AI\s?)?|(?:AI\s?)?A?R|AI\s)([3579])\s?(?:AI\s?)?[-\s]?\s?((?:(?:PRO|HX)\s?){0,2})"
     r"(\d{3,4}(?:[A-Z]{1,3}\d?[A-Z]?)?)\b",
     re.IGNORECASE,
 )
@@ -103,15 +103,15 @@ _SNAPDRAGON = re.compile(r"\bX([12])[EP]?[-\s](\d{2})[-\s](\d{3})\b", re.IGNOREC
 # The family a coarse field names — bigbox's `AMD Ryzen 7`, `Intel Core 7 / i7`, `Intel Core
 # Ultra 5` — which a bare number in the title completes: `… 16 FHD+ IPS 150U 16 GB …`.
 _FAMILY = re.compile(
-    r"^\s*(?:(?P<ultra>Intel\s+Core\s+Ultra\s+(?P<ut>[579]))"
-    r"|(?P<core>Intel\s+Core\s+(?P<ct>[3579])(?:\s*/\s*i[3579])?)"
-    r"|(?P<ryzen>AMD\s+Ryzen\s+(?:AI\s+)?(?P<rt>[3579])))\s*$",
+    r"^\s*(?:(?P<ultra>Intel\s+Core\s+Ultra\s+(?P<ut>X?[579]))"
+    r"|(?P<core>Intel\s+Core\s+i?(?P<ct>[3579])(?:\s*/\s*i[3579])?)"
+    r"|(?P<ryzen>AMD\s+Ryzen\s+(?:AI\s+)?(?P<rt>[3579])(?:\s+PRO)?))\s*$",
     re.IGNORECASE,
 )
 # A number on its own that could be a processor's: not a size, a rate, a resolution or a
 # part number, which is what a bare three digits usually are.
 _BARE = re.compile(
-    r"(?<![\w.,/-])(\d{3,5}(?:[A-Z]{1,3}\d?)?)(?![\w.,])(?!\s*(?:GB|TB|MB|Hz|nits|W\b|mm|MHz|x\s?\d|SSD|HDD|eMMC|NVMe|UFS))",
+    r"(?<![\w.,/-])(\d{3,5}(?:[A-Z]{1,3}\d?)?)(?![\w.]|,\d)(?!\s*(?:GB|TB|MB|Hz|nits|W\b|mm|MHz|x\s?\d|SSD|HDD|eMMC|NVMe|UFS))",
     re.IGNORECASE,
 )
 
@@ -142,7 +142,11 @@ def processors(text: str) -> set[str]:
     for plus, number in _RYZEN_AI_MAX.findall(text):
         found.add(f"AMD Ryzen AI Max{plus} {number}")
     if not _RYZEN_AI_MAX.search(text):
-        for tier, _pro, number in _RYZEN.findall(text):
+        for tier, _marks, number in _RYZEN.findall(text):
+            # A three-digit Ryzen has no suffix — `Ryzen AI 7 350` — and shops add one:
+            # `AI 7-350H`.
+            if re.fullmatch(r"\d{3}[A-Z]+", number):
+                number = number[:3]
             found.add(f"AMD Ryzen {tier} {number.upper()}")
     if re.search(r"\b(?:Apple|MacBook)\b", text, re.IGNORECASE):
         for generation, grade in _APPLE_M.findall(text):
@@ -179,15 +183,39 @@ def _in_intel_s_scheme(chip: str) -> str:
         # A number the scheme says nothing about: kept as the shop wrote it.
         return chip
     ultra = number[-1] in "568" or suffix.endswith("Plus") or tier.startswith("X")
+    # The 2026 chips ending in 8 with `H` are the `X` tier — `X7 358H`, `X9 388H` — and
+    # Lenovo's `ULT9-388H` drops the letter.
+    if re.fullmatch(r"3\d8", number) and suffix == "H" and not tier.startswith("X"):
+        tier = f"X{tier}"
     return f"Intel Core {'Ultra ' if ultra else ''}{tier} {number}{suffix}"
 
 
 _STORAGE_SIZES = {"128", "256", "512"}
+# A chip's number standing as an item of the title's list — `…, 226V, 16 GB, …`, `| 260 |` —
+# or carrying its letter anywhere. A bare three digits elsewhere is too often a name:
+# `HP 250 G10` is a laptop, not a Ryzen 7 250.
+_LISTED = re.compile(r"(?:^|[,|/]\s*)(\d{3,5}[A-Z]{0,3}\d?)(?=\s*(?:[,|/]|$))", re.IGNORECASE)
+_LETTERED = re.compile(r"(?<![\w.,/-])(\d{3,5}[A-Z]{1,3}\d?)(?![\w.]|,\d)", re.IGNORECASE)
+
+
+def _known_by_its_number(title: str, vocabulary: Vocabulary) -> set[str]:
+    """The one chip the registry knows by a number the title states, and no field named.
+
+    1a's index states no processor family at all — `Lenovo ThinkPad T14 G6, 226V, 16 GB` —
+    and a chip's number is its identity: `226V` is only ever the Core Ultra 5 226V. Which
+    chip a number is belongs to the registry, where each chip is entered with its number as
+    an alias wherever that number is one chip's alone.
+    """
+    text = _CELLS.sub(" | ", _MARKS.sub("", title))
+    numbers = set(_LISTED.findall(text)) | set(_LETTERED.findall(text))
+    known = {vocabulary.value_of(CPU_KEY, number) for number in numbers - _STORAGE_SIZES}
+    known.discard(None)
+    return known if len(known) == 1 else set()
 
 
 def _completed(family: str, title: str) -> set[str]:
     """A coarse family from a field, completed by the one bare number in the title that fits."""
-    shape = _FAMILY.match(family)
+    shape = _FAMILY.match(_MARKS.sub("", family))
     if shape is None:
         return set()
     text = _CELLS.sub(" ", _MARKS.sub("", title))
@@ -234,6 +262,8 @@ def _cpu(payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
     if not named:
         for family in families:
             named |= _completed(family, title)
+    if not named:
+        named = _known_by_its_number(title, vocabulary)
     named = {n for n in named if not any(o != n and o.startswith(n + " ") for o in named)}
     if len(named) != 1:
         return {}
@@ -244,6 +274,32 @@ def _cpu(payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
     if makers & _MAKERS and chip.split()[0].casefold() not in makers:
         return {}
     return _axis(fields, CPU_KEY, chip)
+
+
+# A shop's model repeating its series — `Ryzen 7` then `Ryzen 7 260` — said once.
+_REPEATED = re.compile(r"\b(\w+(?:\s+\w+){0,2})\s+\1\b", re.IGNORECASE)
+
+
+def chip_from_fields(texts: list[str], fields: dict[str, Any]) -> dict[str, Any]:
+    """The chip several of a shop's fields name together, checked against the reading.
+
+    rdveikals, euronics and bm each split the chip over fields that name nothing alone —
+    maker, series, model: `Intel`, `Core Ultra 7`, `255H`. Joined, they are this category's
+    spelling of the chip. A coarser name gives way to a finer one either way round; two
+    chips leave the axis empty.
+    """
+    chips = processors(_REPEATED.sub(r"\1", " ".join(t.strip() for t in texts if t)))
+    if len(chips) != 1:
+        return {}
+    chip = chips.pop()
+    identity = dict(fields.get("identity") or {})
+    read = identity.get(CPU_KEY)
+    if read == chip or (read and read.startswith(chip + " ")):
+        return {}
+    if read is None or chip.startswith(read + " "):
+        return {"identity": {**identity, CPU_KEY: chip}}
+    identity.pop(CPU_KEY)
+    return {"identity": identity}
 
 
 # --- memory and storage -------------------------------------------------------------------
@@ -276,7 +332,7 @@ _PAIR = re.compile(
 )
 
 
-def _mb(amount: str, unit: str) -> int:
+def megabytes(amount: str, unit: str) -> int:
     return int(float(amount.replace(",", ".")) * _SCALE[unit.upper()])
 
 
@@ -290,32 +346,32 @@ def _stated(fields: dict[str, Any], vocabulary: Vocabulary, key: str) -> set[int
             continue
         found = re.search(_SIZE, str(value), re.IGNORECASE)
         if found:
-            sizes.add(_mb(*found.groups()))
+            sizes.add(megabytes(*found.groups()))
     return sizes
 
 
 def _titled_ram(title: str) -> set[int]:
-    sizes = {_mb(a or c, b or d) for a, b, c, d in _RAM_MARKED.findall(title)}
+    sizes = {megabytes(a or c, b or d) for a, b, c, d in _RAM_MARKED.findall(title)}
     for memory, _, _ in _PAIR.findall(title):
-        sizes.add(_mb(memory, "GB"))
+        sizes.add(megabytes(memory, "GB"))
     for memory in _RAM_BEFORE_STORAGE.findall(title):
-        sizes.add(_mb(memory, "GB"))
+        sizes.add(megabytes(memory, "GB"))
     return sizes
 
 
-def _titled_storage(title: str) -> set[int]:
+def titled_storage(title: str) -> set[int]:
     sizes: set[int] = set()
     for a, b, c, d in _STORAGE_MARKED.findall(title):
         if a:
-            sizes.add(_mb(a, b))
+            sizes.add(megabytes(a, b))
         elif c:
             # `SSD512` names no unit; a laptop's storage in gigabytes is three digits or four.
-            sizes.add(_mb(c, d or ("TB" if len(c) == 1 else "GB")))
+            sizes.add(megabytes(c, d or ("TB" if len(c) == 1 else "GB")))
     for _, storage, unit in _PAIR.findall(title):
-        sizes.add(_mb(storage, unit))
+        sizes.add(megabytes(storage, unit))
     if not sizes:
         for amount in _STORAGE_BARE.findall(title):
-            sizes.add(_mb(amount, "TB" if len(amount) == 1 else "GB"))
+            sizes.add(megabytes(amount, "TB" if len(amount) == 1 else "GB"))
     return sizes
 
 
@@ -337,7 +393,7 @@ def _storage(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
     size = _one(
-        _stated(fields, vocabulary, STORAGE_KEY), _titled_storage(str(fields.get("title") or ""))
+        _stated(fields, vocabulary, STORAGE_KEY), titled_storage(str(fields.get("title") or ""))
     )
     return _axis(fields, STORAGE_KEY, size) if size else {}
 
@@ -410,7 +466,12 @@ _INTEGRATED_SLOT = re.compile(
 _NO_DISCRETE = ("Apple ", "Qualcomm ")
 # The vendors whose graphics share the processor's die. A listing naming only one of these
 # and no discrete card has the processor's graphics.
-_ON_THE_PROCESSOR = re.compile(r"^\s*(?:Intel|AMD\s+Radeon|Apple|Qualcomm)\b", re.IGNORECASE)
+# The vendors, and the names of graphics that are the processor's own, written with or
+# without the vendor: euronics' `UHD Graphics`, `Radeon`, `Iris Xe Graphics`.
+_ON_THE_PROCESSOR = re.compile(
+    r"^\s*(?:Intel|AMD\s+Radeon|Apple|Qualcomm|UHD|Iris|Arc\s+Graphics|Radeon(?!\s+RX)|Adreno)\b",
+    re.IGNORECASE,
+)
 
 
 def _discrete(text: str) -> set[str]:

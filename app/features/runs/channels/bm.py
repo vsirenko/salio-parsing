@@ -47,6 +47,10 @@ CATEGORY_UID = "MTIy"
 # e-readers, accessories and covers are leaves beside it.
 TABLETS_SLUG = "bm-tablets"
 TABLET_CATEGORY_UID = "MTIx"
+# `Portatīvie datori` under `Portatīvie datori un aksesuāri`; bags, chargers, batteries and
+# coolers are leaves beside it.
+LAPTOPS_SLUG = "bm-laptops"
+LAPTOP_CATEGORY_UID = "Mjky"
 # Verified against the live endpoint: 200 comes back whole, with every attribute, in 15
 # seconds. Asking for more is where a generous endpoint stops being generous.
 PAGE = 200
@@ -269,3 +273,4 @@ def _text(value: Any) -> str:
 
 register(Bm())
 TABLETS_CHANNEL = register(Bm(slug=TABLETS_SLUG, category_uid=TABLET_CATEGORY_UID))
+LAPTOPS_CHANNEL = register(Bm(slug=LAPTOPS_SLUG, category_uid=LAPTOP_CATEGORY_UID))

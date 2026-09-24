@@ -52,6 +52,9 @@ CATEGORY_PATH = "/en/phones/smartphones/all-smartphones"
 # not inside it — unlike bigbox, whose one tablet category held all of them.
 TABLETS_SLUG = "euronics-tablets"
 TABLET_CATEGORY_PATH = "/en/phones/tablets/tablets"
+# Found in the shop's sitemap, `type=SubSubGroup`: its menu is drawn by script.
+LAPTOPS_SLUG = "euronics-laptops"
+LAPTOP_CATEGORY_PATH = "/en/it/laptops/laptops"
 # The sort the token names. `top` is the shop's default and the only one measured.
 SORT = b"top"
 # Far past the end, so one request returns the whole cumulative listing. 319 phones sat in
@@ -299,3 +302,4 @@ def _amount(text: str) -> str:
 
 register(Euronics())
 TABLETS_CHANNEL = register(Euronics(slug=TABLETS_SLUG, category_path=TABLET_CATEGORY_PATH))
+LAPTOPS_CHANNEL = register(Euronics(slug=LAPTOPS_SLUG, category_path=LAPTOP_CATEGORY_PATH))

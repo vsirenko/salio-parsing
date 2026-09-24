@@ -15,7 +15,7 @@ from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabu
 
 CATEGORY = "laptops"
 BRAND_KEY = "apple"
-VERSION = "apple-laptops-3"
+VERSION = "apple-laptops-4"
 
 _PART_NUMBER = re.compile(r"\b[A-Z0-9]{5}([A-Z]{2})/A\b")
 # The code, to the layout the listings beside it named.

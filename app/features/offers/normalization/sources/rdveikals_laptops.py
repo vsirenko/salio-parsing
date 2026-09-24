@@ -16,14 +16,13 @@ from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocab
 # this shop's is the processor, split over three fields (`Intel`, `Core Ultra 7`, `255H`),
 # and the maker's part number, in a field of its own.
 LAPTOPS_SLUG = "rdveikals-laptops"
-LAPTOPS_VERSION = "rdveikals-laptops-2"
+LAPTOPS_VERSION = "rdveikals-laptops-3"
 CPU_FIELDS = (
     "Procesors / Procesora ražotājs",
     "Procesors / Procesora sērija",
     "Procesors / Procesora modelis",
 )
 PART_NUMBER_FIELD = "Modeļa sērija / Modeļa nosaukums"
-_REPEATED = re.compile(r"\b(\w+(?:\s+\w+){0,2})\s+\1\b", re.IGNORECASE)
 # A part number is a code: letters and digits, no spaces. `Nav informācijas` — "no
 # information" — is what the field says where the shop has none.
 _PART_NUMBER = re.compile(r"^(?=[^\s]*\d)[A-Z0-9][A-Z0-9#./-]{4,}$", re.IGNORECASE)
@@ -32,27 +31,8 @@ _PART_NUMBER = re.compile(r"^(?=[^\s]*\d)[A-Z0-9][A-Z0-9#./-]{4,}$", re.IGNORECA
 def _cpu_from_three_fields(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
-    """The chip the three fields name together; where the title named another, neither."""
     specs = payload.get("specs") or {}
-    stated = " ".join(str(specs.get(name) or "").strip() for name in CPU_FIELDS)
-    # The model often repeats the series — `Ryzen 7` then `Ryzen 7 260`, `Ryzen AI 9 Pro` then
-    # `Pro 375` — and a word said twice in a row is said once.
-    stated = _REPEATED.sub(r"\1", stated)
-    chips = laptops.processors(stated)
-    if len(chips) != 1:
-        return {}
-    chip = chips.pop()
-    identity = dict(fields.get("identity") or {})
-    read = identity.get(laptops.CPU_KEY)
-    # A coarser name gives way: the fields say `290HX` where the title says `290HX Plus`.
-    if read == chip or (read and read.startswith(chip + " ")):
-        return {}
-    if read and chip.startswith(read + " "):
-        return {"identity": {**identity, laptops.CPU_KEY: chip}}
-    if read is None:
-        return {"identity": {**identity, laptops.CPU_KEY: chip}}
-    identity.pop(laptops.CPU_KEY)
-    return {"identity": identity}
+    return laptops.chip_from_fields([str(specs.get(name) or "") for name in CPU_FIELDS], fields)
 
 
 def _part_number(

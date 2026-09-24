@@ -16,6 +16,8 @@ other shops through a shared barcode.
 
 import base64
 import json
+import re
+from collections.abc import Callable
 from typing import Any
 
 from app.features.runs.channel import Listing, Part, Snapshot, register
@@ -35,6 +37,8 @@ CATEGORIES = ("Mobilie telefoni",)
 TABLETS_SLUG = "ksenukai-tablets"
 # The leaf the shop files its tablets under; the same name at both sister shops.
 TABLET_CATEGORIES = ("Planšetdatori",)
+LAPTOPS_SLUG = "ksenukai-laptops"
+LAPTOP_CATEGORIES = ("Portatīvie datori",)
 # Verified against the live index: 250 comes back, and more is not needed.
 PAGE = 250
 # A category that suddenly returns thousands of items is a filter that stopped filtering,
@@ -42,12 +46,36 @@ PAGE = 250
 MAX_PAGES = 40
 
 
+# Second-hand stock in the words the group's two shops use for it. On 24.09.2026 their laptop
+# leaves held 109 and about as many refurbished laptops, every one titled `Atjaunots
+# portatīvais dators …` and marked `Atjaunots: Jā`.
+_SECOND_HAND = re.compile(r"(?i)\b(?:atjaunot\w*|renew\w*|refurb\w*|lietot\w*|demo)\b")
+
+
+def second_hand(fields: dict[str, Any]) -> bool:
+    """Whether a record, flattened by `fields_of`, is a refurbished or used product."""
+    attributes = fields.get("attributes") or {}
+    return bool(_SECOND_HAND.search(str(fields.get("title") or ""))) or (
+        str(attributes.get("Atjaunots") or "").strip() == "Jā"
+    )
+
+
+def keeps_everything(fields: dict[str, Any]) -> bool:
+    return False
+
+
 class Ksenukai:
     """One channel: this shop's phones, through this index."""
 
-    def __init__(self, slug: str = SLUG, categories: tuple[str, ...] = CATEGORIES) -> None:
+    def __init__(
+        self,
+        slug: str = SLUG,
+        categories: tuple[str, ...] = CATEGORIES,
+        leaves_out: Callable[[dict[str, Any]], bool] = keeps_everything,
+    ) -> None:
         self.slug = slug
         self.categories = categories
+        self.leaves_out = leaves_out
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
         listings: list[Listing] = []
@@ -65,7 +93,7 @@ class Ksenukai:
                     card=item,
                 )
                 for item in items
-                if item.get("id") is not None
+                if item.get("id") is not None and not self.leaves_out(fields_of(item))
             ]
             offset += len(items)
             if offset >= int(page.get("total") or 0):
@@ -95,7 +123,11 @@ class Ksenukai:
         part = snapshot.part("index")
         if part is None:
             raise ValueError("snapshot has no index record")
-        return fields_of(json.loads(part.body))
+        fields = fields_of(json.loads(part.body))
+        # Here as well as in `discover`: a reparse reads the snapshots and never the index.
+        if self.leaves_out(fields):
+            raise ValueError(f"{snapshot.external_id} is not what this channel collects")
+        return fields
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:  # pragma: no cover - no quick pass
         return fields_of(listing.card)
@@ -227,3 +259,6 @@ def _text(value: Any) -> str:
 
 register(Ksenukai())
 register(Ksenukai(slug=TABLETS_SLUG, categories=TABLET_CATEGORIES))
+LAPTOPS_CHANNEL = register(
+    Ksenukai(slug=LAPTOPS_SLUG, categories=LAPTOP_CATEGORIES, leaves_out=second_hand)
+)

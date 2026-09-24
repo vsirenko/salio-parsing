@@ -55,6 +55,8 @@ CATEGORY_SLUG = "viedtalruni"
 # The same pages under the shop's word for tablets.
 TABLETS_SLUG = "dateks-tablets"
 TABLET_CATEGORY_SLUG = "plansetdatori"
+LAPTOPS_SLUG = "dateks-laptops"
+LAPTOP_CATEGORY_SLUG = "portativie-datori"
 # Zero-based: page N is `/pg/N-1`, and page 1 is `/pg/0`.
 LISTING = f"{SITE}/cenas/{{slug}}/pg/{{page}}"
 # A category that suddenly claims hundreds of pages is a site that changed, not a shop that
@@ -392,3 +394,4 @@ def _id_from(url: str) -> str:
 
 CHANNEL = register(Dateks())
 TABLETS_CHANNEL = register(Dateks(slug=TABLETS_SLUG, category_slug=TABLET_CATEGORY_SLUG))
+LAPTOPS_CHANNEL = register(Dateks(slug=LAPTOPS_SLUG, category_slug=LAPTOP_CATEGORY_SLUG))
