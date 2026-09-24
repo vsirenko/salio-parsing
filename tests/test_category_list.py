@@ -85,8 +85,10 @@ def test_a_binding_names_its_attribute_and_an_entry_shows_its_attributes(client)
         {
             "key": "storage_mb",
             "label": "Storage",
+            "labels": {},
             "value": 262144,
             "display": "256 GB",
+            "value_labels": {},
             "unit": "MB",
             "position": 0,
             "identity_bearing": True,

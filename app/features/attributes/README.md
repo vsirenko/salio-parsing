@@ -6,16 +6,46 @@ One canonical registry of attributes, because sources name the same thing a doze
 
 | | |
 |---|---|
-| `GET · POST /api/admin/attributes` | the registry |
-| `GET /api/admin/attributes/{attribute_id}` | one attribute |
+| `GET · POST /api/admin/attributes` | the registry, with counts, `search`, `ids`, `?sort=` |
+| `GET · PATCH /api/admin/attributes/{attribute_id}` | one attribute; rename and relabel it |
+| `GET /api/admin/attributes/{attribute_id}/categories` | the categories it is bound to |
+| `GET /api/admin/attributes/{attribute_id}/resolve` | what the registry makes of a string |
 | `GET · POST /api/admin/attributes/{attribute_id}/aliases` | what the sources call it |
+| `DELETE /api/admin/attributes/{attribute_id}/aliases/{alias_id}` | stop reading a name as it |
 | `GET · POST /api/admin/attributes/{attribute_id}/values` | canonical values, enums only |
+| `PATCH · DELETE /api/admin/attributes/values/{value_id}` | reorder or relabel a value; remove one nothing carries |
 | `POST /api/admin/attributes/values/{value_id}/aliases` | what the sources call a value |
+| `DELETE /api/admin/attributes/values/{value_id}/aliases/{alias_id}` | stop reading a word as it |
 | `GET /api/admin/attributes/by-category/{category_id}` | what a category makes of them |
 | `POST /api/admin/categories/{category_id}/attributes` | attach one to a category |
 | `PATCH · DELETE /api/admin/categories/{category_id}/attributes/{attribute_id}` | adjust or detach |
 
 ## How it works
+
+**A label is what a person reads; a name and a canonical string are what the system
+keeps.** `labels` on an attribute and on a value is text by language — `{"lv": "Operatīvā
+atmiņa", "ru": "Оперативная память"}`, `black` as `melns` — and nothing reads it but a page.
+So the two things a front end might want to edit are fixed on purpose. **The key** is how
+the readings and the rules name the attribute. **A value's canonical string** is what a
+reading produces and the matcher looks up — `wifi`, `Intel Core Ultra 5 226V` — and renamed,
+the next reading would produce the old string and find nothing. A value that reads badly
+gets a label.
+
+**What changes, and what does not, once something is stored.** The unit and the scale of a
+number attribute change only while no entry holds a value: `storage_mb` holds `16384`, and
+calling the unit GB under it would make every stored value a thousand times larger. A value
+is removed only while no entry carries it (409 `value_in_use` otherwise, with the count):
+one that is carried is part of those entries' identity keys, and folding it into another is
+a merge of entries, which is the matcher's to do, not an edit here.
+
+**`resolve` answers what a reading would**: whether the string is a name a shop gives the
+attribute, and which value it resolves to, by its canonical spelling or an alias, compared
+in the normalized form the registry stores. A colour's readings also try phrases of a title;
+this is the string as given.
+
+**A row counts where an attribute is used and how far it is set up** — categories, values,
+aliases, entries carrying a value — and a value, the entries that carry it: a value nothing
+carries and no reading produces is one to look at.
 
 **A category's binding names its attribute** — `attribute: {id, key, name, value_type,
 unit_dimension}` beside `attribute_id` — so a table of them prints `RAM` without loading

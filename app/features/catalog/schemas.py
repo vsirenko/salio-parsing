@@ -172,8 +172,14 @@ class VariantAttributeShown(BaseModel):
 
     key: str
     label: str
+    labels: dict[str, str] = Field(
+        default_factory=dict, description="The attribute's label by language, where written"
+    )
     value: bool | int | float | str
     display: str
+    value_labels: dict[str, str] = Field(
+        default_factory=dict, description="An enum value's label by language, where written"
+    )
     unit: str | None
     position: int | None
     identity_bearing: bool

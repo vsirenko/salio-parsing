@@ -280,6 +280,9 @@ class Attribute(Base):
     # without a fixed scale, 39.624 and 39.62 describe one screen and hash to two keys.
     unit_dimension: Mapped[str | None] = mapped_column(String(20))
     scale: Mapped[int | None] = mapped_column(SmallInteger)
+    # What a person reads, by language: `{"lv": "Operatīvā atmiņa", "ru": "Оперативная
+    # память"}`. `name` stays the one the registry is kept in; a label is only shown.
+    labels: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
 
     __table_args__ = (
         CheckConstraint("key ~ '^[a-z][a-z0-9_]*$'", name="key_shape"),
@@ -387,6 +390,10 @@ class AttributeValue(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     attribute_id: Mapped[int] = mapped_column(ForeignKey("attributes.id", ondelete="CASCADE"))
     canonical: Mapped[str] = mapped_column(String(200))
+    # The value as a person reads it, by language: `black` is `melns` and `чёрный`. The
+    # canonical string is what the readings produce and the matcher compares, and it is
+    # never renamed for display's sake.
+    labels: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     # Display order, because S / M / L / XL is not alphabetical.
     position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 

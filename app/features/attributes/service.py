@@ -1,6 +1,8 @@
 """The canonical attribute registry, its aliases, and what a category makes of it."""
 
-from sqlalchemy import delete, select
+from typing import Any
+
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,21 +15,28 @@ from app.db.models import (
     AttributeValueAlias,
     Category,
     CategoryAttribute,
+    VariantAttribute,
 )
-from app.db.query import paginated
+from app.db.query import ordered, paginated_rows
+from app.features.attributes.normalization import normalize_attribute_name
 from app.features.attributes.schemas import (
     AliasCreate,
     AliasRead,
+    AttributeCategoryRead,
     AttributeCreate,
     AttributeRead,
     AttributeRef,
+    AttributeRow,
+    AttributeUpdate,
     CategoryAttributeCreate,
     CategoryAttributeRead,
     CategoryAttributeUpdate,
     ValueAliasRead,
     ValueCreate,
     ValueRead,
+    ValueResolution,
     ValueType,
+    ValueUpdate,
 )
 from app.schemas.pagination import Pagination
 
@@ -39,19 +48,35 @@ class AttributeService:
     # --- the registry ---
 
     async def list_attributes(
-        self, pagination: Pagination, *, value_type: ValueType | None = None
-    ) -> tuple[list[AttributeRead], int]:
-        stmt = select(Attribute)
+        self,
+        pagination: Pagination,
+        *,
+        value_type: ValueType | None = None,
+        search: str | None = None,
+        ids: list[int] | None = None,
+    ) -> tuple[list[AttributeRow], int]:
+        stmt = _attribute_rows()
         if value_type is not None:
             stmt = stmt.where(Attribute.value_type == value_type.value)
+        if ids:
+            stmt = stmt.where(Attribute.id.in_(ids))
+        if search and search.strip():
+            stmt = stmt.where(_attribute_search(search.strip()))
 
-        rows, total = await paginated(self.session, stmt.order_by(Attribute.key), pagination)
-        return [AttributeRead.model_validate(row) for row in rows], total
+        columns = {c.name: c for c in stmt.selected_columns}
+        stmt = ordered(
+            stmt,
+            pagination,
+            {**columns, "id": Attribute.id, "key": Attribute.key, "name": Attribute.name},
+            Attribute.id,
+        )
+        rows, total = await paginated_rows(self.session, stmt, pagination)
+        return [_attribute_row(row) for row in rows], total
 
-    async def get_attribute(self, attribute_id: int) -> AttributeRead:
-        return AttributeRead.model_validate(await self._attribute(attribute_id))
+    async def get_attribute(self, attribute_id: int) -> AttributeRow:
+        return await self._read(attribute_id)
 
-    async def create_attribute(self, payload: AttributeCreate) -> AttributeRead:
+    async def create_attribute(self, payload: AttributeCreate) -> AttributeRow:
         attribute = Attribute(**payload.model_dump(mode="json"))
         self.session.add(attribute)
         try:
@@ -60,10 +85,116 @@ class AttributeService:
             await self.session.rollback()
             raise ConflictError(f"The attribute key '{payload.key}' is taken") from exc
 
-        await self.session.refresh(attribute)
         audit.set_target("attribute", attribute.id)
         audit.record_changes(**payload.model_dump(mode="json"))
-        return AttributeRead.model_validate(attribute)
+        return await self._read(attribute.id)
+
+    async def update_attribute(self, attribute_id: int, payload: AttributeUpdate) -> AttributeRow:
+        attribute = await self._attribute(attribute_id)
+        audit.set_target("attribute", attribute_id)
+        sent = payload.model_dump(exclude_unset=True, mode="json")
+
+        if {"unit_dimension", "scale"} & set(sent):
+            if attribute.value_type != ValueType.NUMBER.value:
+                raise ValidationError(
+                    "unit_dimension and scale only apply to a number attribute",
+                    code="not_a_number",
+                )
+            stored = await self.session.scalar(
+                select(func.count())
+                .select_from(VariantAttribute)
+                .where(VariantAttribute.attribute_id == attribute_id)
+            )
+            if stored:
+                raise ConflictError(
+                    f"{stored} entries hold a value of '{attribute.key}' in"
+                    f" {attribute.unit_dimension or 'no unit'}; changing the unit would make"
+                    " each of them a different amount",
+                    code="values_stored",
+                )
+            if "unit_dimension" in sent:
+                attribute.unit_dimension = payload.unit_dimension
+            if "scale" in sent:
+                attribute.scale = payload.scale
+        if payload.name is not None:
+            attribute.name = payload.name
+        if payload.labels is not None:
+            attribute.labels = payload.labels
+
+        await self.session.flush()
+        audit.record_changes(**sent)
+        return await self._read(attribute_id)
+
+    async def list_categories(self, attribute_id: int) -> list[AttributeCategoryRead]:
+        await self._attribute(attribute_id)
+        rows = await self.session.execute(
+            select(CategoryAttribute, Category)
+            .join(Category, Category.id == CategoryAttribute.category_id)
+            .where(CategoryAttribute.attribute_id == attribute_id)
+            .order_by(Category.name)
+        )
+        return [
+            AttributeCategoryRead(
+                category_id=category.id,
+                category_name=category.name,
+                category_slug=category.slug,
+                identity_bearing=link.identity_bearing,
+                position=link.position,
+                label_override=link.label_override,
+                display_unit=link.display_unit,
+            )
+            for link, category in rows.all()
+        ]
+
+    async def resolve(self, attribute_id: int, query: str) -> ValueResolution:
+        """What the registry makes of a string, exactly as a reading would.
+
+        A value's words are compared in the normalized form they are stored in, the way
+        `Vocabulary.value_of` looks them up; a colour, whose readings also try phrases of a
+        title, is resolved the same way here only for the string as given.
+        """
+        await self._attribute(attribute_id)
+        try:
+            normalized = normalize_attribute_name(query)
+        except ValueError:
+            normalized = ""
+        named = bool(
+            normalized
+            and await self.session.scalar(
+                select(func.count())
+                .select_from(AttributeAlias)
+                .where(
+                    AttributeAlias.attribute_id == attribute_id,
+                    AttributeAlias.alias_normalized == normalized,
+                )
+            )
+        )
+        value = await self.session.scalar(
+            select(AttributeValue).where(
+                AttributeValue.attribute_id == attribute_id,
+                func.lower(AttributeValue.canonical) == query.strip().lower(),
+            )
+        )
+        via = "canonical" if value is not None else None
+        if value is None and normalized:
+            value = await self.session.scalar(
+                select(AttributeValue)
+                .join(
+                    AttributeValueAlias, AttributeValueAlias.attribute_value_id == AttributeValue.id
+                )
+                .where(
+                    AttributeValueAlias.attribute_id == attribute_id,
+                    AttributeValueAlias.alias_normalized == normalized,
+                )
+            )
+            via = "alias" if value is not None else None
+        return ValueResolution(
+            query=query,
+            normalized=normalized,
+            is_attribute_name=named,
+            value=(await self._values(attribute_id, [value.id]))[0] if value else None,
+            via=via,
+        )
 
     # --- aliases: what the sources call it ---
 
@@ -97,16 +228,62 @@ class AttributeService:
         audit.record_changes(added_alias=payload.alias)
         return AliasRead.model_validate(alias)
 
+    async def remove_alias(self, attribute_id: int, alias_id: int) -> None:
+        await self._attribute(attribute_id)
+        alias = await self.session.get(AttributeAlias, alias_id)
+        if alias is None or alias.attribute_id != attribute_id:
+            raise NotFoundError(f"Alias {alias_id} is not on attribute {attribute_id}")
+        audit.set_target("attribute", attribute_id)
+        audit.record_changes(removed_alias=alias.alias_normalized)
+        await self.session.execute(delete(AttributeAlias).where(AttributeAlias.id == alias_id))
+
     # --- enum values, and what the sources call those ---
 
     async def list_values(self, attribute_id: int) -> list[ValueRead]:
         await self._attribute(attribute_id)
-        rows = await self.session.scalars(
-            select(AttributeValue)
-            .where(AttributeValue.attribute_id == attribute_id)
-            .order_by(AttributeValue.position, AttributeValue.canonical)
+        return await self._values(attribute_id)
+
+    async def update_value(self, value_id: int, payload: ValueUpdate) -> ValueRead:
+        value = await self._value(value_id)
+        audit.set_target("attribute", value.attribute_id)
+        sent = payload.model_dump(exclude_unset=True, mode="json")
+        if payload.position is not None:
+            value.position = payload.position
+        if payload.labels is not None:
+            value.labels = payload.labels
+        await self.session.flush()
+        audit.record_changes(value=value.canonical, **sent)
+        return (await self._values(value.attribute_id, [value.id]))[0]
+
+    async def remove_value(self, value_id: int) -> None:
+        """Only a value no entry carries. One that is carried is part of those entries'
+        identity keys; folding it into another is a merge of entries, not an edit here."""
+        value = await self._value(value_id)
+        audit.set_target("attribute", value.attribute_id)
+        carried = await self.session.scalar(
+            select(func.count())
+            .select_from(VariantAttribute)
+            .where(VariantAttribute.value_id == value_id)
         )
-        return [ValueRead.model_validate(row) for row in rows]
+        if carried:
+            raise ConflictError(
+                f"{carried} entries carry '{value.canonical}'",
+                code="value_in_use",
+                details={"variants_count": carried},
+            )
+        audit.record_changes(removed_value=value.canonical)
+        await self.session.execute(delete(AttributeValue).where(AttributeValue.id == value_id))
+
+    async def remove_value_alias(self, value_id: int, alias_id: int) -> None:
+        value = await self._value(value_id)
+        alias = await self.session.get(AttributeValueAlias, alias_id)
+        if alias is None or alias.attribute_value_id != value_id:
+            raise NotFoundError(f"Alias {alias_id} is not on value {value_id}")
+        audit.set_target("attribute", value.attribute_id)
+        audit.record_changes(removed_value_alias=alias.alias_normalized, value=value.canonical)
+        await self.session.execute(
+            delete(AttributeValueAlias).where(AttributeValueAlias.id == alias_id)
+        )
 
     async def add_value(self, attribute_id: int, payload: ValueCreate) -> ValueRead:
         attribute = await self._attribute(attribute_id)
@@ -126,9 +303,8 @@ class AttributeService:
             await self.session.rollback()
             raise ConflictError(f"'{payload.canonical}' is already a value here") from exc
 
-        await self.session.refresh(value)
         audit.record_changes(added_value=payload.canonical)
-        return ValueRead.model_validate(value)
+        return (await self._values(attribute_id, [value.id]))[0]
 
     async def add_value_alias(self, value_id: int, payload: AliasCreate) -> ValueAliasRead:
         value = await self.session.get(AttributeValue, value_id)
@@ -247,6 +423,61 @@ class AttributeService:
                 code="text_cannot_bear_identity",
             )
 
+    async def _read(self, attribute_id: int) -> AttributeRow:
+        row = (
+            await self.session.execute(_attribute_rows().where(Attribute.id == attribute_id))
+        ).first()
+        if row is None:
+            raise NotFoundError(f"Attribute {attribute_id} not found")
+        return _attribute_row(row)
+
+    async def _value(self, value_id: int) -> AttributeValue:
+        value = await self.session.get(AttributeValue, value_id)
+        if value is None:
+            raise NotFoundError(f"Attribute value {value_id} not found")
+        return value
+
+    async def _values(self, attribute_id: int, ids: list[int] | None = None) -> list[ValueRead]:
+        """The values, each with its aliases and how many entries carry it."""
+        carried = (
+            select(func.count())
+            .select_from(VariantAttribute)
+            .where(VariantAttribute.value_id == AttributeValue.id)
+            .correlate(AttributeValue)
+            .scalar_subquery()
+        )
+        stmt = (
+            select(AttributeValue, carried.label("variants_count"))
+            .where(AttributeValue.attribute_id == attribute_id)
+            .order_by(AttributeValue.position, AttributeValue.canonical)
+        )
+        if ids is not None:
+            stmt = stmt.where(AttributeValue.id.in_(ids))
+        rows = (await self.session.execute(stmt)).all()
+        aliases: dict[int, list[ValueAliasRead]] = {}
+        if rows:
+            found = await self.session.scalars(
+                select(AttributeValueAlias)
+                .where(AttributeValueAlias.attribute_value_id.in_([v.id for v, _ in rows]))
+                .order_by(AttributeValueAlias.alias_normalized)
+            )
+            for alias in found:
+                aliases.setdefault(alias.attribute_value_id, []).append(
+                    ValueAliasRead.model_validate(alias)
+                )
+        return [
+            ValueRead(
+                id=value.id,
+                attribute_id=value.attribute_id,
+                canonical=value.canonical,
+                position=value.position,
+                labels=value.labels or {},
+                aliases=aliases.get(value.id, []),
+                variants_count=count,
+            )
+            for value, count in rows
+        ]
+
     async def _attribute(self, attribute_id: int) -> Attribute:
         attribute = await self.session.get(Attribute, attribute_id)
         if attribute is None:
@@ -275,4 +506,55 @@ def _link_read(link: CategoryAttribute, attribute: Attribute) -> CategoryAttribu
         position=link.position,
         label_override=link.label_override,
         display_unit=link.display_unit,
+    )
+
+
+def _attribute_rows() -> Select[Any]:
+    """Each attribute with four counts, correlated: a page costs its own rows."""
+
+    def count(column: Any, *where: Any) -> Any:
+        return select(func.count(column)).where(*where).correlate(Attribute).scalar_subquery()
+
+    return select(
+        Attribute,
+        count(CategoryAttribute.category_id, CategoryAttribute.attribute_id == Attribute.id).label(
+            "categories_count"
+        ),
+        count(AttributeValue.id, AttributeValue.attribute_id == Attribute.id).label("values_count"),
+        count(AttributeAlias.id, AttributeAlias.attribute_id == Attribute.id).label(
+            "aliases_count"
+        ),
+        count(
+            func.distinct(VariantAttribute.variant_id),
+            VariantAttribute.attribute_id == Attribute.id,
+        ).label("variants_count"),
+    )
+
+
+def _attribute_search(text: str) -> Any:
+    """The key, the name, or a name a shop gives it."""
+    pattern = f"%{text}%"
+    found = [Attribute.key.ilike(pattern), Attribute.name.ilike(pattern)]
+    try:
+        normalized = normalize_attribute_name(text)
+    except ValueError:
+        normalized = ""
+    if normalized:
+        found.append(
+            Attribute.id.in_(
+                select(AttributeAlias.attribute_id).where(
+                    AttributeAlias.alias_normalized.ilike(f"%{normalized}%")
+                )
+            )
+        )
+    return or_(*found)
+
+
+def _attribute_row(row: Any) -> AttributeRow:
+    return AttributeRow(
+        **AttributeRead.model_validate(row[0]).model_dump(),
+        categories_count=row.categories_count,
+        values_count=row.values_count,
+        aliases_count=row.aliases_count,
+        variants_count=row.variants_count,
     )

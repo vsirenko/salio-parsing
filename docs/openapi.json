@@ -101,6 +101,64 @@
         "title": "AliasRead",
         "type": "object"
       },
+      "AttributeCategoryRead": {
+        "description": "A category an attribute is bound to, and what that category makes of it.",
+        "properties": {
+          "category_id": {
+            "title": "Category Id",
+            "type": "integer"
+          },
+          "category_name": {
+            "title": "Category Name",
+            "type": "string"
+          },
+          "category_slug": {
+            "title": "Category Slug",
+            "type": "string"
+          },
+          "display_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Unit"
+          },
+          "identity_bearing": {
+            "title": "Identity Bearing",
+            "type": "boolean"
+          },
+          "label_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Override"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category_id",
+          "category_name",
+          "category_slug",
+          "identity_bearing",
+          "position",
+          "label_override",
+          "display_unit"
+        ],
+        "title": "AttributeCategoryRead",
+        "type": "object"
+      },
       "AttributeCreate": {
         "additionalProperties": false,
         "properties": {
@@ -109,6 +167,14 @@
             "minLength": 1,
             "title": "Key",
             "type": "string"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Labels",
+            "type": "object"
           },
           "name": {
             "maxLength": 200,
@@ -153,7 +219,8 @@
         "title": "AttributeCreate",
         "type": "object"
       },
-      "AttributeRead": {
+      "AttributeRef": {
+        "description": "The attribute a binding is of, as a table row needs it.",
         "properties": {
           "id": {
             "title": "Id",
@@ -162,6 +229,73 @@
           "key": {
             "title": "Key",
             "type": "string"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Labels",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "unit_dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Dimension"
+          },
+          "value_type": {
+            "title": "Value Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "value_type",
+          "unit_dimension"
+        ],
+        "title": "AttributeRef",
+        "type": "object"
+      },
+      "AttributeRow": {
+        "description": "An attribute with where it is used and how far it is set up.",
+        "properties": {
+          "aliases_count": {
+            "description": "Names shops give it",
+            "title": "Aliases Count",
+            "type": "integer"
+          },
+          "categories_count": {
+            "description": "Categories it is bound to",
+            "title": "Categories Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "What a person reads, by language; falls back to `name`",
+            "title": "Labels",
+            "type": "object"
           },
           "name": {
             "maxLength": 200,
@@ -196,35 +330,80 @@
           },
           "value_type": {
             "$ref": "#/components/schemas/ValueType"
+          },
+          "values_count": {
+            "description": "Canonical values; an enum's only",
+            "title": "Values Count",
+            "type": "integer"
+          },
+          "variants_count": {
+            "description": "Entries that carry a value of it",
+            "title": "Variants Count",
+            "type": "integer"
           }
         },
         "required": [
           "name",
           "value_type",
           "id",
-          "key"
+          "key",
+          "labels",
+          "categories_count",
+          "values_count",
+          "aliases_count",
+          "variants_count"
         ],
-        "title": "AttributeRead",
+        "title": "AttributeRow",
         "type": "object"
       },
-      "AttributeRef": {
-        "description": "The attribute a binding is of, as a table row needs it.",
+      "AttributeUpdate": {
+        "additionalProperties": false,
+        "description": "The name and the labels, always; the unit and the scale only while nothing is stored.\n\nThe key is not here: the readings and the rules name an attribute by it. A stored number\nmeans what its unit says it means — `storage_mb` holds `16384` — and relabelling the\nunit under it would make every stored value a different amount.",
         "properties": {
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "key": {
-            "title": "Key",
-            "type": "string"
+          "labels": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "maximum": 6.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
           },
           "unit_dimension": {
             "anyOf": [
               {
+                "maxLength": 20,
                 "type": "string"
               },
               {
@@ -232,20 +411,9 @@
               }
             ],
             "title": "Unit Dimension"
-          },
-          "value_type": {
-            "title": "Value Type",
-            "type": "string"
           }
         },
-        "required": [
-          "id",
-          "key",
-          "name",
-          "value_type",
-          "unit_dimension"
-        ],
-        "title": "AttributeRef",
+        "title": "AttributeUpdate",
         "type": "object"
       },
       "AuditEntry": {
@@ -3162,7 +3330,7 @@
         "title": "Outcome",
         "type": "string"
       },
-      "Page_AttributeRead_": {
+      "Page_AttributeRow_": {
         "properties": {
           "has_more": {
             "description": "Whether another page exists",
@@ -3172,7 +3340,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AttributeRead"
+              "$ref": "#/components/schemas/AttributeRow"
             },
             "title": "Items",
             "type": "array"
@@ -3210,7 +3378,7 @@
           "offset",
           "has_more"
         ],
-        "title": "Page[AttributeRead]",
+        "title": "Page[AttributeRow]",
         "type": "object"
       },
       "Page_AuditEntry_": {
@@ -6849,6 +7017,14 @@
             "title": "Canonical",
             "type": "string"
           },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Labels",
+            "type": "object"
+          },
           "position": {
             "default": 0,
             "minimum": 0.0,
@@ -6871,7 +7047,16 @@
         "type": "string"
       },
       "ValueRead": {
+        "description": "A canonical value, what shops call it, and how many entries carry it — a value no\nentry carries and no reading produces is one to look at.",
         "properties": {
+          "aliases": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ValueAliasRead"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
           "attribute_id": {
             "title": "Attribute Id",
             "type": "integer"
@@ -6884,8 +7069,21 @@
             "title": "Id",
             "type": "integer"
           },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "What a person reads, by language; falls back to `canonical`",
+            "title": "Labels",
+            "type": "object"
+          },
           "position": {
             "title": "Position",
+            "type": "integer"
+          },
+          "variants_count": {
+            "default": 0,
+            "title": "Variants Count",
             "type": "integer"
           }
         },
@@ -6893,9 +7091,60 @@
           "id",
           "attribute_id",
           "canonical",
-          "position"
+          "position",
+          "labels"
         ],
         "title": "ValueRead",
+        "type": "object"
+      },
+      "ValueResolution": {
+        "description": "What the registry makes of a string, for this attribute.",
+        "properties": {
+          "is_attribute_name": {
+            "description": "The string is a name a shop gives the attribute",
+            "title": "Is Attribute Name",
+            "type": "boolean"
+          },
+          "normalized": {
+            "title": "Normalized",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValueRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The value the string resolves to, if any"
+          },
+          "via": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`canonical` or `alias`: how it resolved",
+            "title": "Via"
+          }
+        },
+        "required": [
+          "query",
+          "normalized",
+          "is_attribute_name",
+          "value",
+          "via"
+        ],
+        "title": "ValueResolution",
         "type": "object"
       },
       "ValueType": {
@@ -6907,6 +7156,40 @@
         ],
         "title": "ValueType",
         "type": "string"
+      },
+      "ValueUpdate": {
+        "additionalProperties": false,
+        "description": "The order and the labels. The canonical string is what the readings produce and the\nmatcher looks up — `wifi`, `Intel Core Ultra 5 226V` — so it is never renamed here; a\nvalue that reads badly gets a label.",
+        "properties": {
+          "labels": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          }
+        },
+        "title": "ValueUpdate",
+        "type": "object"
       },
       "VariantAttributeRead": {
         "properties": {
@@ -7073,6 +7356,14 @@
             "title": "Label",
             "type": "string"
           },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The attribute's label by language, where written",
+            "title": "Labels",
+            "type": "object"
+          },
           "position": {
             "anyOf": [
               {
@@ -7111,6 +7402,14 @@
               }
             ],
             "title": "Value"
+          },
+          "value_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "An enum value's label by language, where written",
+            "title": "Value Labels",
+            "type": "object"
           }
         },
         "required": [
@@ -7657,6 +7956,46 @@
             }
           },
           {
+            "description": "Key, name or a name a shop gives it",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Key, name or a name a shop gives it",
+              "title": "Search"
+            }
+          },
+          {
+            "description": "Only these. Repeat for several",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these. Repeat for several",
+              "title": "Ids"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -7678,6 +8017,28 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, key, name, categories_count, values_count, aliases_count, variants_count.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, key, name, categories_count, values_count, aliases_count, variants_count.",
+              "examples": [
+                "key"
+              ],
+              "title": "Sort"
+            }
           }
         ],
         "responses": {
@@ -7685,7 +8046,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_AttributeRead_"
+                  "$ref": "#/components/schemas/Page_AttributeRow_"
                 }
               }
             },
@@ -7730,7 +8091,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AttributeRead"
+                  "$ref": "#/components/schemas/AttributeRow"
                 }
               }
             },
@@ -7819,6 +8180,132 @@
         ]
       }
     },
+    "/api/admin/attributes/values/{value_id}": {
+      "delete": {
+        "operationId": "remove_value_api_admin_attributes_values__value_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "value_id",
+            "required": true,
+            "schema": {
+              "title": "Value Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Value not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Entries carry it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove a value no entry carries",
+        "tags": [
+          "admin: attributes"
+        ]
+      },
+      "patch": {
+        "description": "The canonical string is not renamed: it is what the readings produce.",
+        "operationId": "update_value_api_admin_attributes_values__value_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "value_id",
+            "required": true,
+            "schema": {
+              "title": "Value Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValueUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValueRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Value not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reorder or relabel a value",
+        "tags": [
+          "admin: attributes"
+        ]
+      }
+    },
     "/api/admin/attributes/values/{value_id}/aliases": {
       "post": {
         "description": "`melns`, `juodas`, `must`, `чёрный` all resolve to one canonical value.",
@@ -7887,6 +8374,65 @@
         ]
       }
     },
+    "/api/admin/attributes/values/{value_id}/aliases/{alias_id}": {
+      "delete": {
+        "operationId": "remove_value_alias_api_admin_attributes_values__value_id__aliases__alias_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "value_id",
+            "required": true,
+            "schema": {
+              "title": "Value Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "alias_id",
+            "required": true,
+            "schema": {
+              "title": "Alias Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such alias on this value"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop reading a word as this value",
+        "tags": [
+          "admin: attributes"
+        ]
+      }
+    },
     "/api/admin/attributes/{attribute_id}": {
       "get": {
         "operationId": "get_attribute_api_admin_attributes__attribute_id__get",
@@ -7906,7 +8452,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AttributeRead"
+                  "$ref": "#/components/schemas/AttributeRow"
                 }
               }
             },
@@ -7939,6 +8485,82 @@
           }
         ],
         "summary": "Get an attribute",
+        "tags": [
+          "admin: attributes"
+        ]
+      },
+      "patch": {
+        "description": "The key is fixed: the readings and the rules name an attribute by it. The unit and the\nscale change only while no entry holds a value, because a stored `16384` means what the\nunit says.",
+        "operationId": "update_attribute_api_admin_attributes__attribute_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attribute_id",
+            "required": true,
+            "schema": {
+              "title": "Attribute Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttributeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttributeRow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Attribute not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Values stored: the unit cannot change"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rename, relabel, or set the unit of an attribute nothing is stored in yet",
         "tags": [
           "admin: attributes"
         ]
@@ -8056,6 +8678,197 @@
           }
         ],
         "summary": "Add an alias",
+        "tags": [
+          "admin: attributes"
+        ]
+      }
+    },
+    "/api/admin/attributes/{attribute_id}/aliases/{alias_id}": {
+      "delete": {
+        "operationId": "remove_alias_api_admin_attributes__attribute_id__aliases__alias_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attribute_id",
+            "required": true,
+            "schema": {
+              "title": "Attribute Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "alias_id",
+            "required": true,
+            "schema": {
+              "title": "Alias Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such alias here"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop reading a name as this attribute",
+        "tags": [
+          "admin: attributes"
+        ]
+      }
+    },
+    "/api/admin/attributes/{attribute_id}/categories": {
+      "get": {
+        "operationId": "list_categories_api_admin_attributes__attribute_id__categories_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attribute_id",
+            "required": true,
+            "schema": {
+              "title": "Attribute Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AttributeCategoryRead"
+                  },
+                  "title": "Response List Categories Api Admin Attributes  Attribute Id  Categories Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Attribute not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The categories it is bound to",
+        "tags": [
+          "admin: attributes"
+        ]
+      }
+    },
+    "/api/admin/attributes/{attribute_id}/resolve": {
+      "get": {
+        "description": "Whether the string is a name a shop gives the attribute, and which value it resolves\nto — by its canonical spelling or an alias — the lookup a reading makes.",
+        "operationId": "resolve_api_admin_attributes__attribute_id__resolve_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attribute_id",
+            "required": true,
+            "schema": {
+              "title": "Attribute Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "As a shop wrote it",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "As a shop wrote it",
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValueResolution"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Attribute not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "What the registry makes of a string, for this attribute",
         "tags": [
           "admin: attributes"
         ]
