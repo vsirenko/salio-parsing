@@ -13,8 +13,10 @@ from app.db.models import (
     AttributeAlias,
     AttributeValue,
     AttributeValueAlias,
+    AttributeValueDismissal,
     Category,
     CategoryAttribute,
+    User,
     VariantAttribute,
 )
 from app.db.query import ordered, paginated_rows
@@ -31,6 +33,8 @@ from app.features.attributes.schemas import (
     CategoryAttributeCreate,
     CategoryAttributeRead,
     CategoryAttributeUpdate,
+    DismissalCreate,
+    DismissalRead,
     ValueAliasRead,
     ValueCreate,
     ValueRead,
@@ -336,6 +340,50 @@ class AttributeService:
 
     # --- what a category makes of an attribute ---
 
+    # --- what a shop writes that is none of the values ---
+
+    async def list_dismissals(self, attribute_id: int) -> list[DismissalRead]:
+        await self._attribute(attribute_id)
+        rows = await self.session.execute(
+            select(AttributeValueDismissal, User.email)
+            .outerjoin(User, User.id == AttributeValueDismissal.dismissed_by)
+            .where(AttributeValueDismissal.attribute_id == attribute_id)
+            .order_by(AttributeValueDismissal.value_normalized)
+        )
+        return [_dismissal_read(row, email) for row, email in rows.all()]
+
+    async def dismiss(
+        self, attribute_id: int, payload: DismissalCreate, *, by: int
+    ) -> DismissalRead:
+        """Mark a word as none of this attribute's values — `melna, pelēka` in a colour
+        field is two colours — so the list of what the registry does not know stops
+        showing it. Marking it again replaces the note."""
+        await self._attribute(attribute_id)
+        audit.set_target("attribute", attribute_id)
+        key = AttributeValueDismissal.key(payload.value)
+        row = await self.session.get(AttributeValueDismissal, (attribute_id, key))
+        if row is None:
+            row = AttributeValueDismissal(attribute_id=attribute_id, value_normalized=key)
+            self.session.add(row)
+        row.note = payload.note
+        row.dismissed_by = by
+        await self.session.flush()
+        await self.session.refresh(row)
+        audit.record_changes(dismissed=key, note=payload.note)
+        email = await self.session.scalar(select(User.email).where(User.id == by))
+        return _dismissal_read(row, email)
+
+    async def undismiss(self, attribute_id: int, value: str) -> None:
+        await self._attribute(attribute_id)
+        audit.set_target("attribute", attribute_id)
+        key = AttributeValueDismissal.key(value)
+        row = await self.session.get(AttributeValueDismissal, (attribute_id, key))
+        if row is None:
+            raise NotFoundError(f"'{key}' is not marked on attribute {attribute_id}")
+        await self.session.delete(row)
+        await self.session.flush()
+        audit.record_changes(undismissed=key)
+
     async def list_for_category(self, category_id: int) -> list[CategoryAttributeRead]:
         await self._category(category_id)
         rows = await self.session.execute(
@@ -557,4 +605,14 @@ def _attribute_row(row: Any) -> AttributeRow:
         values_count=row.values_count,
         aliases_count=row.aliases_count,
         variants_count=row.variants_count,
+    )
+
+
+def _dismissal_read(row: AttributeValueDismissal, email: str | None) -> DismissalRead:
+    return DismissalRead(
+        attribute_id=row.attribute_id,
+        value=row.value_normalized,
+        note=row.note,
+        dismissed_by=email,
+        dismissed_at=row.dismissed_at,
     )

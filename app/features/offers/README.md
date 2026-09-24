@@ -13,6 +13,7 @@ Everything downstream is derived from them and can be thrown away.
 | `POST /api/admin/sources/{source_id}/offers/batch` | submit many, gzipped |
 | `GET /api/admin/offers` | the listings — by shop, entry (`variant_id`), family (`product_id`), condition, `listed`, `match_state`, `queue_reason`, `method`, `availability`, `brand_id`, `category_id`, price range, `search`; sorted by price, first or last seen, shop, title |
 | `GET /api/admin/offers/coverage` | how far a deterministic matcher could get |
+| `GET /api/admin/offers/unresolved-colours` | what shops write for a colour that did not become one, and why |
 | `GET /api/admin/offers/{offer_id}` | one listing |
 | `GET /api/admin/offers/{offer_id}/raw` | every observation of it |
 | `GET /api/admin/offers/{offer_id}/trace` | its path from the shop's bytes to the catalogue: the reading recomputed rule by rule, the match, the entry |
@@ -69,6 +70,17 @@ quick pass has seen. Review asks `match_state=queued&queue_reason=ambiguous`, or
 `method=brand_model` for the placements resting on a model name alone. `search` is a
 fragment of the title or the shop's id, or a whole barcode, compared padded to fourteen
 digits as it is stored — a fragment of a barcode names nothing.
+
+**What the registry does not know is computed, not queued.** `unresolved-colours` takes
+every listing whose current reading has a colour field and no colour, resolves its fields
+again with the category rule's own function (`devices._canonical`) against the registry as
+it is now, and says why each did not become a colour: `unknown` — a word to enter; `pair` —
+known colours whose combination is not a value, which an alias must not paper over;
+`conflict` — fields naming different colours, which the reading rightly refuses and no row
+fixes; `resolves_now` — a reading older than the registry, which a reparse fills. It stores
+nothing and so cannot go stale; the one thing kept is a word marked as none of the colours
+(`attribute_value_dismissals`, in `attributes`). On 24.09.2026 it was 105 listings: `Black`
+at dateks was never a language problem, it sat beside `zils` in a second field.
 
 **Those names are copied onto `offers`, like the price.** Picked out of the observations per
 row, a page sorted by title took 0.4 s over 18660 listings, before counting its total. They

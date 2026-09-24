@@ -7,6 +7,7 @@
     GET  /api/admin/raw-offers/{id}/reading
     POST /api/admin/raw-offers/{id}/renormalize
     GET  /api/admin/offers/coverage        how far a deterministic matcher could get
+    GET  /api/admin/offers/unresolved-colours  what shops write for a colour that did not become one
 
 Ingestion is a POST because there is no fetcher yet. That is the point rather than a
 placeholder: a sample can be loaded by hand and measured before a line of crawling is
@@ -36,6 +37,8 @@ from app.features.offers.schemas import (
     RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
+    UnresolvedReason,
+    UnresolvedReport,
 )
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
@@ -182,6 +185,35 @@ async def list_offers(
         search=search,
     )
     return Page[OfferRead].of(items, total, pagination)
+
+
+@router.get(
+    "/unresolved-colours",
+    response_model=UnresolvedReport,
+    summary="What shops write for a colour that did not become one, and why",
+)
+async def unresolved_colours(
+    service: OfferServiceDep,
+    category_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    shop_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    reason: Annotated[
+        list[UnresolvedReason] | None, Query(description="Repeat for several")
+    ] = None,
+    include_dismissed: Annotated[
+        bool, Query(description="Also the words marked as none of the colours")
+    ] = False,
+) -> UnresolvedReport:
+    """Each value with its reason: `unknown` is a word to enter in the registry,
+    `conflict` fields that name different colours — which the reading rightly refuses,
+    and no alias fixes — and `resolves_now` a reading older than the registry, which a
+    reparse fills. Mark a word that is none of the colours with
+    `POST /api/admin/attributes/{attribute_id}/dismissals`."""
+    return await service.unresolved_colours(
+        category_ids=category_id,
+        shop_ids=shop_id,
+        reasons=[value.value for value in reason or []],
+        include_dismissed=include_dismissed,
+    )
 
 
 @router.get(

@@ -1,5 +1,6 @@
 """Taking in what a shop served, and reading it."""
 
+import re
 from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -18,6 +19,7 @@ from app.db.models import (
     AttributeAlias,
     AttributeValue,
     AttributeValueAlias,
+    AttributeValueDismissal,
     Brand,
     Category,
     CategoryAlias,
@@ -42,7 +44,9 @@ from app.features.brands.normalization import normalize_brand
 from app.features.offers.normalization import (
     Vocabulary,
     barcodes,
+    colours,
     content_hash,
+    devices,
     read,
     version_for,
 )
@@ -69,6 +73,10 @@ from app.features.offers.schemas import (
     TraceQueue,
     TraceReading,
     TraceStep,
+    UnresolvedExample,
+    UnresolvedReason,
+    UnresolvedReport,
+    UnresolvedValue,
 )
 from app.features.prices.service import PriceService
 from app.features.runs.schemas import Kind
@@ -789,6 +797,11 @@ class OfferService:
         """
         if source.category_id is None:
             return Vocabulary()
+        return await self._vocabulary_for(source.category_id)
+
+    async def _vocabulary_for(self, category_id: int) -> Vocabulary:
+        """The same words by category, which is all they depend on."""
+        source = Source(category_id=category_id)
         if source.category_id not in self._vocabularies:
             names = await self.session.scalars(
                 select(CategoryAlias.alias_normalized).where(
@@ -861,6 +874,157 @@ class OfferService:
                 ),
             )
         return self._vocabularies[source.category_id]
+
+    async def unresolved_colours(
+        self,
+        *,
+        category_ids: list[int] | None = None,
+        shop_ids: list[int] | None = None,
+        reasons: list[str] | None = None,
+        include_dismissed: bool = False,
+    ) -> UnresolvedReport:
+        """What shops write in colour fields that did not become a colour, and why.
+
+        Each listing's colour fields are resolved again with the category's rule — the same
+        function, against the registry as it is now — so the reason is the rule's and not a
+        guess about it: a word it does not know, fields that name different colours, or a
+        reading older than the registry.
+        """
+        newest = (
+            select(
+                RawOffer.offer_id,
+                NormalizedOffer.attributes,
+                NormalizedOffer.identity,
+                func.row_number()
+                .over(
+                    partition_by=RawOffer.offer_id,
+                    order_by=(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc()),
+                )
+                .label("rank"),
+            )
+            .join(NormalizedOffer, NormalizedOffer.raw_offer_id == RawOffer.id)
+            .outerjoin(Run, Run.id == RawOffer.run_id)
+            .where(or_(Run.id.is_(None), Run.kind != Kind.QUICK.value))
+            .subquery()
+        )
+        coloured = (
+            select(CategoryAttribute.category_id)
+            .join(Attribute, Attribute.id == CategoryAttribute.attribute_id)
+            .where(Attribute.key == COLOR_KEY)
+        )
+        stmt = (
+            select(
+                Offer.id,
+                Offer.title,
+                Offer.category_id,
+                Shop.name,
+                newest.c.attributes,
+            )
+            .join(newest, (newest.c.offer_id == Offer.id) & (newest.c.rank == 1))
+            .join(Seller, Seller.id == Offer.seller_id)
+            .join(Shop, Shop.id == Seller.shop_id)
+            .where(
+                Offer.category_id.in_(coloured),
+                ~newest.c.identity.has_key(COLOR_KEY),
+            )
+        )
+        if category_ids:
+            stmt = stmt.where(Offer.category_id.in_(category_ids))
+        if shop_ids:
+            stmt = stmt.where(Shop.id.in_(shop_ids))
+
+        colour_id = await self.session.scalar(
+            select(Attribute.id).where(Attribute.key == COLOR_KEY)
+        )
+        dismissed = set(
+            await self.session.scalars(
+                select(AttributeValueDismissal.value_normalized).where(
+                    AttributeValueDismissal.attribute_id == colour_id
+                )
+            )
+        )
+
+        groups: dict[tuple[str, str], dict[str, Any]] = {}
+        listings = 0
+        by_reason: Counter[str] = Counter()
+        for offer_id, title, category_id, shop, attributes in (
+            await self.session.execute(stmt)
+        ).all():
+            vocabulary = await self._vocabulary_for(category_id)
+            fields = [
+                (str(name), str(value).strip())
+                for name, value in (attributes or {}).items()
+                if value is not None
+                and str(value).strip()
+                and vocabulary.attribute_key(str(name)) == COLOR_KEY
+            ]
+            if not fields:
+                continue
+            # The rule's own resolver, kept private there because renaming it would move
+            # every ruleset's fingerprint and recompute every reading for nothing.
+            read = [
+                (name, written, devices._canonical(written, vocabulary)) for name, written in fields
+            ]
+            unknown = [(name, written) for name, written, found in read if found is None]
+            found = {canonical for _, _, canonical in read if canonical}
+            listings += 1
+            if unknown:
+                cases = [
+                    (name, written, *_why_unknown(written, vocabulary)) for name, written in unknown
+                ]
+            elif len(found) > 1:
+                cases = [
+                    (name, written, "conflict", canonical, sorted(found - {canonical}))
+                    for name, written, canonical in read
+                ]
+            else:
+                cases = [
+                    (name, written, "resolves_now", canonical, [])
+                    for name, written, canonical in read
+                ]
+            by_reason[cases[0][2]] += 1
+            for name, written, reason, canonical, others in cases:
+                key = AttributeValueDismissal.key(written)
+                group = groups.setdefault(
+                    (key, reason),
+                    {
+                        "spellings": [],
+                        "resolves_to": canonical,
+                        "conflicts_with": set(),
+                        "offers": set(),
+                        "shops": set(),
+                        "examples": [],
+                    },
+                )
+                if written not in group["spellings"] and len(group["spellings"]) < 5:
+                    group["spellings"].append(written)
+                group["conflicts_with"].update(others)
+                if offer_id not in group["offers"] and len(group["examples"]) < 3:
+                    group["examples"].append(
+                        UnresolvedExample(
+                            offer_id=offer_id, title=title, shop=shop, field=name, written=written
+                        )
+                    )
+                group["offers"].add(offer_id)
+                group["shops"].add(shop)
+
+        values = [
+            UnresolvedValue(
+                value=key,
+                spellings=group["spellings"],
+                reason=UnresolvedReason(reason),
+                resolves_to=group["resolves_to"],
+                conflicts_with=sorted(group["conflicts_with"]),
+                listings=len(group["offers"]),
+                shops=sorted(group["shops"]),
+                examples=group["examples"],
+                dismissed=key in dismissed,
+            )
+            for (key, reason), group in groups.items()
+            if (include_dismissed or key not in dismissed) and (not reasons or reason in reasons)
+        ]
+        values.sort(key=lambda value: (-value.listings, value.value))
+        return UnresolvedReport(listings=listings, by_reason=dict(by_reason), values=values)
 
     async def _shop_slug(self, source: Source) -> str | None:
         """Which shop a channel is into — what selects the rules that are true of the shop."""
@@ -1026,3 +1190,15 @@ def _offer_read(row: Any) -> OfferRead:
         first_seen_at=offer.first_seen_at,
         last_seen_at=offer.last_seen_at,
     )
+
+
+def _why_unknown(written: str, vocabulary: Vocabulary) -> tuple[str, str | None, list[str]]:
+    """A word the registry lacks, or known colours whose combination it lacks. Split the
+    way the colour rule splits a field (`devices._canonical`), or the two would disagree
+    about what is a pair."""
+    parts = [part.strip() for part in re.split(r"[,/]", written) if part.strip()]
+    if len(parts) > 1:
+        named = [colours.resolve(part, vocabulary) for part in parts]
+        if all(named):
+            return "pair", "-".join(named), []
+    return "unknown", None, []

@@ -367,3 +367,59 @@ class OfferTrace(BaseModel):
     history: list[TraceMatch]
     queue: TraceQueue | None
     entry: TraceEntry | None
+
+
+class UnresolvedReason(StrEnum):
+    """Why a listing's colour field left its reading without a colour.
+
+    `unknown`: the registry has no word for what the shop wrote — a row to enter. `pair`: it
+    knows each colour and not the combination. `conflict`:
+    every field resolves, to different colours, and the reading takes none of them, as it
+    should; no alias fixes that. `resolves_now`: the fields agree under the registry as it is
+    today and the stored reading is older — a reparse fills it.
+    """
+
+    UNKNOWN = "unknown"
+    # Two or more colours the registry knows, written as one, whose combination is not a
+    # value: `sudraba, zila`. A two-tone value to add, or a word to mark as none — never
+    # an alias, which would file the product under one of its colours.
+    PAIR = "pair"
+    CONFLICT = "conflict"
+    RESOLVES_NOW = "resolves_now"
+
+
+class UnresolvedExample(BaseModel):
+    offer_id: int
+    title: str | None
+    shop: str
+    field: str
+    written: str
+
+
+class UnresolvedValue(BaseModel):
+    """One thing shops write in a colour field, and why it did not become a colour."""
+
+    value: str = Field(description="Casefolded and trimmed, as it is grouped and marked")
+    spellings: list[str] = Field(description="How shops actually wrote it, a few")
+    reason: UnresolvedReason
+    resolves_to: str | None = Field(description="What it resolves to now, where it does")
+    conflicts_with: list[str] = Field(
+        default_factory=list, description="The other fields' colours, for a conflict"
+    )
+    listings: int
+    shops: list[str]
+    examples: list[UnresolvedExample]
+    dismissed: bool
+
+
+class UnresolvedReport(BaseModel):
+    """The listings with a colour field and no colour in their reading, and why.
+
+    Computed from the current readings with the registry as it is now, so it is never stale
+    and stores nothing; a listing with no colour field at all is not here — that colour is
+    in its title, which is the judge's.
+    """
+
+    listings: int
+    by_reason: dict[str, int]
+    values: list[UnresolvedValue]

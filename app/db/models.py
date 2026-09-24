@@ -483,6 +483,33 @@ class BrandAlias(Base):
     )
 
 
+class AttributeValueDismissal(Base):
+    """A word a shop writes for an attribute that is deliberately not one of its values.
+
+    `melna, pelēka` in a colour field is two colours, and not resolving it is right: a
+    product filed under one of them is filed wrong. Marked so the list of what the registry
+    does not know stops showing it — the one thing about that list worth storing, since
+    everything else on it is computed from the readings as they are.
+    """
+
+    __tablename__ = "attribute_value_dismissals"
+
+    attribute_id: Mapped[int] = mapped_column(
+        ForeignKey("attributes.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Casefolded and trimmed, as the list groups what shops wrote.
+    value_normalized: Mapped[str] = mapped_column(String(200), primary_key=True)
+    note: Mapped[str | None] = mapped_column(String(500))
+    dismissed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    dismissed_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+
+    @staticmethod
+    def key(value: str) -> str:
+        """How a shop's word is grouped and marked. Here rather than in either feature,
+        because the one that marks and the one that lists have to agree on it."""
+        return value.strip().casefold()
+
+
 class ModelAlias(Base):
     """`galaxy s26 5g`, `s26`, `galaxy s26` -> `Galaxy S26`, under Samsung.
 

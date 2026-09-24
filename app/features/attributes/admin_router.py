@@ -15,7 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.api.deps import AttributeServiceDep
+from app.api.deps import AttributeServiceDep, CurrentAdmin
 from app.api.pagination import pagination_params
 from app.features.attributes.schemas import (
     ATTRIBUTE_SORT,
@@ -28,6 +28,8 @@ from app.features.attributes.schemas import (
     CategoryAttributeCreate,
     CategoryAttributeRead,
     CategoryAttributeUpdate,
+    DismissalCreate,
+    DismissalRead,
     ValueAliasRead,
     ValueCreate,
     ValueRead,
@@ -161,6 +163,50 @@ async def add_alias(
 )
 async def remove_alias(attribute_id: int, alias_id: int, service: AttributeServiceDep) -> Response:
     await service.remove_alias(attribute_id, alias_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{attribute_id}/dismissals",
+    response_model=list[DismissalRead],
+    summary="Words marked as none of its values",
+)
+async def list_dismissals(attribute_id: int, service: AttributeServiceDep) -> list[DismissalRead]:
+    return await service.list_dismissals(attribute_id)
+
+
+@router.post(
+    "/{attribute_id}/dismissals",
+    response_model=DismissalRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Mark a shop's word as none of its values",
+    responses={404: {"model": ErrorResponse, "description": "Attribute not found"}},
+)
+async def dismiss(
+    attribute_id: int,
+    payload: DismissalCreate,
+    current: CurrentAdmin,
+    service: AttributeServiceDep,
+) -> DismissalRead:
+    """`melna, pelēka` in a colour field is two colours, and not resolving it is right.
+    Marked, it leaves `GET /api/admin/offers/unresolved-colours`. Marking again replaces
+    the note."""
+    return await service.dismiss(attribute_id, payload, by=current.id)
+
+
+@router.delete(
+    "/{attribute_id}/dismissals",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Unmark a word",
+    responses={404: {"model": ErrorResponse, "description": "Not marked"}},
+)
+async def undismiss(
+    attribute_id: int,
+    service: AttributeServiceDep,
+    value: Annotated[str, Query(min_length=1, max_length=200)],
+) -> Response:
+    """By query, not path: what shops write has slashes in it — `zila / rozā`."""
+    await service.undismiss(attribute_id, value)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

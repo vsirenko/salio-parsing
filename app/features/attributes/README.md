@@ -12,6 +12,7 @@ One canonical registry of attributes, because sources name the same thing a doze
 | `GET /api/admin/attributes/{attribute_id}/resolve` | what the registry makes of a string |
 | `GET · POST /api/admin/attributes/{attribute_id}/aliases` | what the sources call it |
 | `DELETE /api/admin/attributes/{attribute_id}/aliases/{alias_id}` | stop reading a name as it |
+| `GET · POST · DELETE /api/admin/attributes/{attribute_id}/dismissals` | words a shop writes that are deliberately none of its values |
 | `GET · POST /api/admin/attributes/{attribute_id}/values` | canonical values, enums only |
 | `PATCH · DELETE /api/admin/attributes/values/{value_id}` | reorder or relabel a value; remove one nothing carries |
 | `POST /api/admin/attributes/values/{value_id}/aliases` | what the sources call a value |
@@ -37,6 +38,12 @@ calling the unit GB under it would make every stored value a thousand times larg
 is removed only while no entry carries it (409 `value_in_use` otherwise, with the count):
 one that is carried is part of those entries' identity keys, and folding it into another is
 a merge of entries, which is the matcher's to do, not an edit here.
+
+**A word can be marked as none of the values.** `melna, pelēka` in a colour field is two
+colours, and not resolving it is right: a product filed under one of them is filed wrong. A
+dismissal takes it off `GET /api/admin/offers/unresolved-colours`, which computes everything
+else it shows; the word is kept casefolded and trimmed, as that list groups it, and deleted
+by query because what shops write has slashes in it.
 
 **`resolve` answers what a reading would**: whether the string is a name a shop gives the
 attribute, and which value it resolves to, by its canonical spelling or an alias, compared

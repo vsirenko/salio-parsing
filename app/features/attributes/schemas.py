@@ -6,6 +6,7 @@ attribute; whether it carries identity belongs to its pairing with a category.
 """
 
 import re
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -283,3 +284,20 @@ class CategoryAttributeRead(BaseModel):
     position: int
     label_override: str | None
     display_unit: str | None
+
+
+class DismissalCreate(BaseModel):
+    """A word a shop writes for this attribute that is deliberately none of its values."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: str = Field(min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class DismissalRead(BaseModel):
+    attribute_id: int
+    value: str
+    note: str | None
+    dismissed_by: str | None
+    dismissed_at: datetime

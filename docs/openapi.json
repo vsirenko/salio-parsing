@@ -2243,6 +2243,83 @@
         "title": "Decode",
         "type": "string"
       },
+      "DismissalCreate": {
+        "additionalProperties": false,
+        "description": "A word a shop writes for this attribute that is deliberately none of its values.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "value": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "DismissalCreate",
+        "type": "object"
+      },
+      "DismissalRead": {
+        "properties": {
+          "attribute_id": {
+            "title": "Attribute Id",
+            "type": "integer"
+          },
+          "dismissed_at": {
+            "format": "date-time",
+            "title": "Dismissed At",
+            "type": "string"
+          },
+          "dismissed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dismissed By"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attribute_id",
+          "value",
+          "note",
+          "dismissed_by",
+          "dismissed_at"
+        ],
+        "title": "DismissalRead",
+        "type": "object"
+      },
       "DoubtKept": {
         "description": "A doubted match a person looked at and left where it was.",
         "properties": {
@@ -8075,6 +8152,162 @@
         "title": "Trust",
         "type": "string"
       },
+      "UnresolvedExample": {
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "offer_id": {
+            "title": "Offer Id",
+            "type": "integer"
+          },
+          "shop": {
+            "title": "Shop",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "written": {
+            "title": "Written",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offer_id",
+          "title",
+          "shop",
+          "field",
+          "written"
+        ],
+        "title": "UnresolvedExample",
+        "type": "object"
+      },
+      "UnresolvedReason": {
+        "description": "Why a listing's colour field left its reading without a colour.\n\n`unknown`: the registry has no word for what the shop wrote — a row to enter. `pair`: it\nknows each colour and not the combination. `conflict`:\nevery field resolves, to different colours, and the reading takes none of them, as it\nshould; no alias fixes that. `resolves_now`: the fields agree under the registry as it is\ntoday and the stored reading is older — a reparse fills it.",
+        "enum": [
+          "unknown",
+          "pair",
+          "conflict",
+          "resolves_now"
+        ],
+        "title": "UnresolvedReason",
+        "type": "string"
+      },
+      "UnresolvedReport": {
+        "description": "The listings with a colour field and no colour in their reading, and why.\n\nComputed from the current readings with the registry as it is now, so it is never stale\nand stores nothing; a listing with no colour field at all is not here — that colour is\nin its title, which is the judge's.",
+        "properties": {
+          "by_reason": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Reason",
+            "type": "object"
+          },
+          "listings": {
+            "title": "Listings",
+            "type": "integer"
+          },
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvedValue"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "listings",
+          "by_reason",
+          "values"
+        ],
+        "title": "UnresolvedReport",
+        "type": "object"
+      },
+      "UnresolvedValue": {
+        "description": "One thing shops write in a colour field, and why it did not become a colour.",
+        "properties": {
+          "conflicts_with": {
+            "description": "The other fields' colours, for a conflict",
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflicts With",
+            "type": "array"
+          },
+          "dismissed": {
+            "title": "Dismissed",
+            "type": "boolean"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvedExample"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "listings": {
+            "title": "Listings",
+            "type": "integer"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/UnresolvedReason"
+          },
+          "resolves_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What it resolves to now, where it does",
+            "title": "Resolves To"
+          },
+          "shops": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shops",
+            "type": "array"
+          },
+          "spellings": {
+            "description": "How shops actually wrote it, a few",
+            "items": {
+              "type": "string"
+            },
+            "title": "Spellings",
+            "type": "array"
+          },
+          "value": {
+            "description": "Casefolded and trimmed, as it is grouped and marked",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "spellings",
+          "reason",
+          "resolves_to",
+          "listings",
+          "shops",
+          "examples",
+          "dismissed"
+        ],
+        "title": "UnresolvedValue",
+        "type": "object"
+      },
       "UsageDay": {
         "properties": {
           "asked": {
@@ -10379,6 +10612,183 @@
           }
         ],
         "summary": "The categories it is bound to",
+        "tags": [
+          "admin: attributes"
+        ]
+      }
+    },
+    "/api/admin/attributes/{attribute_id}/dismissals": {
+      "delete": {
+        "description": "By query, not path: what shops write has slashes in it — `zila / rozā`.",
+        "operationId": "undismiss_api_admin_attributes__attribute_id__dismissals_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attribute_id",
+            "required": true,
+            "schema": {
+              "title": "Attribute Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Value",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not marked"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unmark a word",
+        "tags": [
+          "admin: attributes"
+        ]
+      },
+      "get": {
+        "operationId": "list_dismissals_api_admin_attributes__attribute_id__dismissals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attribute_id",
+            "required": true,
+            "schema": {
+              "title": "Attribute Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DismissalRead"
+                  },
+                  "title": "Response List Dismissals Api Admin Attributes  Attribute Id  Dismissals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Words marked as none of its values",
+        "tags": [
+          "admin: attributes"
+        ]
+      },
+      "post": {
+        "description": "`melna, pelēka` in a colour field is two colours, and not resolving it is right.\nMarked, it leaves `GET /api/admin/offers/unresolved-colours`. Marking again replaces\nthe note.",
+        "operationId": "dismiss_api_admin_attributes__attribute_id__dismissals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attribute_id",
+            "required": true,
+            "schema": {
+              "title": "Attribute Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DismissalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Attribute not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark a shop's word as none of its values",
         "tags": [
           "admin: attributes"
         ]
@@ -15453,6 +15863,120 @@
           }
         ],
         "summary": "How far determinism gets",
+        "tags": [
+          "admin: offers"
+        ]
+      }
+    },
+    "/api/admin/offers/unresolved-colours": {
+      "get": {
+        "description": "Each value with its reason: `unknown` is a word to enter in the registry,\n`conflict` fields that name different colours — which the reading rightly refuses,\nand no alias fixes — and `resolves_now` a reading older than the registry, which a\nreparse fills. Mark a word that is none of the colours with\n`POST /api/admin/attributes/{attribute_id}/dismissals`.",
+        "operationId": "unresolved_colours_api_admin_offers_unresolved_colours_get",
+        "parameters": [
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Category Id"
+            }
+          },
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "shop_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Shop Id"
+            }
+          },
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/UnresolvedReason"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Reason"
+            }
+          },
+          {
+            "description": "Also the words marked as none of the colours",
+            "in": "query",
+            "name": "include_dismissed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also the words marked as none of the colours",
+              "title": "Include Dismissed",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnresolvedReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "What shops write for a colour that did not become one, and why",
         "tags": [
           "admin: offers"
         ]
