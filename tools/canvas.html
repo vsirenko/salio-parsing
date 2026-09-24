@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline canvas</title>
+<style>
+:root { color-scheme: light dark;
+  --bg:#f7f6f3; --fg:#1b1b1b; --muted:#6c6a66; --line:#dcd8d0; --card:#fff;
+  --accent:#2457d6; --ok:#1b7f3b; --warn:#b26a00; --bad:#b3261e; --soft:#eef2fd; }
+@media (prefers-color-scheme: dark) { :root {
+  --bg:#141518; --fg:#e7e5e1; --muted:#9a978f; --line:#2d3036; --card:#1c1e22;
+  --accent:#7aa2f7; --ok:#6cc583; --warn:#e0a44d; --bad:#f07b72; --soft:#1f2a44; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+header { padding:18px 24px 10px; border-bottom:1px solid var(--line); }
+h1 { font-size:18px; margin:0 0 4px; }
+.sub { color:var(--muted); font-size:13px; }
+main { padding:16px 24px 60px; }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 0; }
+.tabs button, .chip { font:inherit; font-size:13px; padding:5px 12px; border-radius:20px;
+  border:1px solid var(--line); background:var(--card); color:var(--muted); cursor:pointer; }
+.tabs button.on { color:var(--fg); border-color:var(--accent); font-weight:600; }
+section { margin:22px 0; }
+section > h2 { font-size:15px; margin:0 0 8px; }
+.panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+.canvas { overflow-x:auto; }
+svg text { fill:var(--fg); font-family:inherit; }
+.node rect { fill:var(--card); stroke:var(--line); stroke-width:1.2; }
+.node.hot rect { stroke:var(--accent); stroke-width:2; }
+.node .count { font-size:20px; font-weight:650; }
+.node .label { font-size:12px; fill:var(--muted); }
+.node .part { font-size:11px; fill:var(--muted); }
+.edge { stroke:var(--muted); stroke-width:1.4; fill:none; }
+.edge-label { font-size:11px; fill:var(--muted); }
+.drop { font-size:11px; fill:var(--bad); }
+table { border-collapse:collapse; width:100%; font-size:13px; }
+th, td { text-align:right; padding:5px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align:left; }
+th { color:var(--muted); font-weight:500; }
+tr.pick { cursor:pointer; } tr.pick:hover td { background:var(--soft); }
+tr.on td { background:var(--soft); font-weight:600; }
+.bar { display:inline-block; height:6px; border-radius:3px; background:var(--ok); vertical-align:middle; }
+.ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); } .muted { color:var(--muted); }
+.trace-bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+select, input { font:inherit; padding:6px 9px; border-radius:8px; border:1px solid var(--line);
+  background:var(--card); color:var(--fg); }
+.flow { display:flex; flex-direction:column; align-items:stretch; gap:0; max-width:980px; }
+.step { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.step h3 { font-size:13px; margin:0 0 4px; display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.step .tag { font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid var(--line); color:var(--muted); font-weight:500; }
+.step .why { color:var(--muted); font-size:12px; margin:2px 0 6px; }
+.step.quiet { opacity:.55; padding:5px 12px; }
+.arrow { text-align:center; color:var(--muted); line-height:1; padding:3px 0; font-size:15px; }
+.kv { display:grid; grid-template-columns:max-content 1fr; gap:2px 12px; font-size:12.5px; }
+.kv div:nth-child(odd) { color:var(--muted); }
+.change { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+.change .was { color:var(--bad); text-decoration:line-through; }
+.change .now { color:var(--ok); }
+pre { margin:0; white-space:pre-wrap; word-break:break-word; font-size:11.5px; }
+details summary { cursor:pointer; color:var(--muted); font-size:12px; }
+</style></head>
+<body>
+<header>
+  <h1>Pipeline canvas</h1>
+  <div class="sub" id="sub"></div>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main>
+  <section><h2 id="canvas-title">Pipeline</h2><div class="panel canvas" id="canvas"></div></section>
+  <section><h2>Channels <span class="muted" style="font-weight:400;font-size:12px">— click one to draw its own path</span></h2>
+    <div class="panel" style="overflow-x:auto"><table id="sources"></table></div></section>
+  <section><h2>One listing, step by step</h2>
+    <div class="panel">
+      <div class="trace-bar">
+        <select id="trace-pick"></select>
+        <label class="muted"><input type="checkbox" id="show-quiet"> show rules that changed nothing</label>
+      </div>
+      <div class="flow" id="trace"></div>
+    </div></section>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById("data").textContent);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = (n, d) => d ? Math.round(100 * n / d) + "%" : "—";
+let TAB = "all", SOURCE = null;
+
+// --- header ---
+const S = D.scheduler;
+const scheduled = S.channels.filter(c => c.cron_full || c.cron_quick).length;
+document.getElementById("sub").innerHTML =
+  `Scheduler <b class="${S.alive ? "ok" : "bad"}">${S.alive ? "alive" : "not ticking"}</b>` +
+  ` · last tick ${esc(S.ticked_at || "never")} · ${S.running.length} running · ${S.due.length} due` +
+  ` · <b class="${scheduled ? "" : "warn"}">${scheduled} of ${S.channels.length} channels scheduled</b>` +
+  ` · generated ${esc(D.generated_at)}`;
+
+function tabs() {
+  const keys = Object.keys(D.pipeline);
+  document.getElementById("tabs").innerHTML = keys.map(k =>
+    `<button class="${k === TAB && !SOURCE ? "on" : ""}" data-k="${esc(k)}">${esc(k === "all" ? "Everything" : k)}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { TAB = b.dataset.k; SOURCE = null; draw(); });
+}
+
+// --- the canvas ---
+const NODES = [
+  ["scheduler", 0, 1], ["channels", 1, 1], ["collected", 2, 1], ["listed", 3, 1],
+  ["read", 4, 1], ["placed", 5, 0], ["queued", 5, 2], ["catalogue", 6, 0],
+];
+function canvas(p) {
+  const W = 190, H = 118, GX = 60, GY = 34, X0 = 10, Y0 = 10;
+  const stage = Object.fromEntries(p.stages.map(s => [s.key, s]));
+  stage.scheduler = { key: "scheduler", label: "Scheduler", count: scheduled,
+    parts: { alive: S.alive ? 1 : 0, running: S.running.length, due: S.due.length, of: S.channels.length } };
+  const pos = {};
+  NODES.forEach(([k, col, row]) => pos[k] = { x: X0 + col * (W + GX), y: Y0 + row * (H + GY) / 1.4 + (row === 1 ? 0 : 0) });
+  pos.placed.y = Y0; pos.queued.y = Y0 + 2 * (H + GY) / 1.4; pos.catalogue.y = Y0;
+  const edges = [{ source: "scheduler", target: "channels", count: stage.channels.count }, ...p.edges];
+  const width = X0 * 2 + 7 * W + 6 * GX, height = Y0 * 2 + 2 * (H + GY) / 1.4 + H;
+  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+  svg += `<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--muted)"/></marker></defs>`;
+  for (const e of edges) {
+    const a = pos[e.source], b = pos[e.target]; if (!a || !b) continue;
+    const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2, mx = (x1 + x2) / 2;
+    svg += `<path class="edge" marker-end="url(#ar)" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2 - 2},${y2}"/>`;
+    // Listings pass every edge but the last: placed listings sit several to an entry, so
+    // that one says how many entries they are on rather than how many were lost.
+    const onEntries = e.source === "placed" && e.target === "catalogue";
+    svg += `<text class="edge-label" x="${mx}" y="${(y1 + y2) / 2 - 5}" text-anchor="middle">${onEntries ? `on ${e.count} entries` : e.count}</text>`;
+    const from = stage[e.source];
+    if (!onEntries && from && e.source !== "scheduler" && e.source !== "read" && from.count > e.count)
+      svg += `<text class="drop" x="${mx}" y="${(y1 + y2) / 2 + 12}" text-anchor="middle">−${from.count - e.count}</text>`;
+  }
+  for (const [k] of NODES) {
+    const s = stage[k], { x, y } = pos[k]; if (!s) continue;
+    const parts = Object.entries(s.parts || {}).slice(0, 4);
+    svg += `<g class="node ${k === "queued" && s.count ? "hot" : ""}"><rect x="${x}" y="${y}" width="${W}" height="${H}" rx="10"/>`;
+    svg += `<text class="label" x="${x + 12}" y="${y + 18}">${esc(s.label)}</text>`;
+    svg += `<text class="count" x="${x + 12}" y="${y + 43}">${s.count}</text>`;
+    parts.forEach(([pk, pv], i) => svg += `<text class="part" x="${x + 12}" y="${y + 62 + i * 14}">${esc(pk)}: ${pv}</text>`);
+    svg += `</g>`;
+  }
+  return svg + `</svg>`;
+}
+
+// --- the channels table ---
+function sources(p) {
+  const rows = p.sources.map(f => {
+    const share = f.listed ? f.placed / f.listed : 0;
+    const status = f.last_run_status === "ok" ? "ok" : f.last_run_status ? "bad" : "muted";
+    return `<tr class="pick ${SOURCE === f.source ? "on" : ""}" data-s="${esc(f.source)}">
+      <td>${esc(f.shop)}</td><td>${esc(f.source)}</td>
+      <td class="${f.scheduled ? "ok" : "warn"}">${f.scheduled ? "yes" : "no"}</td>
+      <td class="${status}">${esc(f.last_run_status || "never")}</td>
+      <td>${f.collected}</td><td>${f.listed}</td><td class="muted">${f.delisted}</td>
+      <td>${f.with_model}</td><td>${f.with_gtin}</td><td>${f.all_axes}</td>
+      <td>${f.placed}</td><td class="${f.queued ? "warn" : "muted"}">${f.queued}</td>
+      <td><span class="bar" style="width:${Math.round(share * 60)}px"></span> ${pct(f.placed, f.listed)}</td></tr>`;
+  }).join("");
+  document.getElementById("sources").innerHTML = `<thead><tr><th>Shop</th><th>Channel</th><th>Scheduled</th>
+    <th>Last run</th><th>Collected</th><th>Listed</th><th>Delisted</th><th>Model</th><th>Barcode</th>
+    <th>All axes</th><th>Placed</th><th>Queued</th><th>Share</th></tr></thead><tbody>${rows}</tbody>`;
+  document.querySelectorAll("#sources tr.pick").forEach(tr => tr.onclick = () => {
+    SOURCE = SOURCE === tr.dataset.s ? null : tr.dataset.s; draw(); });
+}
+
+function draw() {
+  tabs();
+  const base = D.pipeline[TAB];
+  const p = SOURCE ? D.by_source[SOURCE] : base;
+  document.getElementById("canvas-title").textContent = SOURCE ? `Pipeline — ${SOURCE}` : `Pipeline — ${TAB === "all" ? "everything" : TAB}`;
+  document.getElementById("canvas").innerHTML = canvas(p);
+  sources(base);
+  pickList();
+}
+
+// --- one listing ---
+function pickList() {
+  const pick = document.getElementById("trace-pick");
+  const want = Object.values(D.traces).filter(t =>
+    (TAB === "all" || t.category === TAB) && (!SOURCE || t.source === SOURCE));
+  const label = t => `${t.queue ? "⏳ " + t.queue.reason : "✓ " + (t.match ? t.match.method : "")} · ${t.shop} · ${(t.now && t.now.fields.title || "").slice(0, 70)}`;
+  want.sort((a, b) => (!!b.queue - !!a.queue) || a.shop.localeCompare(b.shop));
+  const kept = pick.value;
+  pick.innerHTML = want.map(t => `<option value="${t.offer_id}">${esc(label(t))}</option>`).join("");
+  pick.value = want.some(t => String(t.offer_id) === kept) ? kept : want.length ? String(want[0].offer_id) : "";
+  trace();
+}
+
+function kv(obj) {
+  return `<div class="kv">${Object.entries(obj).filter(([, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => `<div>${esc(k)}</div><div>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</div>`).join("")}</div>`;
+}
+function change(ch) {
+  return Object.entries(ch).map(([k, [was, now]]) => {
+    const show = v => typeof v === "object" && v !== null ? JSON.stringify(v).slice(0, 160) : v;
+    return `<div class="change"><b>${esc(k)}</b> ${was === null || was === undefined ? "" : `<span class="was">${esc(show(was))}</span> → `}<span class="now">${esc(show(now))}</span></div>`;
+  }).join("");
+}
+const arrow = () => `<div class="arrow">↓</div>`;
+
+function trace() {
+  const t = D.traces[document.getElementById("trace-pick").value];
+  const box = document.getElementById("trace");
+  if (!t) { box.innerHTML = `<div class="muted">No listing traced for this view.</div>`; return; }
+  const quiet = document.getElementById("show-quiet").checked;
+  const o = t.observation;
+  let html = `<div class="step"><h3>Listing <span class="tag">${esc(t.shop)}</span><span class="tag">${esc(t.source)}</span><span class="tag">${esc(t.category)}</span></h3>
+    ${kv({ offer: t.offer_id, price: t.price && `${t.price} ${t.currency_code}`, availability: t.availability, url: t.url })}</div>`;
+  if (o) html += arrow() + `<div class="step"><h3>What the shop served <span class="tag">run ${esc(o.run_id)} · ${esc(o.run_kind)}</span><span class="tag">${esc(o.fetched_at)}</span></h3>
+    <details><summary>the channel's fields (${Object.keys(o.payload).length})</summary><pre>${esc(JSON.stringify(o.payload, null, 1))}</pre></details></div>`;
+  let round = 0;
+  for (const s of t.steps) {
+    const changed = Object.keys(s.changed).length;
+    if (!changed && !quiet) continue;
+    if (s.round !== round) { round = s.round; if (round === 2) html += arrow() + `<div class="muted" style="font-size:12px;padding:2px 12px">second round: the brand's layers and below, now that the brand is known</div>`; }
+    html += arrow() + `<div class="step ${changed ? "" : "quiet"}"><h3>${esc(s.rule)} <span class="tag">${esc(s.layer)}</span></h3>
+      ${changed ? `<div class="why">${esc(s.why)}</div>${change(s.changed)}` : ""}</div>`;
+  }
+  if (t.now) {
+    const f = t.now.fields;
+    html += arrow() + `<div class="step"><h3>The reading <span class="tag">${esc(t.now.ruleset_version)}</span>${t.stale ? `<span class="tag bad">stored one is stale</span>` : `<span class="tag ok">stored = now</span>`}</h3>
+      ${kv({ brand: f.brand_raw, model: f.model, gtin: f.gtin, mpn: f.mpn, identity: f.identity, price: f.price, availability: f.availability })}</div>`;
+  }
+  if (t.match) html += arrow() + `<div class="step"><h3>Matched <span class="tag ok">${esc(t.match.method)}</span><span class="tag">confidence ${esc(t.match.confidence)}</span><span class="tag">by ${esc(t.match.decided_by)}</span></h3>
+      ${kv({ evidence: t.match.evidence, decided_at: t.match.decided_at })}
+      ${t.history.length ? `<details><summary>${t.history.length} earlier decision(s)</summary><pre>${esc(JSON.stringify(t.history, null, 1))}</pre></details>` : ""}</div>`;
+  if (t.queue) html += arrow() + `<div class="step"><h3>Queued <span class="tag warn">${esc(t.queue.reason)}</span><span class="tag">${t.queue.attempts} attempt(s)</span></h3>
+      ${t.queue.candidates.length ? `<details><summary>${t.queue.candidates.length} candidate(s)</summary><pre>${esc(JSON.stringify(t.queue.candidates, null, 1))}</pre></details>` : `<div class="muted">no candidates</div>`}</div>`;
+  if (t.entry) html += arrow() + `<div class="step"><h3>Catalogue entry <span class="tag">v${t.entry.variant_id}</span><span class="tag">${esc(t.entry.product_title)}</span></h3>
+      ${kv({ title: t.entry.title, model: t.entry.model, axes: t.entry.axes, "listings by shop": t.entry.listings_by_shop })}</div>`;
+  box.innerHTML = html;
+}
+document.getElementById("trace-pick").onchange = trace;
+document.getElementById("show-quiet").onchange = trace;
+draw();
+</script>
+</body></html>
