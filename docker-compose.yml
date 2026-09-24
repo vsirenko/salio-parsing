@@ -36,8 +36,14 @@ services:
     environment:
       # Inside the compose network the database is reachable by service name.
       DATABASE_URL: postgresql+asyncpg://app:app@db:5432/app
+      # A segfault in native code (uvloop, asyncpg, ssl) otherwise leaves only exit code
+      # 139 and no line in the log. With this Python prints the stack it died in.
+      PYTHONFAULTHANDLER: "1"
     ports:
       - "8080:8000"
+    # It went down on 24.09.2026 with a segfault nobody could reproduce, and stayed down:
+    # the panel was dead until someone noticed. Brought back instead, like the scheduler.
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -57,6 +63,7 @@ services:
       # through the host port.
       API_BASE_URL: http://api:8000
       SNAPSHOT_DIR: /snapshots
+      PYTHONFAULTHANDLER: "1"
     # The bytes a shop served, kept so a parser can be fixed against the page that broke
     # it. On a volume because a container's own disk goes away with it, and losing them
     # turns every parser fix back into a crawl.
