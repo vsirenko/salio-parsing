@@ -12,7 +12,12 @@ made names the right model.
 
 | | |
 |---|---|
-| `GET /api/admin/judge/verdicts` | every answer bought, with what it was asked, filterable by `kind` |
+| `GET /api/admin/judge/config` | whether a key is configured, the model, the two thresholds |
+| `GET /api/admin/judge/verdicts` | every answer, named — by `kind`, `outcome`, `no_match`, confidence range, `search`, dates, `forgotten`; `?sort=` |
+| `GET · DELETE /api/admin/judge/verdicts/{verdict_id}` | one answer; forget it so the next pass asks again |
+| `POST /api/admin/judge/verdicts/{verdict_id}/review` | a person's word: right or wrong |
+| `GET /api/admin/judge/calibration` | answers bucketed by the number the threshold is on, with those words |
+| `GET /api/admin/judge/usage` | per day and kind: bought, from the store, tokens |
 | `GET /api/admin/judge/summary` | what it cost over the last day, week and all time |
 
 Running the judge is deliberately **not** here. For brands that is
@@ -119,6 +124,37 @@ recorded as one rather than filed under the nearest value.
 **A verdict is an input to matching, never a match.** The matcher reads the verdict store
 and cannot reach the network through it, so running the ladder stays offline, deterministic
 and as fast as its indexes. Asking is a separate pass an admin starts.
+
+**An answer is shown the way a person reads it.** `options` carry a `label` — the brand's
+name, the entry's title, the colour — beside the slug they were sent as, and the
+`description` the model was told. That description is computed from the catalogue of the
+day it was asked, so it is kept with the answer (`criteria`); answers bought before it was
+kept have one only where it never changes, the model check's four and "none of these".
+
+**`outcome` is what policy made of the answer**, from the answer and the thresholds alone:
+`accepted`, `below_threshold` (recorded, not acted on), `brand_unknown` (a brand question
+answered "none of these" — acted on at any confidence, it files the listing as a brand
+nobody has) or `no_match` for the other questions, and `doubt` or `confirmed` for a model
+check. Whether a listing was then placed is on `listings`, which are the listings the
+question was about found the way it was asked — by title, and by the shop's brand string
+where the question names one — with where each stands now. One question can be about
+several: two shops wrote the same title and it was asked once. This reads `offers`; the
+judge still knows nothing about them when it answers.
+
+**Forgetting keeps the row.** `DELETE` marks `forgotten_at`: the store stops answering with
+it, so the next pass asks again — after the options were described differently, say — and
+the one live answer per question is a partial unique index. It was paid for, so it stays in
+the usage and the summary. A listing it placed stays placed; that match is its own record.
+
+**A review is what a threshold is measured against.** One per answer, the latest standing.
+`calibration` buckets answers by the number the threshold compares — `confidence` for a
+choice, the probability of `same` for a model check, since a check sure of a sibling has
+high confidence and no `same` — and counts the reviews in each.
+
+**What a pass would cost** is `GET /api/admin/matching/judge/pending`, on matching's side
+because the questions are built there: every listing each pass would consider with no
+limit, the distinct questions among them the store cannot answer, and their tokens at the
+kind's average so far.
 
 **What it cost is counted from two places.** `asked` and the tokens are the verdicts
 bought — one stored row each, so they are exact. `cached` is the questions answered from the

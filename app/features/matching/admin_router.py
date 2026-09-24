@@ -9,6 +9,7 @@ GET    /api/admin/match-queue           what could not be placed, and why
 GET    /api/admin/match-queue/summary   the breakdown that says what to build next
 GET    /api/admin/match-queue/{id}      one row
 POST · DELETE /api/admin/match-queue/{id}/snooze  set aside until, or bring back
+GET    /api/admin/matching/judge/pending  what each judge pass would pay for now
 POST   /api/admin/matching/judge        ask the judge about the brand choices, then retry
 POST   /api/admin/matching/judge/colours  buy the colour a title carries and no rule reads
 POST   /api/admin/matching/judge/matches  ask whether each rule's match names the right model
@@ -24,7 +25,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import MatchingServiceDep
 from app.api.pagination import pagination_params
-from app.features.judge.schemas import JudgeReport
+from app.features.judge.schemas import JudgeReport, PendingKind
 from app.features.matching.schemas import (
     DOUBT_SORT,
     QUEUE_SORT,
@@ -290,6 +291,18 @@ async def keep_doubted(offer_id: int, service: MatchingServiceDep) -> DoubtKept:
     superseded and stays in the history, and a person's decision survives the next pass.
     It leaves `GET /doubts`, which is only about what a rule decided."""
     return await service.keep_doubted(offer_id)
+
+
+@router.get(
+    "/judge/pending",
+    response_model=list[PendingKind],
+    summary="What each judge pass would pay for now",
+)
+async def judge_pending(service: MatchingServiceDep) -> list[PendingKind]:
+    """Per kind: the listings a pass would consider with no limit, the distinct questions
+    among them the store cannot answer, and their tokens at this kind's average. Asks
+    nothing and writes nothing."""
+    return await service.judge_pending()
 
 
 @router.post(

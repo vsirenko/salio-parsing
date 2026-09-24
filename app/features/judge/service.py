@@ -8,11 +8,11 @@ through the matcher.
 
 import asyncio
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from typesafe_sdk import (
@@ -23,8 +23,9 @@ from typesafe_sdk import (
     TypeSafeError,
 )
 
+from app.core import audit
 from app.core.config import settings
-from app.core.exceptions import ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.db.models import (
     Attribute,
     AttributeValue,
@@ -33,26 +34,46 @@ from app.db.models import (
     Brand,
     Category,
     CategoryAttribute,
+    JudgeReview,
     JudgeVerdict,
+    MatchQueue,
+    Offer,
+    OfferMatch,
+    Seller,
+    Shop,
+    User,
     Variant,
     VariantAttribute,
 )
-from app.db.query import paginated
+from app.db.query import ordered, paginated
 from app.features.judge import questions
 from app.features.judge.questions import Candidate, Colour, Option, Question
 from app.features.judge.schemas import (
     BrandRequest,
     BrandVerdict,
+    Calibration,
+    CalibrationBucket,
     ColourRequest,
     ColourVerdict,
+    JudgeConfig,
     JudgeReport,
     JudgeSummary,
     JudgeWindow,
+    Kind,
     MatchCheckRequest,
     MatchCheckVerdict,
+    Named,
+    Outcome,
+    PendingKind,
+    ReviewCreate,
+    UsageDay,
     VariantRequest,
     VariantVerdict,
+    VerdictAnswer,
+    VerdictListing,
+    VerdictOption,
     VerdictRead,
+    VerdictReview,
 )
 from app.schemas.pagination import Pagination
 
@@ -454,6 +475,7 @@ class JudgeService:
             question_hash=question.hash,
             state=question.state,
             options=list(question.criteria),
+            criteria=question.criteria,
             answer=answer.model_dump(mode="json"),
             choice=answer.choice,
             confidence=Decimal(str(answer.confidence)).quantize(Decimal("0.0001")),
@@ -484,15 +506,413 @@ class JudgeService:
     # --- reading ---
 
     async def verdicts(
-        self, pagination: Pagination, *, kind: str | None = None
+        self,
+        pagination: Pagination,
+        *,
+        kinds: list[str] | None = None,
+        outcomes: list[str] | None = None,
+        no_match: bool | None = None,
+        confidence_min: Decimal | None = None,
+        confidence_max: Decimal | None = None,
+        search: str | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        forgotten: bool | None = None,
     ) -> tuple[list[VerdictRead], int]:
         stmt = select(JudgeVerdict)
+        if kinds:
+            stmt = stmt.where(JudgeVerdict.kind.in_(kinds))
+        if outcomes:
+            stmt = stmt.where(_outcome().in_(outcomes))
+        if no_match is not None:
+            chose_none = JudgeVerdict.choice == questions.NO_MATCH
+            stmt = stmt.where(chose_none if no_match else ~chose_none)
+        if confidence_min is not None:
+            stmt = stmt.where(JudgeVerdict.confidence >= confidence_min)
+        if confidence_max is not None:
+            stmt = stmt.where(JudgeVerdict.confidence <= confidence_max)
+        if search and search.strip():
+            stmt = stmt.where(
+                JudgeVerdict.state["listing_title"].astext.ilike(f"%{search.strip()}%")
+            )
+        if created_from is not None:
+            stmt = stmt.where(JudgeVerdict.created_at >= created_from)
+        if created_to is not None:
+            stmt = stmt.where(JudgeVerdict.created_at < created_to)
+        if forgotten is not None:
+            stmt = stmt.where(
+                JudgeVerdict.forgotten_at.is_not(None)
+                if forgotten
+                else JudgeVerdict.forgotten_at.is_(None)
+            )
+        stmt = ordered(
+            stmt,
+            pagination,
+            {
+                "id": JudgeVerdict.id,
+                "created_at": JudgeVerdict.created_at,
+                "confidence": JudgeVerdict.confidence,
+                "tokens": JudgeVerdict.input_tokens + JudgeVerdict.output_tokens,
+            },
+            JudgeVerdict.id,
+        )
+        rows, total = await paginated(self.session, stmt, pagination)
+        return await self._verdict_reads(list(rows)), total
+
+    async def verdict(self, verdict_id: int) -> VerdictRead:
+        stored = await self.session.get(JudgeVerdict, verdict_id)
+        if stored is None:
+            raise NotFoundError(f"Verdict {verdict_id} not found")
+        [read] = await self._verdict_reads([stored])
+        return read
+
+    async def forget(self, verdict_id: int) -> None:
+        """Stop answering with this, so the next pass asks again — after the options it
+        was asked about were described differently, say. Kept, not deleted: it was paid
+        for, and the usage it counts in is money that was spent."""
+        stored = await self.session.get(JudgeVerdict, verdict_id)
+        audit.set_target("judge_verdict", verdict_id)
+        if stored is None:
+            raise NotFoundError(f"Verdict {verdict_id} not found")
+        if stored.forgotten_at is None:
+            stored.forgotten_at = datetime.now(UTC)
+            await self.session.flush()
+            audit.record_changes(forgotten=True, kind=stored.kind)
+
+    async def review(
+        self, verdict_id: int, payload: ReviewCreate, *, reviewer_id: int
+    ) -> VerdictRead:
+        stored = await self.session.get(JudgeVerdict, verdict_id)
+        audit.set_target("judge_verdict", verdict_id)
+        if stored is None:
+            raise NotFoundError(f"Verdict {verdict_id} not found")
+        existing = await self.session.get(JudgeReview, verdict_id)
+        if existing is None:
+            existing = JudgeReview(verdict_id=verdict_id)
+            self.session.add(existing)
+        existing.correct = payload.correct
+        existing.note = payload.note
+        existing.reviewed_by = reviewer_id
+        existing.reviewed_at = datetime.now(UTC)
+        await self.session.flush()
+        audit.record_changes(correct=payload.correct, note=payload.note)
+        return await self.verdict(verdict_id)
+
+    async def calibration(self, kind: str | None, *, buckets: int = 10) -> Calibration:
+        """The answers of a kind in equal-width buckets of the number their threshold is
+        on, each with how many a person marked right and wrong."""
+        is_check = kind == questions.MODEL_MATCH
+        score = (
+            JudgeVerdict.answer["probabilities"][questions.SAME_MODEL].as_float()
+            if is_check
+            else JudgeVerdict.confidence
+        )
+        bucket = func.least(func.floor(score * buckets), buckets - 1).label("bucket")
+        stmt = (
+            select(
+                bucket,
+                func.count(),
+                func.count(JudgeReview.verdict_id),
+                func.count().filter(JudgeReview.correct.is_(True)),
+                func.count().filter(JudgeReview.correct.is_(False)),
+            )
+            .select_from(JudgeVerdict)
+            .outerjoin(JudgeReview, JudgeReview.verdict_id == JudgeVerdict.id)
+            .group_by(bucket)
+        )
         if kind is not None:
             stmt = stmt.where(JudgeVerdict.kind == kind)
-        rows, total = await paginated(
-            self.session, stmt.order_by(JudgeVerdict.id.desc()), pagination
+        counted = {int(row[0]): row[1:] for row in (await self.session.execute(stmt)).all()}
+        width = Decimal(1) / buckets
+        return Calibration(
+            kind=kind,
+            score="same" if is_check else "confidence",
+            threshold=settings.judge_doubt_below if is_check else settings.judge_min_confidence,
+            buckets=[
+                CalibrationBucket(
+                    low=(width * index).quantize(Decimal("0.01")),
+                    high=(width * (index + 1)).quantize(Decimal("0.01")),
+                    answers=counted.get(index, (0, 0, 0, 0))[0],
+                    reviewed=counted.get(index, (0, 0, 0, 0))[1],
+                    correct=counted.get(index, (0, 0, 0, 0))[2],
+                    incorrect=counted.get(index, (0, 0, 0, 0))[3],
+                )
+                for index in range(buckets)
+            ],
         )
-        return [VerdictRead.model_validate(row) for row in rows], total
+
+    async def usage(self, *, days: int) -> list[UsageDay]:
+        """Per day and kind: answers bought and their tokens from the store, answers the
+        store gave instead from the passes' reports in the trail — a cache hit writes no
+        verdict, and the trail is where it is recorded. A pass is one kind of question,
+        which is how its hits are attributed."""
+        since = datetime.now(UTC) - timedelta(days=days)
+        day = func.date_trunc("day", JudgeVerdict.created_at)
+        bought = (
+            await self.session.execute(
+                select(
+                    day,
+                    JudgeVerdict.kind,
+                    func.count(),
+                    func.sum(JudgeVerdict.input_tokens),
+                    func.sum(JudgeVerdict.output_tokens),
+                )
+                .where(JudgeVerdict.created_at >= since)
+                .group_by(day, JudgeVerdict.kind)
+            )
+        ).all()
+        passed = func.date_trunc("day", AuditEntry.created_at)
+        hits = (
+            await self.session.execute(
+                select(
+                    passed,
+                    AuditEntry.path,
+                    func.coalesce(func.sum(AuditEntry.changes["cached"].as_integer()), 0),
+                )
+                .where(
+                    AuditEntry.method == "POST",
+                    AuditEntry.path.in_(PASS_KINDS),
+                    AuditEntry.status_code < 300,
+                    AuditEntry.created_at >= since,
+                )
+                .group_by(passed, AuditEntry.path)
+            )
+        ).all()
+        table: dict[tuple[date, str], dict[str, int]] = {}
+        for when, kind, count, tokens_in, tokens_out in bought:
+            entry = table.setdefault((when.date(), kind), {})
+            entry.update(asked=count, input_tokens=tokens_in or 0, output_tokens=tokens_out or 0)
+        for when, path, cached in hits:
+            entry = table.setdefault((when.date(), PASS_KINDS[path]), {})
+            entry["cached"] = entry.get("cached", 0) + int(cached)
+        return [
+            UsageDay(
+                day=when,
+                kind=kind,
+                asked=entry.get("asked", 0),
+                cached=entry.get("cached", 0),
+                input_tokens=entry.get("input_tokens", 0),
+                output_tokens=entry.get("output_tokens", 0),
+            )
+            for (when, kind), entry in sorted(table.items())
+        ]
+
+    @staticmethod
+    def config() -> JudgeConfig:
+        return JudgeConfig(
+            enabled=settings.judge_enabled,
+            model=settings.typesafe_model,
+            min_confidence=settings.judge_min_confidence,
+            doubt_below=settings.judge_doubt_below,
+            concurrency=settings.judge_concurrency,
+            timeout_seconds=settings.typesafe_timeout_seconds,
+        )
+
+    async def pending(
+        self,
+        *,
+        brands: list[BrandRequest],
+        variants: list[VariantRequest],
+        colours: list[ColourRequest],
+        matches: list[MatchCheckRequest],
+    ) -> list[PendingKind]:
+        """What each pass would pay for now: its questions, built exactly as the pass
+        builds them, less the ones the store already answers."""
+        built: dict[str, tuple[int, set[str]]] = {}
+        for kind, requests, build in (
+            (questions.BRAND_CHOICE, brands, self._brand_question),
+            (questions.VARIANT_CHOICE, variants, self._variant_question),
+            (questions.COLOUR_CHOICE, colours, self._colour_question),
+        ):
+            hashes = set()
+            for request in requests:
+                question = await build(request)
+                if question is not None:
+                    hashes.add(question.hash)
+            built[kind] = (len(requests), hashes)
+        built[questions.MODEL_MATCH] = (
+            len(matches),
+            {
+                questions.model_match(
+                    title=request.title, brand=request.brand, entry_model=request.entry_model
+                ).hash
+                for request in matches
+            },
+        )
+        averages = dict(
+            (kind, (tokens_in, tokens_out))
+            for kind, tokens_in, tokens_out in (
+                await self.session.execute(
+                    select(
+                        JudgeVerdict.kind,
+                        func.avg(JudgeVerdict.input_tokens),
+                        func.avg(JudgeVerdict.output_tokens),
+                    )
+                    .where(JudgeVerdict.input_tokens > 0)
+                    .group_by(JudgeVerdict.kind)
+                )
+            ).all()
+        )
+        out = []
+        for kind, (eligible, hashes) in built.items():
+            to_ask = len(hashes - await self._stored_hashes(hashes))
+            average = averages.get(kind)
+            out.append(
+                PendingKind(
+                    kind=Kind(kind),
+                    eligible=eligible,
+                    to_ask=to_ask,
+                    estimated_input_tokens=round(float(average[0]) * to_ask) if average else None,
+                    estimated_output_tokens=round(float(average[1]) * to_ask) if average else None,
+                )
+            )
+        return out
+
+    async def _verdict_reads(self, stored: list[JudgeVerdict]) -> list[VerdictRead]:
+        if not stored:
+            return []
+        labels = await self._labels(stored)
+        listings = await self._listings(stored)
+        reviews = {
+            review.verdict_id: (review, email)
+            for review, email in (
+                await self.session.execute(
+                    select(JudgeReview, User.email)
+                    .outerjoin(User, User.id == JudgeReview.reviewed_by)
+                    .where(JudgeReview.verdict_id.in_([row.id for row in stored]))
+                )
+            ).all()
+        }
+        out = []
+        for row in stored:
+            answer = row.answer or {}
+            options = [
+                VerdictOption(
+                    key=key,
+                    label=labels.get((row.kind, key), key),
+                    description=_description(row, key),
+                )
+                for key in row.options or []
+            ]
+            review = reviews.get(row.id)
+            out.append(
+                VerdictRead(
+                    id=row.id,
+                    kind=Kind(row.kind),
+                    question_hash=row.question_hash,
+                    state=row.state,
+                    options=options,
+                    answer=VerdictAnswer(
+                        choice=answer.get("choice", row.choice),
+                        confidence=Decimal(str(answer.get("confidence", row.confidence))),
+                        probabilities=answer.get("probabilities") or {},
+                    ),
+                    choice=row.choice,
+                    choice_label=labels.get((row.kind, row.choice), row.choice),
+                    confidence=row.confidence,
+                    model=row.model,
+                    input_tokens=row.input_tokens,
+                    output_tokens=row.output_tokens,
+                    created_at=row.created_at,
+                    forgotten_at=row.forgotten_at,
+                    outcome=Outcome(_outcome_of(row)),
+                    listings=listings.get(row.id, []),
+                    review=VerdictReview(
+                        correct=review[0].correct,
+                        note=review[0].note,
+                        reviewed_by=review[1],
+                        reviewed_at=review[0].reviewed_at,
+                    )
+                    if review
+                    else None,
+                )
+            )
+        return out
+
+    async def _labels(self, stored: list[JudgeVerdict]) -> dict[tuple[str, str], str]:
+        """What a person reads for each option key: a slug is how it was sent, not a name."""
+        keys: dict[str, set[str]] = {}
+        for row in stored:
+            keys.setdefault(row.kind, set()).update(row.options or [])
+        labels: dict[tuple[str, str], str] = {}
+        for kind in keys:
+            labels[(kind, questions.NO_MATCH)] = "None of these"
+        if keys.get(questions.BRAND_CHOICE):
+            for slug, name in (
+                await self.session.execute(
+                    select(Brand.slug, Brand.canonical_name).where(
+                        Brand.slug.in_(keys[questions.BRAND_CHOICE])
+                    )
+                )
+            ).all():
+                labels[(questions.BRAND_CHOICE, slug)] = name
+        if keys.get(questions.VARIANT_CHOICE):
+            for slug, override, title in (
+                await self.session.execute(
+                    select(Variant.slug, Variant.title_override, Variant.title).where(
+                        Variant.slug.in_(keys[questions.VARIANT_CHOICE])
+                    )
+                )
+            ).all():
+                labels[(questions.VARIANT_CHOICE, slug)] = override or title
+        for key in keys.get(questions.COLOUR_CHOICE, set()) - {questions.NO_MATCH}:
+            labels[(questions.COLOUR_CHOICE, key)] = key
+        for key, label in MODEL_MATCH_LABELS.items():
+            labels[(questions.MODEL_MATCH, key)] = label
+        return labels
+
+    async def _listings(self, stored: list[JudgeVerdict]) -> dict[int, list[VerdictListing]]:
+        """The listings each question was about, found the way it was asked: by the
+        listing's title and, where the question names the shop's brand string, by that."""
+        titles = {
+            row.state.get("listing_title") for row in stored if row.state.get("listing_title")
+        }
+        if not titles:
+            return {}
+        rows = (
+            await self.session.execute(
+                select(
+                    Offer.id,
+                    Offer.title,
+                    Offer.brand_raw,
+                    Shop.id,
+                    Shop.name,
+                    OfferMatch.variant_id,
+                    OfferMatch.method,
+                    OfferMatch.decided_by,
+                    MatchQueue.offer_id,
+                )
+                .join(Seller, Seller.id == Offer.seller_id)
+                .join(Shop, Shop.id == Seller.shop_id)
+                .outerjoin(
+                    OfferMatch,
+                    (OfferMatch.offer_id == Offer.id) & OfferMatch.superseded_at.is_(None),
+                )
+                .outerjoin(MatchQueue, MatchQueue.offer_id == Offer.id)
+                .where(Offer.title.in_(titles))
+                .order_by(Offer.id)
+            )
+        ).all()
+        by_title: dict[str, list[Any]] = {}
+        for row in rows:
+            by_title.setdefault(row[1], []).append(row)
+        out: dict[int, list[VerdictListing]] = {}
+        for verdict in stored:
+            brand = _brand_as_asked(verdict)
+            out[verdict.id] = [
+                VerdictListing(
+                    offer_id=row[0],
+                    title=row[1],
+                    shop=Named(id=row[3], name=row[4]),
+                    state="placed" if row[5] else "queued" if row[8] else "unplaced",
+                    variant_id=row[5],
+                    method=row[6],
+                    decided_by=row[7],
+                )
+                for row in by_title.get(verdict.state.get("listing_title"), [])
+                if brand is _ANY or row[2] == brand
+            ]
+        return out
 
     async def summary(self) -> JudgeSummary:
         now = datetime.now(UTC)
@@ -536,8 +956,25 @@ class JudgeService:
 
     async def _stored(self, question_hash: str) -> JudgeVerdict | None:
         return await self.session.scalar(
-            select(JudgeVerdict).where(JudgeVerdict.question_hash == question_hash)
+            select(JudgeVerdict).where(
+                JudgeVerdict.question_hash == question_hash, JudgeVerdict.forgotten_at.is_(None)
+            )
         )
+
+    async def _stored_hashes(self, hashes: set[str]) -> set[str]:
+        """Which of these questions the store can answer, in a few queries, not one each."""
+        held: set[str] = set()
+        ordered_hashes = sorted(hashes)
+        for start in range(0, len(ordered_hashes), 1000):
+            chunk = ordered_hashes[start : start + 1000]
+            held.update(
+                await self.session.scalars(
+                    select(JudgeVerdict.question_hash).where(
+                        JudgeVerdict.question_hash.in_(chunk), JudgeVerdict.forgotten_at.is_(None)
+                    )
+                )
+            )
+        return held
 
     @staticmethod
     def _read(stored: JudgeVerdict, question: Question) -> BrandVerdict:
@@ -683,3 +1120,81 @@ def _plain(number: object) -> str:
         return ""
     text = f"{number}".rstrip("0").rstrip(".")
     return text or "0"
+
+
+# The pass each audited path is, for attributing the cache hits its report records.
+PASS_KINDS = {
+    "/api/admin/matching/judge": questions.BRAND_CHOICE,
+    "/api/admin/matching/judge/ambiguous": questions.VARIANT_CHOICE,
+    "/api/admin/matching/judge/colours": questions.COLOUR_CHOICE,
+    "/api/admin/matching/judge/matches": questions.MODEL_MATCH,
+}
+
+MODEL_MATCH_LABELS = {
+    questions.SAME_MODEL: "The entry's model",
+    "sibling": "Another model of the same line",
+    "different": "An unrelated model",
+    "cant_tell": "Cannot tell",
+}
+
+_NO_MATCH_DESCRIPTIONS = {
+    questions.BRAND_CHOICE: questions.NO_MATCH_DESCRIPTION,
+    questions.VARIANT_CHOICE: questions.VARIANT_NO_MATCH_DESCRIPTION,
+    questions.COLOUR_CHOICE: questions.COLOUR_NO_MATCH_DESCRIPTION,
+}
+
+_ANY = object()
+
+
+def _description(row: JudgeVerdict, key: str) -> str | None:
+    """What the model was told about an option: kept since criteria were stored, and for
+    what never changes — the model check's options and "none of these" — known anyway."""
+    if row.criteria is not None:
+        return row.criteria.get(key)
+    if row.kind == questions.MODEL_MATCH:
+        return questions.MODEL_MATCH_CRITERIA.get(key)
+    if key == questions.NO_MATCH:
+        return _NO_MATCH_DESCRIPTIONS.get(row.kind)
+    return None
+
+
+def _brand_as_asked(row: JudgeVerdict) -> Any:
+    """The shop's brand string the question names, or `_ANY` where it names ours."""
+    if row.kind == questions.BRAND_CHOICE:
+        return row.state.get("brand_as_written")
+    if row.kind in (questions.VARIANT_CHOICE, questions.COLOUR_CHOICE):
+        return row.state.get("brand")
+    return _ANY
+
+
+def _outcome() -> Any:
+    """`_outcome_of`, as SQL, so a list can filter on it. The two have to agree."""
+    same = JudgeVerdict.answer["probabilities"][questions.SAME_MODEL].as_float()
+    return case(
+        (
+            JudgeVerdict.kind == questions.MODEL_MATCH,
+            case((same < settings.judge_doubt_below, "doubt"), else_="confirmed"),
+        ),
+        (
+            JudgeVerdict.choice == questions.NO_MATCH,
+            case(
+                (JudgeVerdict.kind == questions.BRAND_CHOICE, "brand_unknown"),
+                else_="no_match",
+            ),
+        ),
+        (JudgeVerdict.confidence >= settings.judge_min_confidence, "accepted"),
+        else_="below_threshold",
+    )
+
+
+def _outcome_of(row: JudgeVerdict) -> str:
+    """What policy made of an answer, as the readers above act on it: "none of these" is
+    acted on whatever its confidence, a choice only above the threshold."""
+    if row.kind == questions.MODEL_MATCH:
+        same = float((row.answer.get("probabilities") or {}).get(questions.SAME_MODEL, 0))
+        return "doubt" if same < settings.judge_doubt_below else "confirmed"
+    if row.choice == questions.NO_MATCH:
+        return "brand_unknown" if row.kind == questions.BRAND_CHOICE else "no_match"
+    if float(row.confidence) >= settings.judge_min_confidence:
+        return "accepted"
+    return "below_threshold"

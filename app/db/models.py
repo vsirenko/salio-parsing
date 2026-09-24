@@ -1305,12 +1305,16 @@ class JudgeVerdict(Base):
     # What was being decided. One kind today; attribute and category mapping are the
     # shapes this was built wide enough to hold.
     kind: Mapped[str] = mapped_column(String(20))
-    question_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    question_hash: Mapped[str] = mapped_column(String(64))
     # What the listing was, and which options it was offered. Stored for the same reason
     # `offer_match.evidence` is: a wrong answer that cannot be inspected can only be
     # deleted, not argued with.
     state: Mapped[dict] = mapped_column(JSONB)
     options: Mapped[list] = mapped_column(JSONB)
+    # What each option was described as when asked, by option key: the description is what
+    # the model judged on, and it is computed from the catalogue of that day. Null on the
+    # answers bought before it was kept.
+    criteria: Mapped[dict | None] = mapped_column(JSONB)
     # The full answer, probabilities included. `choice` and `confidence` are lifted out
     # of it because they are what every query filters on.
     answer: Mapped[dict] = mapped_column(JSONB)
@@ -1323,6 +1327,9 @@ class JudgeVerdict(Base):
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    # Forgotten rather than deleted: the store stops answering with it, so the next pass
+    # asks again, and what it cost stays counted — it was paid for.
+    forgotten_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
 
     __table_args__ = (
         CheckConstraint(
@@ -1331,7 +1338,34 @@ class JudgeVerdict(Base):
         ),
         CheckConstraint("confidence between 0 and 1", name="confidence_is_a_fraction"),
         Index("ix_judge_verdicts_kind_created", "kind", "created_at"),
+        # One live answer per question; a forgotten one stays beside the one that
+        # replaced it.
+        Index(
+            "uq_judge_verdicts_question_hash",
+            "question_hash",
+            unique=True,
+            postgresql_where=text("forgotten_at is null"),
+        ),
     )
+
+
+class JudgeReview(Base):
+    """A person's word on one answer: right or wrong.
+
+    What a threshold is measured against. A confidence has to be evaluated on the data it
+    is used on, and this is that data: the answers a person looked at, bucketed by the
+    number they came with. One per answer, the latest word standing.
+    """
+
+    __tablename__ = "judge_reviews"
+
+    verdict_id: Mapped[int] = mapped_column(
+        ForeignKey("judge_verdicts.id", ondelete="CASCADE"), primary_key=True
+    )
+    correct: Mapped[bool] = mapped_column(Boolean)
+    note: Mapped[str | None] = mapped_column(String(500))
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
 
 class Run(Base):

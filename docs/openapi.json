@@ -481,7 +481,7 @@
             "type": "string"
           },
           "outcome": {
-            "$ref": "#/components/schemas/Outcome",
+            "$ref": "#/components/schemas/app__features__audit__schemas__Outcome",
             "description": "Derived from the status code",
             "readOnly": true
           },
@@ -1037,6 +1037,84 @@
           }
         },
         "title": "BrandUpdate",
+        "type": "object"
+      },
+      "Calibration": {
+        "description": "Answers bucketed by the number their threshold is on, with what people said.\n\nFor a choice that number is `confidence`; for a model check it is the probability of\n`same`, because that is what `JUDGE_DOUBT_BELOW` compares — a check that is sure the\nlisting is a sibling has high confidence and a `same` near nothing.",
+        "properties": {
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/CalibrationBucket"
+            },
+            "title": "Buckets",
+            "type": "array"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/app__features__judge__schemas__Kind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "title": "Score",
+            "type": "string"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "score",
+          "threshold",
+          "buckets"
+        ],
+        "title": "Calibration",
+        "type": "object"
+      },
+      "CalibrationBucket": {
+        "properties": {
+          "answers": {
+            "title": "Answers",
+            "type": "integer"
+          },
+          "correct": {
+            "title": "Correct",
+            "type": "integer"
+          },
+          "high": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "High",
+            "type": "string"
+          },
+          "incorrect": {
+            "title": "Incorrect",
+            "type": "integer"
+          },
+          "low": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Low",
+            "type": "string"
+          },
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "low",
+          "high",
+          "answers",
+          "reviewed",
+          "correct",
+          "incorrect"
+        ],
+        "title": "CalibrationBucket",
         "type": "object"
       },
       "Candidate": {
@@ -2201,7 +2279,7 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/Kind"
+            "$ref": "#/components/schemas/app__features__runs__schemas__Kind"
           },
           "source_id": {
             "title": "Source Id",
@@ -2510,7 +2588,7 @@
             "type": "array"
           },
           "kind": {
-            "$ref": "#/components/schemas/Kind"
+            "$ref": "#/components/schemas/app__features__runs__schemas__Kind"
           },
           "market_codes": {
             "items": {
@@ -2544,6 +2622,45 @@
           "delivers"
         ],
         "title": "Job",
+        "type": "object"
+      },
+      "JudgeConfig": {
+        "description": "Whether the judge can be asked at all, and the numbers its answers are read by.",
+        "properties": {
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "doubt_below": {
+            "title": "Doubt Below",
+            "type": "number"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "min_confidence": {
+            "title": "Min Confidence",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "title": "Timeout Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "min_confidence",
+          "doubt_below",
+          "concurrency",
+          "timeout_seconds"
+        ],
+        "title": "JudgeConfig",
         "type": "object"
       },
       "JudgeReport": {
@@ -2695,16 +2812,6 @@
         ],
         "title": "JudgeWindow",
         "type": "object"
-      },
-      "Kind": {
-        "description": "Two that collect, and one that does not.\n\nA dedicated stock endpoint is not a fourth: it is another channel into the same shop\nwhose full pass happens to carry availability and nothing else, which the channel\nmodel already covers.",
-        "enum": [
-          "full",
-          "quick",
-          "reparse"
-        ],
-        "title": "Kind",
-        "type": "string"
       },
       "LoginRequest": {
         "additionalProperties": false,
@@ -3331,6 +3438,24 @@
           "origin"
         ],
         "title": "ModelAliasRead",
+        "type": "object"
+      },
+      "Named": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Named",
         "type": "object"
       },
       "NamedRef": {
@@ -4063,14 +4188,6 @@
           "human"
         ],
         "title": "Origin",
-        "type": "string"
-      },
-      "Outcome": {
-        "enum": [
-          "success",
-          "failure"
-        ],
-        "title": "Outcome",
         "type": "string"
       },
       "Page_AttributeRow_": {
@@ -5066,6 +5183,53 @@
         "title": "PasswordChange",
         "type": "object"
       },
+      "PendingKind": {
+        "description": "What a pass of one kind would pay for if started now.\n\n`eligible` is every listing it would consider with no limit; `to_ask` the distinct\nquestions among them the store has no answer for — two shops writing one title are one\nquestion. The tokens are that times this kind's average so far, null before any answer\nof the kind was bought.",
+        "properties": {
+          "eligible": {
+            "title": "Eligible",
+            "type": "integer"
+          },
+          "estimated_input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Input Tokens"
+          },
+          "estimated_output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Output Tokens"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/app__features__judge__schemas__Kind"
+          },
+          "to_ask": {
+            "title": "To Ask",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "eligible",
+          "to_ask",
+          "estimated_input_tokens",
+          "estimated_output_tokens"
+        ],
+        "title": "PendingKind",
+        "type": "object"
+      },
       "Pipeline": {
         "description": "The pipeline for one category, one channel or everything, with the channels under it.",
         "properties": {
@@ -5853,6 +6017,32 @@
         "title": "RenameReport",
         "type": "object"
       },
+      "ReviewCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "correct": {
+            "title": "Correct",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "correct"
+        ],
+        "title": "ReviewCreate",
+        "type": "object"
+      },
       "Role": {
         "enum": [
           "customer",
@@ -6124,7 +6314,7 @@
             "type": "integer"
           },
           "kind": {
-            "$ref": "#/components/schemas/Kind"
+            "$ref": "#/components/schemas/app__features__runs__schemas__Kind"
           },
           "progress": {
             "additionalProperties": true,
@@ -7885,6 +8075,44 @@
         "title": "Trust",
         "type": "string"
       },
+      "UsageDay": {
+        "properties": {
+          "asked": {
+            "title": "Asked",
+            "type": "integer"
+          },
+          "cached": {
+            "title": "Cached",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/app__features__judge__schemas__Kind"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "kind",
+          "asked",
+          "cached",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "UsageDay",
+        "type": "object"
+      },
       "UserCreate": {
         "additionalProperties": false,
         "description": "Admin-side creation. There is no public registration endpoint.",
@@ -8945,15 +9173,147 @@
         "title": "VariantUpdate",
         "type": "object"
       },
+      "VerdictAnswer": {
+        "properties": {
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "probabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Probabilities",
+            "type": "object"
+          }
+        },
+        "required": [
+          "choice",
+          "confidence",
+          "probabilities"
+        ],
+        "title": "VerdictAnswer",
+        "type": "object"
+      },
+      "VerdictListing": {
+        "description": "A listing the question was about, as it stands now. One question can be about\nseveral: two shops wrote the same title, and it was asked once.",
+        "properties": {
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "offer_id": {
+            "title": "Offer Id",
+            "type": "integer"
+          },
+          "shop": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "state": {
+            "description": "placed, queued or unplaced",
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          }
+        },
+        "required": [
+          "offer_id",
+          "title",
+          "shop",
+          "state",
+          "variant_id",
+          "method",
+          "decided_by"
+        ],
+        "title": "VerdictListing",
+        "type": "object"
+      },
+      "VerdictOption": {
+        "description": "One option the judge was offered. `label` is what a person reads — the brand's\nname, the entry's title, the colour — and `key` the slug it was sent as.\n`description` is what the model was told about it; null on answers bought before it\nwas kept.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description"
+        ],
+        "title": "VerdictOption",
+        "type": "object"
+      },
       "VerdictRead": {
         "properties": {
           "answer": {
-            "additionalProperties": true,
-            "title": "Answer",
-            "type": "object"
+            "$ref": "#/components/schemas/VerdictAnswer"
           },
           "choice": {
             "title": "Choice",
+            "type": "string"
+          },
+          "choice_label": {
+            "title": "Choice Label",
             "type": "string"
           },
           "confidence": {
@@ -8966,6 +9326,18 @@
             "title": "Created At",
             "type": "string"
           },
+          "forgotten_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forgotten At"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -8975,17 +9347,28 @@
             "type": "integer"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/app__features__judge__schemas__Kind"
+          },
+          "listings": {
+            "items": {
+              "$ref": "#/components/schemas/VerdictListing"
+            },
+            "title": "Listings",
+            "type": "array"
           },
           "model": {
             "title": "Model",
             "type": "string"
           },
           "options": {
-            "items": {},
+            "items": {
+              "$ref": "#/components/schemas/VerdictOption"
+            },
             "title": "Options",
             "type": "array"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/app__features__judge__schemas__Outcome"
           },
           "output_tokens": {
             "title": "Output Tokens",
@@ -8994,6 +9377,16 @@
           "question_hash": {
             "title": "Question Hash",
             "type": "string"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerdictReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "additionalProperties": true,
@@ -9009,14 +9402,103 @@
           "options",
           "answer",
           "choice",
+          "choice_label",
           "confidence",
           "model",
           "input_tokens",
           "output_tokens",
-          "created_at"
+          "created_at",
+          "forgotten_at",
+          "outcome",
+          "listings",
+          "review"
         ],
         "title": "VerdictRead",
         "type": "object"
+      },
+      "VerdictReview": {
+        "properties": {
+          "correct": {
+            "title": "Correct",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          }
+        },
+        "required": [
+          "correct",
+          "note",
+          "reviewed_by",
+          "reviewed_at"
+        ],
+        "title": "VerdictReview",
+        "type": "object"
+      },
+      "app__features__audit__schemas__Outcome": {
+        "enum": [
+          "success",
+          "failure"
+        ],
+        "title": "Outcome",
+        "type": "string"
+      },
+      "app__features__judge__schemas__Kind": {
+        "enum": [
+          "brand_choice",
+          "variant_choice",
+          "colour_choice",
+          "model_match"
+        ],
+        "title": "Kind",
+        "type": "string"
+      },
+      "app__features__judge__schemas__Outcome": {
+        "description": "What policy made of an answer, read off the answer and the thresholds.\n\n`accepted`: confident enough to act on. `below_threshold`: recorded, not acted on.\n`brand_unknown`: a brand question answered \"none of these\", which files the listing as\na brand nobody has; `no_match`: the same answer to the other questions. For a model\ncheck, `doubt` (listed for a person) or `confirmed`. Whether a listing was then placed\nis on each of `listings`, because it is a fact about the listing now, not the answer.",
+        "enum": [
+          "accepted",
+          "below_threshold",
+          "brand_unknown",
+          "no_match",
+          "doubt",
+          "confirmed"
+        ],
+        "title": "Outcome",
+        "type": "string"
+      },
+      "app__features__runs__schemas__Kind": {
+        "description": "Two that collect, and one that does not.\n\nA dedicated stock endpoint is not a fourth: it is another channel into the same shop\nwhose full pass happens to carry availability and nothing else, which the channel\nmodel already covers.",
+        "enum": [
+          "full",
+          "quick",
+          "reparse"
+        ],
+        "title": "Kind",
+        "type": "string"
       }
     },
     "securitySchemes": {
@@ -10156,7 +10638,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Outcome"
+                  "$ref": "#/components/schemas/app__features__audit__schemas__Outcome"
                 },
                 {
                   "type": "null"
@@ -12593,6 +13075,100 @@
         ]
       }
     },
+    "/api/admin/judge/calibration": {
+      "get": {
+        "description": "Answers in equal buckets of the number the threshold is on — `confidence`, or for\nthe model check the probability of `same` — each with how many a person marked right\nand wrong. Where the threshold should sit is read off this.",
+        "operationId": "calibration_api_admin_judge_calibration_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/app__features__judge__schemas__Kind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "buckets",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 2,
+              "title": "Buckets",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Calibration"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Confidence against reviews",
+        "tags": [
+          "admin: judge"
+        ]
+      }
+    },
+    "/api/admin/judge/config": {
+      "get": {
+        "description": "`enabled` is whether a key is configured: without one every pass answers 422\n`judge_disabled`, so a page can say the judge is off instead of offering buttons.",
+        "operationId": "config_api_admin_judge_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JudgeConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Whether the judge can be asked",
+        "tags": [
+          "admin: judge"
+        ]
+      }
+    },
     "/api/admin/judge/summary": {
       "get": {
         "description": "Questions bought and their tokens, and how many were answered from the store\ninstead, over the last day, the last week and all time. Tokens, not money: the price\nis the provider's and would go stale here.",
@@ -12620,27 +13196,239 @@
         ]
       }
     },
+    "/api/admin/judge/usage": {
+      "get": {
+        "description": "Per day and kind: answers bought, their tokens, and answers the store gave instead.\nDays with nothing are left out.",
+        "operationId": "usage_api_admin_judge_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UsageDay"
+                  },
+                  "title": "Response Usage Api Admin Judge Usage Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "What was bought, day by day",
+        "tags": [
+          "admin: judge"
+        ]
+      }
+    },
     "/api/admin/judge/verdicts": {
       "get": {
-        "description": "Newest first, each row carrying the state it was asked about and the full\ndistribution that came back.\n\nStored for the same reason a match keeps its evidence: an answer nobody can inspect\ncan only be deleted, never argued with.",
+        "description": "Newest first by default. Each answer carries its options named, the listings it\nwas about and where they stand now, what policy made of it, and a person's review.\n\nStored for the same reason a match keeps its evidence: an answer nobody can inspect\ncan only be deleted, never argued with.",
         "operationId": "verdicts_api_admin_judge_verdicts_get",
         "parameters": [
           {
-            "description": "One kind of question",
+            "description": "Repeat for several",
             "in": "query",
             "name": "kind",
             "required": false,
             "schema": {
               "anyOf": [
                 {
+                  "items": {
+                    "$ref": "#/components/schemas/app__features__judge__schemas__Kind"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Kind"
+            }
+          },
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/app__features__judge__schemas__Outcome"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Outcome"
+            }
+          },
+          {
+            "description": "Answered, or did not answer, \"none of these\"",
+            "in": "query",
+            "name": "no_match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Answered, or did not answer, \"none of these\"",
+              "title": "No Match"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confidence_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "One kind of question",
-              "title": "Kind"
+              "title": "Confidence Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confidence_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Confidence Max"
+            }
+          },
+          {
+            "description": "The listing's title contains",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The listing's title contains",
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created From"
+            }
+          },
+          {
+            "description": "Before this moment",
+            "in": "query",
+            "name": "created_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Before this moment",
+              "title": "Created To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "forgotten",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Forgotten"
             }
           },
           {
@@ -12664,6 +13452,28 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, created_at, confidence, tokens.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, created_at, confidence, tokens.",
+              "examples": [
+                "-created_at"
+              ],
+              "title": "Sort"
             }
           }
         ],
@@ -12695,6 +13505,180 @@
           }
         ],
         "summary": "What the judge answered",
+        "tags": [
+          "admin: judge"
+        ]
+      }
+    },
+    "/api/admin/judge/verdicts/{verdict_id}": {
+      "delete": {
+        "description": "Kept and marked `forgotten_at`, not deleted: the store stops answering with it,\nand what it cost stays counted. A listing it already placed stays placed — that match\nis its own record.",
+        "operationId": "forget_api_admin_judge_verdicts__verdict_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "verdict_id",
+            "required": true,
+            "schema": {
+              "title": "Verdict Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Verdict not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Forget an answer, so the next pass asks again",
+        "tags": [
+          "admin: judge"
+        ]
+      },
+      "get": {
+        "operationId": "verdict_api_admin_judge_verdicts__verdict_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "verdict_id",
+            "required": true,
+            "schema": {
+              "title": "Verdict Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerdictRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Verdict not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One answer",
+        "tags": [
+          "admin: judge"
+        ]
+      }
+    },
+    "/api/admin/judge/verdicts/{verdict_id}/review": {
+      "post": {
+        "description": "One word per answer, the latest standing. What `GET /calibration` counts.",
+        "operationId": "review_api_admin_judge_verdicts__verdict_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "verdict_id",
+            "required": true,
+            "schema": {
+              "title": "Verdict Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerdictRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Verdict not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Say whether an answer was right",
         "tags": [
           "admin: judge"
         ]
@@ -13774,6 +14758,37 @@
           }
         ],
         "summary": "Ask whether each rule's match names the right model",
+        "tags": [
+          "admin: matching"
+        ]
+      }
+    },
+    "/api/admin/matching/judge/pending": {
+      "get": {
+        "description": "Per kind: the listings a pass would consider with no limit, the distinct questions\namong them the store cannot answer, and their tokens at this kind's average. Asks\nnothing and writes nothing.",
+        "operationId": "judge_pending_api_admin_matching_judge_pending_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PendingKind"
+                  },
+                  "title": "Response Judge Pending Api Admin Matching Judge Pending Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "What each judge pass would pay for now",
         "tags": [
           "admin: matching"
         ]
@@ -17456,7 +18471,7 @@
             "name": "kind",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/Kind"
+              "$ref": "#/components/schemas/app__features__runs__schemas__Kind"
             }
           }
         ],

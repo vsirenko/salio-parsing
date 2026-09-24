@@ -1,10 +1,11 @@
 """Judge schemas: what was asked, what came back, and what code may do with it."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from typing import NamedTuple
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BrandRequest(NamedTuple):
@@ -108,21 +109,160 @@ class MatchCheckVerdict(NamedTuple):
     doubted: bool
 
 
-class VerdictRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+VERDICT_SORT = ("id", "created_at", "confidence", "tokens")
 
+
+class Kind(StrEnum):
+    BRAND_CHOICE = "brand_choice"
+    VARIANT_CHOICE = "variant_choice"
+    COLOUR_CHOICE = "colour_choice"
+    MODEL_MATCH = "model_match"
+
+
+class Outcome(StrEnum):
+    """What policy made of an answer, read off the answer and the thresholds.
+
+    `accepted`: confident enough to act on. `below_threshold`: recorded, not acted on.
+    `brand_unknown`: a brand question answered "none of these", which files the listing as
+    a brand nobody has; `no_match`: the same answer to the other questions. For a model
+    check, `doubt` (listed for a person) or `confirmed`. Whether a listing was then placed
+    is on each of `listings`, because it is a fact about the listing now, not the answer.
+    """
+
+    ACCEPTED = "accepted"
+    BELOW_THRESHOLD = "below_threshold"
+    BRAND_UNKNOWN = "brand_unknown"
+    NO_MATCH = "no_match"
+    DOUBT = "doubt"
+    CONFIRMED = "confirmed"
+
+
+class VerdictOption(BaseModel):
+    """One option the judge was offered. `label` is what a person reads — the brand's
+    name, the entry's title, the colour — and `key` the slug it was sent as.
+    `description` is what the model was told about it; null on answers bought before it
+    was kept."""
+
+    key: str
+    label: str
+    description: str | None
+
+
+class VerdictAnswer(BaseModel):
+    choice: str
+    confidence: Decimal
+    probabilities: dict[str, float]
+
+
+class Named(BaseModel):
     id: int
-    kind: str
+    name: str
+
+
+class VerdictListing(BaseModel):
+    """A listing the question was about, as it stands now. One question can be about
+    several: two shops wrote the same title, and it was asked once."""
+
+    offer_id: int
+    title: str | None
+    shop: Named
+    state: str = Field(description="placed, queued or unplaced")
+    variant_id: int | None
+    method: str | None
+    decided_by: str | None
+
+
+class VerdictReview(BaseModel):
+    correct: bool
+    note: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime
+
+
+class VerdictRead(BaseModel):
+    id: int
+    kind: Kind
     question_hash: str
     state: dict
-    options: list
-    answer: dict
+    options: list[VerdictOption]
+    answer: VerdictAnswer
     choice: str
+    choice_label: str
     confidence: Decimal
     model: str
     input_tokens: int
     output_tokens: int
     created_at: datetime
+    forgotten_at: datetime | None
+    outcome: Outcome
+    listings: list[VerdictListing]
+    review: VerdictReview | None
+
+
+class ReviewCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    correct: bool
+    note: str | None = Field(default=None, max_length=500)
+
+
+class CalibrationBucket(BaseModel):
+    low: Decimal
+    high: Decimal
+    answers: int
+    reviewed: int
+    correct: int
+    incorrect: int
+
+
+class Calibration(BaseModel):
+    """Answers bucketed by the number their threshold is on, with what people said.
+
+    For a choice that number is `confidence`; for a model check it is the probability of
+    `same`, because that is what `JUDGE_DOUBT_BELOW` compares — a check that is sure the
+    listing is a sibling has high confidence and a `same` near nothing.
+    """
+
+    kind: Kind | None
+    score: str
+    threshold: float
+    buckets: list[CalibrationBucket]
+
+
+class UsageDay(BaseModel):
+    day: date
+    kind: Kind
+    asked: int
+    cached: int
+    input_tokens: int
+    output_tokens: int
+
+
+class JudgeConfig(BaseModel):
+    """Whether the judge can be asked at all, and the numbers its answers are read by."""
+
+    enabled: bool
+    model: str
+    min_confidence: float
+    doubt_below: float
+    concurrency: int
+    timeout_seconds: float
+
+
+class PendingKind(BaseModel):
+    """What a pass of one kind would pay for if started now.
+
+    `eligible` is every listing it would consider with no limit; `to_ask` the distinct
+    questions among them the store has no answer for — two shops writing one title are one
+    question. The tokens are that times this kind's average so far, null before any answer
+    of the kind was bought.
+    """
+
+    kind: Kind
+    eligible: int
+    to_ask: int
+    estimated_input_tokens: int | None
+    estimated_output_tokens: int | None
 
 
 class JudgeReport(BaseModel):

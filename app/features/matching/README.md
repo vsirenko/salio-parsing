@@ -15,6 +15,7 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `GET /api/admin/match-queue/{offer_id}` | one queued listing |
 | `POST · DELETE /api/admin/match-queue/{offer_id}/snooze` | set it aside until a time, or bring it back |
 | `GET /api/admin/match-queue/summary` | the breakdown that says what to build next |
+| `GET /api/admin/matching/judge/pending` | what each judge pass would pay for now, asking nothing |
 | `POST /api/admin/matching/judge` | ask the judge about the brand choices, then retry them |
 | `POST /api/admin/matching/judge/colours` | buy the colour a title carries and no rule may read |
 | `POST /api/admin/matching/judge/matches` | ask whether each rule's match names the right model |

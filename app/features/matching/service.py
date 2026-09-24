@@ -61,6 +61,7 @@ from app.features.judge.schemas import (
     ColourRequest,
     JudgeReport,
     MatchCheckRequest,
+    PendingKind,
     VariantRequest,
 )
 from app.features.judge.service import COLOUR_KEY, JudgeService
@@ -1838,27 +1839,7 @@ class MatchingService:
         nothing acts on is a row, and re-running the whole queue to pick it up would redo
         every listing that is stuck for an unrelated reason.
         """
-        rows = (
-            await self.session.scalars(
-                select(MatchQueue)
-                .where(MatchQueue.reason == Reason.BRAND_AMBIGUOUS.value)
-                .order_by(MatchQueue.offer_id)
-                .limit(limit)
-            )
-        ).all()
-
-        requests: list[BrandRequest] = []
-        for row in rows:
-            reading = await self._reading(row.offer_id)
-            if reading is None:
-                continue
-            offer = await self._offer(row.offer_id)
-            candidates = [
-                entry["brand_id"] for entry in row.candidates if entry.get("brand_id") is not None
-            ]
-            requests.append(self._brand_request(offer, reading, candidates))
-
-        verdicts, report = await self.judge.decide_brands(requests)
+        verdicts, report = await self.judge.decide_brands(await self._brand_requests(limit))
 
         placed = 0
         for offer_id, verdict in verdicts.items():
@@ -1875,6 +1856,41 @@ class MatchingService:
         report = report.model_copy(update={"placed": placed})
         audit.record_changes(**report.model_dump(mode="json"))
         return report
+
+    async def _brand_requests(self, limit: int | None) -> list[BrandRequest]:
+        stmt = (
+            select(MatchQueue)
+            .where(MatchQueue.reason == Reason.BRAND_AMBIGUOUS.value)
+            .order_by(MatchQueue.offer_id)
+        )
+        rows = (await self.session.scalars(stmt.limit(limit))).all()
+        requests: list[BrandRequest] = []
+        for row in rows:
+            reading = await self._reading(row.offer_id)
+            if reading is None:
+                continue
+            offer = await self._offer(row.offer_id)
+            candidates = [
+                entry["brand_id"] for entry in row.candidates if entry.get("brand_id") is not None
+            ]
+            requests.append(self._brand_request(offer, reading, candidates))
+        return requests
+
+    async def judge_pending(self) -> list[PendingKind]:
+        """What every judge pass would pay for if started now, with no limit: the same
+        requests the passes build, handed to the judge to count against its store."""
+        rows = (
+            await self.session.execute(self._rule_matches().order_by(OfferMatch.offer_id))
+        ).all()
+        return await self.judge.pending(
+            brands=await self._brand_requests(None),
+            variants=await self._variant_requests(None),
+            colours=await self._colour_requests(None),
+            matches=[
+                MatchCheckRequest(key=offer_id, title=title, brand=brand, entry_model=model)
+                for offer_id, _, title, brand, model, _ in rows
+            ],
+        )
 
     async def judge_ambiguous(self, *, limit: int = 50) -> JudgeReport:
         """Put the entries nobody could choose between in front of the judge.
@@ -1898,36 +1914,7 @@ class MatchingService:
         them, so that is exactly what the link records — `method` the rung that fired,
         `decided_by` the judge.
         """
-        rows = (
-            await self.session.scalars(
-                select(MatchQueue)
-                .where(MatchQueue.reason == Reason.AMBIGUOUS.value)
-                .order_by(MatchQueue.offer_id)
-                .limit(limit)
-            )
-        ).all()
-
-        requests: list[VariantRequest] = []
-        for row in rows:
-            reading = await self._reading(row.offer_id)
-            if reading is None:
-                continue
-            candidates = [
-                entry["variant_id"]
-                for entry in row.candidates
-                if entry.get("variant_id") is not None
-            ]
-            requests.append(
-                VariantRequest(
-                    key=row.offer_id,
-                    title=reading.title,
-                    brand=reading.brand_raw,
-                    model=reading.model,
-                    variant_ids=candidates,
-                )
-            )
-
-        verdicts, report = await self.judge.decide_variants(requests)
+        verdicts, report = await self.judge.decide_variants(await self._variant_requests(limit))
 
         placed = 0
         for offer_id, verdict in verdicts.items():
@@ -1951,6 +1938,34 @@ class MatchingService:
         audit.record_changes(**report.model_dump(mode="json"))
         return report
 
+    async def _variant_requests(self, limit: int | None) -> list[VariantRequest]:
+        stmt = (
+            select(MatchQueue)
+            .where(MatchQueue.reason == Reason.AMBIGUOUS.value)
+            .order_by(MatchQueue.offer_id)
+        )
+        rows = (await self.session.scalars(stmt.limit(limit))).all()
+        requests: list[VariantRequest] = []
+        for row in rows:
+            reading = await self._reading(row.offer_id)
+            if reading is None:
+                continue
+            candidates = [
+                entry["variant_id"]
+                for entry in row.candidates
+                if entry.get("variant_id") is not None
+            ]
+            requests.append(
+                VariantRequest(
+                    key=row.offer_id,
+                    title=reading.title,
+                    brand=reading.brand_raw,
+                    model=reading.model,
+                    variant_ids=candidates,
+                )
+            )
+        return requests
+
     async def judge_colours(self, *, limit: int = 50) -> JudgeReport:
         """Buy the colour for the listings a colour is the only thing missing from.
 
@@ -1970,25 +1985,39 @@ class MatchingService:
         Re-run rather than placed, as brands are: the verdict is in the store, so the ladder
         consults it on its own and takes whichever rung actually fires.
         """
-        rows = (
-            await self.session.scalars(
-                select(MatchQueue)
-                .where(
-                    MatchQueue.reason.in_(
-                        (
-                            Reason.AMBIGUOUS.value,
-                            Reason.SIGNALS_UNMATCHED.value,
-                            # The bucket this question was written for: the axis the
-                            # candidates are split on is the one nobody published.
-                            Reason.AXIS_UNPUBLISHED.value,
-                        )
+        verdicts, report = await self.judge.decide_colours(await self._colour_requests(limit))
+
+        placed = 0
+        for offer_id, verdict in verdicts.items():
+            if not verdict.accepted:
+                continue
+            reading = await self._reading(offer_id)
+            if reading is None:
+                continue
+            outcome = await self._decide(await self._offer(offer_id), reading)
+            placed += outcome.matched
+
+        report = report.model_copy(update={"placed": placed})
+        audit.record_changes(**report.model_dump(mode="json"))
+        return report
+
+    async def _colour_requests(self, limit: int | None) -> list[ColourRequest]:
+        stmt = (
+            select(MatchQueue)
+            .where(
+                MatchQueue.reason.in_(
+                    (
+                        Reason.AMBIGUOUS.value,
+                        Reason.SIGNALS_UNMATCHED.value,
+                        # The bucket this question was written for: the axis the
+                        # candidates are split on is the one nobody published.
+                        Reason.AXIS_UNPUBLISHED.value,
                     )
                 )
-                .order_by(MatchQueue.offer_id)
-                .limit(limit)
             )
-        ).all()
-
+            .order_by(MatchQueue.offer_id)
+        )
+        rows = (await self.session.scalars(stmt.limit(limit))).all()
         requests: list[ColourRequest] = []
         for row in rows:
             reading = await self._reading(row.offer_id)
@@ -2004,22 +2033,7 @@ class MatchingService:
                     model=reading.model,
                 )
             )
-
-        verdicts, report = await self.judge.decide_colours(requests)
-
-        placed = 0
-        for offer_id, verdict in verdicts.items():
-            if not verdict.accepted:
-                continue
-            reading = await self._reading(offer_id)
-            if reading is None:
-                continue
-            outcome = await self._decide(await self._offer(offer_id), reading)
-            placed += outcome.matched
-
-        report = report.model_copy(update={"placed": placed})
-        audit.record_changes(**report.model_dump(mode="json"))
-        return report
+        return requests
 
     # --- asking whether a rule's match names the right model ---
 
@@ -2086,7 +2100,11 @@ class MatchingService:
                 )
                 .label("rank"),
             )
-            .where(JudgeVerdict.kind == questions.MODEL_MATCH, same < settings.judge_doubt_below)
+            .where(
+                JudgeVerdict.kind == questions.MODEL_MATCH,
+                JudgeVerdict.forgotten_at.is_(None),
+                same < settings.judge_doubt_below,
+            )
             .subquery()
         )
         stmt = (
