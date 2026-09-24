@@ -229,7 +229,12 @@ would have been.
 them, `from` (folded in, disappears) and `into` (survives) with title, model, brand and how
 many listings sit on each, and `outcome` with the refusal's `reason` and `detail`. The
 refused pairs are the ones to read: one barcode on two makers or two categories is more
-often a shop's data error than one product. The entries are taken as they stood before the
+often a shop's data error than one product. **A barcode does not fold entries that disagree on an identity axis** —
+`axes_differ`, with the axes in `detail`. On 24.09.2026 the preview would have folded, of
+198 pairs, 66 whose titles named two colours and 34 two capacities: a listing carrying one
+entry's barcode had been placed on the other, and the fix is moving that listing, not
+making one entry of two products. An axis only one side holds is a gap and does not refuse.
+A person merging by hand is not held to this. The entries are taken as they stood before the
 pair was tried; an entry an earlier pair of the same pass already folded away shows its id
 and nothing else, beside `not_found`.
 

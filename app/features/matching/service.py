@@ -1209,6 +1209,15 @@ class MatchingService:
             outcome = MergePair(
                 gtin=gtin, from_=before[loser], into=before[survivor], outcome="merged"
             )
+            differ = await self._axes_differ(loser, survivor)
+            if differ:
+                reasons["axes_differ"] += 1
+                outcome.outcome, outcome.reason = "refused", "axes_differ"
+                outcome.detail = "They differ in " + ", ".join(
+                    f"{key}: {mine} / {theirs}" for key, mine, theirs in differ
+                )
+                tried.append(outcome)
+                continue
             try:
                 async with self.session.begin_nested():
                     await catalog.merge_variants(
@@ -1240,6 +1249,49 @@ class MatchingService:
             pairs=tried,
             dry_run=dry_run,
         )
+
+    async def _axes_differ(self, first: int, second: int) -> list[tuple[str, str, str]]:
+        """The identity axes two entries both hold and disagree on.
+
+        A barcode shared by two entries is usually one product written twice — and on
+        24.09.2026 it was also, for 66 of 198 pairs, a white phone and a blue one, and for
+        34 two capacities: a listing carrying one entry's barcode had been placed on the
+        other. Folding those would make one entry of two products, so where the entries
+        themselves disagree the pair is refused and left for a person, who can see which
+        listing is misplaced. An axis only one of them holds is a gap, not a disagreement.
+        """
+        rows = await self.session.execute(
+            select(
+                VariantAttribute.variant_id,
+                Attribute.key,
+                Attribute.unit_dimension,
+                VariantAttribute.value_num,
+                AttributeValue.canonical,
+            )
+            .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+            .outerjoin(AttributeValue, AttributeValue.id == VariantAttribute.value_id)
+            .where(VariantAttribute.variant_id.in_((first, second)))
+        )
+        held: dict[int, dict[str, Any]] = {first: {}, second: {}}
+        units: dict[str, str | None] = {}
+        for variant_id, key, unit, number, canonical in rows.all():
+            value = number if number is not None else canonical
+            if value is not None:
+                held[variant_id][key] = value
+                units[key] = unit
+        axes = await self._identity_axes([first, second])
+        bearing = axes.get(first, set()) | axes.get(second, set())
+
+        def shown(key: str, value: Any) -> str:
+            if isinstance(value, Decimal):
+                return display_number(value, units.get(key))
+            return str(value)
+
+        return [
+            (key, shown(key, held[first][key]), shown(key, held[second][key]))
+            for key in sorted(bearing & set(held[first]) & set(held[second]))
+            if held[first][key] != held[second][key]
+        ]
 
     async def _snapshots(self, variant_ids: list[int]) -> dict[int, EntrySnapshot]:
         placed = (

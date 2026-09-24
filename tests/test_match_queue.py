@@ -409,3 +409,42 @@ def test_repeated_passes_reach_every_queued_listing(client):
         assert report["attempted"] == 2
     # Six attempts over three listings: every one of them twice, none left behind.
     assert attempts() == {offer: 2 for offer in offers}
+
+
+def test_a_barcode_does_not_fold_two_colours_into_one(client):
+    """A listing carrying the black phone's barcode placed on the blue one makes the two
+    entries share it; folding them would make one entry of two products."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+
+    def listing(external_id, colour, ean):
+        return offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Apple iPhone 15 256 GB {colour}",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "ean": ean,
+                "attributes": {"storage": "256 GB", "color": colour},
+            },
+            external_id=external_id,
+        )
+
+    promote(client, token, listing("B-1", "black", "4006381333931"))
+    blue = promote(client, token, listing("U-1", "blue", "0194253000001"))["variant_id"]
+    misplaced = listing("B-2", "black", "4006381333931")
+    placed = client.put(
+        f"/api/admin/offers/{misplaced}/match", headers=auth(token), json={"variant_id": blue}
+    )
+    assert placed.status_code == 200, placed.text
+
+    report = client.post("/api/admin/matching/merge", headers=auth(token)).json()
+    assert (report["found"], report["merged"], report["reasons"]) == (1, 0, {"axes_differ": 1})
+    [pair] = report["pairs"]
+    assert (pair["outcome"], pair["reason"]) == ("refused", "axes_differ")
+    assert "color" in pair["detail"] and "black" in pair["detail"] and "blue" in pair["detail"]
+    assert client.get("/api/admin/variants", headers=auth(token)).json()["total"] == 2
