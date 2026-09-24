@@ -1336,6 +1336,10 @@ class Run(Base):
     coverage: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     contract: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     error: Mapped[str | None] = mapped_column(Text)
+    # What the run has done so far, while it does it: the worker's counts as it reads and
+    # hands over, then what settling it placed. `items_*` above are the verdict at the end;
+    # this is how a person watches one run fill in, step by step.
+    progress: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
 
     __table_args__ = (
         CheckConstraint("kind in ('full', 'quick', 'reparse')", name="kind_known"),

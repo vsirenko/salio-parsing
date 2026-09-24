@@ -157,17 +157,24 @@ its own process and nothing else.
 **It reaches the service over HTTP with its own credentials, not through the database.** A
 parser is the one thing here that runs hostile input through itself all day, and what it
 holds while doing that decides what a compromised one is worth. A worker token carries
-`aud=worker` and reaches exactly five routes:
+`aud=worker` and reaches exactly six routes:
 
 | | |
 |---|---|
 | `POST /api/worker/auth/login` · `POST /api/worker/auth/refresh` | its own session |
 | `GET /api/worker/runs/{run_id}` | the job |
+| `POST /api/worker/runs/{run_id}/progress` | how far it has got |
 | `POST /api/worker/runs/{run_id}/finish` | report back |
 | `POST /api/worker/sources/{source_id}/offers/batch` | hand over a pass |
 
-`tests/test_worker.py` asserts that exact set, so a sixth route is a decision rather than
-an accident.
+`tests/test_worker.py` asserts that exact set, so a seventh route is a decision rather than
+an accident. `progress` was the sixth: a run used to say nothing between being taken and
+being finished, so a person watching one saw a bar and no numbers for ten minutes. It writes
+counts — found, read, failed, handed over — onto the run's `progress`, only while that run
+is running, and judges nothing; the worker sends it after discovery and after each slice,
+and a report that does not arrive is dropped rather than failing the run. Settling writes
+`phase: settling`, then `settled` with what it renamed, matched and promoted, into the same
+column, so `GET /api/admin/pipeline/runs/{id}` can draw a run from queue to catalogue.
 
 **The job is asked for, not passed on the command line.** The channel's declaration travels
 with the run — including which facts *this* pass is expected to bring back, already chosen

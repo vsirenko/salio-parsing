@@ -58,8 +58,13 @@ def test_a_customer_cannot_sign_in_as_a_collector(client):
     assert response.json()["error"]["code"] == "wrong_panel"
 
 
-def test_the_collector_reaches_exactly_five_routes(client):
-    """A route added to the worker router is a decision, so it should be visible here."""
+def test_the_collector_reaches_exactly_six_routes(client):
+    """A route added to the worker router is a decision, so it should be visible here.
+
+    The sixth, `progress`, was added on 24.09.2026 so that a run could be watched filling
+    in: it writes counts onto the worker's own running run and nothing else, which is less
+    than `finish` already may.
+    """
     from app.main import app
 
     reachable = {
@@ -73,6 +78,7 @@ def test_the_collector_reaches_exactly_five_routes(client):
         ("POST", "/api/worker/auth/refresh"),
         ("GET", "/api/worker/runs/{run_id}"),
         ("POST", "/api/worker/runs/{run_id}/finish"),
+        ("POST", "/api/worker/runs/{run_id}/progress"),
         ("POST", "/api/worker/sources/{source_id}/offers/batch"),
     }
 
@@ -189,6 +195,22 @@ def test_the_worker_signs_itself_in_and_finishes_its_run(client, event_loop, col
     finished = next(r for r in runs if r["id"] == run["id"])
     assert finished["status"] == "failed"
     assert "no channel implementation" in finished["error"]
+
+
+def test_the_worker_reports_progress_over_http(client, event_loop, collector):
+    """`progress` answers 204 with no body; the first version read that as JSON, raised,
+    and failed a real run right after discovery."""
+    from app.features.runs.schemas import RunProgress
+
+    admin = admin_token(client)
+    _, run = a_run(client, admin)
+    taken(event_loop, run["id"])
+
+    event_loop.run_until_complete(
+        collector.progress(run["id"], RunProgress(phase="reading", discovered=7))
+    )
+    progress = client.get(f"/api/admin/runs/{run['id']}", headers=auth(admin)).json()["progress"]
+    assert progress["discovered"] == 7
 
 
 def test_a_worker_that_cannot_reach_the_service_says_so(client, event_loop):
@@ -407,10 +429,14 @@ def test_a_run_hands_over_as_it_reads_and_keeps_the_shop_s_order(event_loop, tmp
     class Receiving:
         def __init__(self) -> None:
             self.batches: list[list[str]] = []
+            self.reports: list[tuple[int, int]] = []
 
         async def hand_over(self, source_id, body):
             self.batches.append([offer["external_id"] for offer in body["offers"]])
             return {"accepted": len(body["offers"]), "coverage": {"price": 1.0}}
+
+        async def progress(self, run_id, progress):
+            self.reports.append((progress.read, progress.handed_over))
 
     channel = a_slow_shop(25, in_flight=[])
     job = Job(
@@ -439,3 +465,57 @@ def test_a_run_hands_over_as_it_reads_and_keeps_the_shop_s_order(event_loop, tmp
     assert [n for batch in receiving.batches for n in batch] == [str(n) for n in range(25)]
     assert (result.items_seen, result.items_ingested, result.error) == (25, 25, None)
     assert result.coverage == {"price": 1.0}
+    # A report after every slice, so the run can be watched filling in.
+    assert receiving.reports == [(10, 10), (20, 20), (25, 25)]
+
+
+def taken(event_loop, run_id: int) -> None:
+    """A queued run, taken the way the scheduler takes it."""
+    from app.db.session import session_factory
+    from app.features.runs.service import RunService
+
+    async def take() -> None:
+        async with session_factory() as session:
+            assert await RunService(session).begin(run_id)
+            await session.commit()
+
+    event_loop.run_until_complete(take())
+
+
+def test_a_collector_says_how_far_it_has_got_while_it_runs(client, event_loop):
+    """A run used to say nothing between being taken and being finished."""
+    admin = admin_token(client)
+    _, run = a_run(client, admin)
+    queued = client.post(
+        f"/api/worker/runs/{run['id']}/progress",
+        headers=auth(worker_token(client)),
+        json={"phase": "reading"},
+    )
+    assert queued.status_code == 409  # nobody has taken it yet
+    taken(event_loop, run["id"])
+    token = worker_token(client)
+    path = f"/api/worker/runs/{run['id']}/progress"
+
+    found = client.post(path, headers=auth(token), json={"phase": "reading", "discovered": 40})
+    assert found.status_code == 204, found.text
+    sliced = client.post(
+        path, headers=auth(token), json={"phase": "reading", "read": 10, "handed_over": 9}
+    )
+    assert sliced.status_code == 204, sliced.text
+    # Merged, not replaced: the slice did not repeat what discovery found.
+    progress = client.get(f"/api/admin/runs/{run['id']}", headers=auth(admin)).json()["progress"]
+    assert progress == {
+        "phase": "reading",
+        "discovered": 40,
+        "read": 10,
+        "failed": 0,
+        "handed_over": 9,
+    }
+
+    client.post(
+        f"/api/worker/runs/{run['id']}/finish",
+        headers=auth(token),
+        json={"items_seen": 40, "items_ingested": 9},
+    )
+    late = client.post(path, headers=auth(token), json={"phase": "reading", "read": 40})
+    assert late.status_code == 409

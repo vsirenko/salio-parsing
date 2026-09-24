@@ -23,7 +23,7 @@ from app.features.runs import channels as _registered  # noqa: F401 - registers 
 from app.features.runs.channel import Channel, Listing
 from app.features.runs.client import Collector, CollectorError
 from app.features.runs.fetching import Fetcher
-from app.features.runs.schemas import Job, Kind, RunResult
+from app.features.runs.schemas import Job, Kind, RunProgress, RunResult
 from app.features.runs.snapshots import SnapshotStore, SnapshotStoreError
 
 log = logging.getLogger(__name__)
@@ -83,6 +83,9 @@ async def collect(
                 )
 
             log.info("run %d: %d listing(s)", job.run_id, len(listings))
+            await collector.progress(
+                job.run_id, RunProgress(phase="reading", discovered=len(listings))
+            )
             return await _read_and_hand_over(job, channel, collector, session, store, listings)
 
     ingested, coverage, handover_error = await _hand_over(job, collector, payloads)
@@ -131,6 +134,16 @@ async def _read_and_hand_over(
                 error=error,
             )
         log.info("run %d: %d of %d handed over", job.run_id, ingested, len(listings))
+        await collector.progress(
+            job.run_id,
+            RunProgress(
+                phase="reading",
+                discovered=len(listings),
+                read=min(start + every, len(listings)) - failed,
+                failed=failed,
+                handed_over=ingested,
+            ),
+        )
     return RunResult(
         items_seen=len(listings),
         items_ingested=ingested,

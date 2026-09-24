@@ -231,6 +231,8 @@ class Scheduler:
         """
         try:
             async with session_factory() as session:
+                await RunService(session).record_settled(run_id, None)
+                await session.commit()
                 matching = MatchingService(session, judge=JudgeService(session))
                 renamed = 0
                 for _ in range(SETTLE_ROUNDS):
@@ -241,6 +243,15 @@ class Scheduler:
                 first = await matching.run(limit=SETTLE_LIMIT)
                 promoted = await matching.promote_queue(limit=SETTLE_LIMIT)
                 again = await matching.run(limit=SETTLE_LIMIT)
+                await RunService(session).record_settled(
+                    run_id,
+                    {
+                        "renamed": renamed,
+                        "matched": first.matched,
+                        "promoted": promoted.promoted,
+                        "matched_after": again.matched,
+                    },
+                )
                 await session.commit()
             log.info(
                 "run %d settled: %d renamed, %d matched, %d promoted, %d matched after",

@@ -15,7 +15,7 @@ from types import TracebackType
 import httpx2
 
 from app.core.config import settings
-from app.features.runs.schemas import Job, RunResult
+from app.features.runs.schemas import Job, RunProgress, RunResult
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +63,17 @@ class Collector:
         return await self._request(
             "POST", f"/api/worker/sources/{source_id}/offers/batch", body=batch
         )
+
+    async def progress(self, run_id: int, progress: RunProgress) -> None:
+        """What the run has done so far. Best effort: a report that does not arrive costs a
+        person watching one step of the picture, and never the run."""
+        try:
+            await self._request(
+                "POST", f"/api/worker/runs/{run_id}/progress", body=progress.model_dump(mode="json")
+            )
+        except Exception as error:  # noqa: BLE001 - never the run, see above
+            # The first version let a JSON error on its 204 out and failed run 313.
+            log.warning("run %d: progress not reported: %s", run_id, error)
 
     async def finish(self, run_id: int, result: RunResult) -> dict:
         return await self._request(
@@ -120,6 +131,7 @@ class Collector:
                 raise CollectorError(
                     f"{method} {path}: {response.status_code} {response.text[:200]}"
                 )
-            return response.json()
+            # `progress` answers 204, and an empty body is not JSON.
+            return response.json() if response.content else {}
 
         raise CollectorError(f"{method} {path}: could not authenticate")  # pragma: no cover

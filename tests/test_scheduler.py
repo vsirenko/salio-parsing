@@ -288,3 +288,18 @@ def test_a_finished_run_is_placed_without_anybody_calling_the_matcher(client, ev
     after = client.get(f"/api/admin/offers/{offer_id}/trace", headers=auth(token)).json()
     assert after["match"] is not None, after["queue"]
     assert after["entry"]["model"] == "iPhone 15"
+
+
+def test_settling_writes_what_it_placed_onto_the_run(client, event_loop):
+    """So the run's own flow can show the last node filling in."""
+    from tests.test_runs import channel, start
+
+    token = admin_token(client)
+    source = channel(client, token, cron_full=None, cron_quick=None)
+    run = start(client, token, source["id"])
+
+    event_loop.run_until_complete(scheduler().settle(run_id=run["id"]))
+
+    progress = client.get(f"/api/admin/runs/{run['id']}", headers=auth(token)).json()["progress"]
+    assert progress["phase"] == "settled"
+    assert set(progress["settled"]) == {"renamed", "matched", "promoted", "matched_after"}

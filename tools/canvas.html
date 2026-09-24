@@ -72,6 +72,15 @@ details summary { cursor:pointer; color:var(--muted); font-size:12px; }
   border-radius:10px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,.15); font-size:13px; max-width:420px; }
 .status-queued { color:var(--warn); } .status-running { color:var(--accent); } .status-ok { color:var(--ok); }
 .status-failed, .status-rejected, .status-interrupted { color:var(--bad); }
+.node.done rect { stroke:var(--ok); stroke-width:1.8; }
+.node.active rect { stroke:var(--accent); stroke-width:2.4; animation:pulse 1.2s ease-in-out infinite; }
+.node.pending { opacity:.45; }
+.node.broken rect { stroke:var(--bad); stroke-width:2; }
+@keyframes pulse { 50% { stroke-opacity:.35; } }
+.edge.live { stroke:var(--accent); stroke-dasharray:6 5; animation:flow .8s linear infinite; }
+.run-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; font-size:13px; }
+.run-head .chip { cursor:pointer; }
+tr.run-pick { cursor:pointer; } tr.run-pick:hover td { background:var(--soft); }
 </style></head>
 <body>
 <header>
@@ -81,7 +90,7 @@ details summary { cursor:pointer; color:var(--muted); font-size:12px; }
 </header>
 <main>
   <section><h2 id="canvas-title">Pipeline</h2><div class="panel canvas" id="canvas"></div></section>
-  <section id="runs-section" hidden><h2>Runs <span class="muted" style="font-weight:400;font-size:12px">— queued by the buttons below, taken by the scheduler on its next tick</span></h2>
+  <section id="runs-section" hidden><h2>Runs <span class="muted" style="font-weight:400;font-size:12px">— queued by the buttons below, taken by the scheduler on its next tick; click one to draw it</span></h2>
     <div class="panel" style="overflow-x:auto"><table id="runs"></table></div></section>
   <section><h2>Channels <span class="muted" style="font-weight:400;font-size:12px">— click one to draw its own path</span></h2>
     <div class="panel" style="overflow-x:auto"><table id="sources"></table></div></section>
@@ -101,6 +110,8 @@ const D = JSON.parse(document.getElementById("data").textContent);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = (n, d) => d ? Math.round(100 * n / d) + "%" : "—";
 let TAB = "all", SOURCE = null;
+// A run being watched: its id, and its flow as last polled.
+let RUN = null, FLOW = null;
 
 // --- header ---
 let S = D.scheduler;
@@ -119,7 +130,7 @@ function tabs() {
   const keys = Object.keys(D.pipeline);
   document.getElementById("tabs").innerHTML = keys.map(k =>
     `<button class="${k === TAB && !SOURCE ? "on" : ""}" data-k="${esc(k)}">${esc(k === "all" ? "Everything" : k)}</button>`).join("");
-  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { TAB = b.dataset.k; SOURCE = null; draw(); });
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { TAB = b.dataset.k; SOURCE = null; RUN = null; draw(); });
 }
 
 // --- the canvas ---
@@ -167,6 +178,73 @@ function canvas(p) {
   return svg + `</svg>`;
 }
 
+// --- one run, filling in ---
+const RUN_NODES = [
+  ["queued", 0, 1], ["discovered", 1, 1], ["fetched", 2, 1], ["handed_over", 3, 1],
+  ["read", 4, 1], ["placed", 5, 0], ["waiting", 5, 2], ["new_entries", 6, 0],
+];
+// Where a run is, as the nodes it has passed and the ones it is on now.
+function where(f) {
+  const bad = ["failed", "rejected", "interrupted"].includes(f.status);
+  if (f.status === "queued") return { done: [], active: ["queued"], bad };
+  if (f.status === "running" && f.phase !== "reading") return { done: ["queued"], active: ["discovered"], bad };
+  if (f.status === "running") return { done: ["queued", "discovered"], active: ["fetched", "handed_over", "read"], bad };
+  const collected = ["queued", "discovered", "fetched", "handed_over", "read"];
+  if (bad) return { done: collected, active: [], bad };
+  if (f.phase === "settled") return { done: RUN_NODES.map(n => n[0]), active: [], bad };
+  // Finished, and the scheduler is placing what it brought (or is about to).
+  return { done: collected, active: ["placed", "waiting", "new_entries"], bad };
+}
+function runCanvas(f) {
+  const W = 190, H = 118, GX = 60, GY = 34, X0 = 10, Y0 = 10;
+  const stage = Object.fromEntries(f.stages.map(s => [s.key, s]));
+  stage.queued = { ...stage.queued, count: `#${f.run_id}`, parts: { kind: f.kind, status: f.status } };
+  const at = where(f), done = new Set(at.done), active = new Set(at.active);
+  const pos = {};
+  RUN_NODES.forEach(([k, col, row]) => pos[k] = { x: X0 + col * (W + GX), y: Y0 + row * (H + GY) / 1.4 });
+  const width = X0 * 2 + 7 * W + 6 * GX, height = Y0 * 2 + 2 * (H + GY) / 1.4 + H;
+  let svg = `<svg width="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMinYMin meet" style="min-width:900px">`;
+  svg += `<defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--muted)"/></marker></defs>`;
+  for (const e of f.edges) {
+    const a = pos[e.source], b = pos[e.target]; if (!a || !b) continue;
+    const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2, mx = (x1 + x2) / 2;
+    const live = active.has(e.target);
+    svg += `<path class="edge ${live ? "live" : ""}" marker-end="url(#ar2)" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2 - 2},${y2}"/>`;
+    if (done.has(e.target) || live) svg += `<text class="edge-label" x="${mx}" y="${(y1 + y2) / 2 - 5}" text-anchor="middle">${e.count}</text>`;
+  }
+  for (const [k] of RUN_NODES) {
+    const s = stage[k], { x, y } = pos[k]; if (!s) continue;
+    const state = at.bad && !done.has(k) ? "broken" : active.has(k) ? "active" : done.has(k) ? "done" : "pending";
+    const parts = Object.entries(s.parts || {}).slice(0, 4);
+    svg += `<g class="node ${state}"><rect x="${x}" y="${y}" width="${W}" height="${H}" rx="10"/>`;
+    svg += `<text class="label" x="${x + 12}" y="${y + 18}">${esc(s.label)}</text>`;
+    svg += `<text class="count" x="${x + 12}" y="${y + 43}">${state === "pending" ? "·" : esc(s.count)}</text>`;
+    if (state !== "pending") parts.forEach(([pk, pv], i) => svg += `<text class="part" x="${x + 12}" y="${y + 62 + i * 14}">${esc(pk)}: ${esc(pv)}</text>`);
+    svg += `</g>`;
+  }
+  return svg + `</svg>`;
+}
+function runView() {
+  const box = document.getElementById("canvas");
+  if (!FLOW || FLOW.run_id !== RUN) { box.innerHTML = `<div class="muted">reading run ${esc(RUN)}…</div>`; return; }
+  const f = FLOW, t = v => esc((v || "").replace("T", " ").slice(0, 19));
+  const phase = { queued: "waiting for the scheduler's next tick", running: "the worker is finding the shop's products",
+    reading: "the worker is reading product pages and handing them over", ok: "collected; waiting to be placed",
+    settling: "the scheduler is placing what it brought", settled: "placed — done" }[f.phase] || f.phase;
+  document.getElementById("canvas-title").textContent = `Run ${f.run_id} — ${f.source} · ${f.kind}`;
+  box.innerHTML = `<div class="run-head"><button class="chip" id="run-close">← back to the pipeline</button>
+    <b class="status-${esc(f.status)}">${esc(f.status)}</b><span>${esc(phase)}</span>
+    <span class="muted">started ${t(f.started_at)}${f.finished_at ? ` · finished ${t(f.finished_at)}` : ""}</span>
+    ${f.error ? `<span class="bad">${esc(f.error)}</span>` : ""}</div>` + runCanvas(f);
+  document.getElementById("run-close").onclick = () => { RUN = null; FLOW = null; draw(); };
+}
+async function pollRun() {
+  if (!RUN || !D.live) return;
+  try { FLOW = await api(`/pipeline/runs/${RUN}`); } catch (e) { toast(`Run ${RUN}: ${e.message}`); }
+  if (RUN) runView();
+}
+function watch(id) { RUN = Number(id); FLOW = null; draw(); pollRun(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+
 // --- the channels table ---
 function sources(p) {
   const rows = p.sources.map(f => {
@@ -195,7 +273,7 @@ function sources(p) {
     <th>All axes</th><th>Placed</th><th>Queued</th><th>Share</th>${D.live ? "<th>Run</th>" : ""}</tr></thead><tbody>${rows}</tbody>`;
   document.querySelectorAll("#sources tr.pick").forEach(tr => tr.onclick = e => {
     if (e.target.closest && e.target.closest(".run-btn")) return;
-    SOURCE = SOURCE === tr.dataset.s ? null : tr.dataset.s; draw(); });
+    SOURCE = SOURCE === tr.dataset.s ? null : tr.dataset.s; RUN = null; draw(); });
   document.querySelectorAll("#sources .run-btn:not([disabled])").forEach(b => b.onclick = () => ask(b.dataset.id, b.dataset.kind));
 }
 
@@ -206,8 +284,11 @@ function draw() {
   runsPanel();
   const base = D.pipeline[TAB];
   const p = SOURCE ? D.by_source[SOURCE] : base;
-  document.getElementById("canvas-title").textContent = SOURCE ? `Pipeline — ${SOURCE}` : `Pipeline — ${TAB === "all" ? "everything" : TAB}`;
-  document.getElementById("canvas").innerHTML = canvas(p);
+  if (RUN) runView();
+  else {
+    document.getElementById("canvas-title").textContent = SOURCE ? `Pipeline — ${SOURCE}` : `Pipeline — ${TAB === "all" ? "everything" : TAB}`;
+    document.getElementById("canvas").innerHTML = canvas(p);
+  }
   sources(base);
   const view = TAB + "|" + (SOURCE || "");
   if (view !== VIEW) { VIEW = view; pickList(); }
@@ -291,12 +372,13 @@ function runsPanel() {
   if (!D.live) return;
   sec.hidden = false;
   const name = id => (S.channels.find(c => c.source_id === id) || {}).source || id;
-  const rows = RUNS.map(r => `<tr><td>${r.id}</td><td>${esc(name(r.source_id))}</td><td>${esc(r.kind)}</td>
+  const rows = RUNS.map(r => `<tr class="run-pick ${RUN === r.id ? "on" : ""}" data-run="${r.id}"><td>${r.id}</td><td>${esc(name(r.source_id))}</td><td>${esc(r.kind)}</td>
     <td class="status-${esc(r.status)}"><b>${esc(r.status)}</b>${r.status === "running" && S.progress && S.progress[r.id] !== undefined ? ` · ${S.progress[r.id]} seen so far` : ""}</td><td>${esc((r.started_at || "").replace("T", " ").slice(0, 19))}</td>
     <td>${esc((r.finished_at || "").replace("T", " ").slice(0, 19))}</td><td>${r.items_seen}</td><td>${r.items_ingested}</td>
     <td>${r.items_failed}</td><td class="muted">${esc((r.contract || {}).verdict || "")}</td><td class="bad">${esc(r.error || "")}</td></tr>`).join("");
   document.getElementById("runs").innerHTML = `<thead><tr><th>Run</th><th>Channel</th><th>Kind</th><th>Status</th>
     <th>Started</th><th>Finished</th><th>Seen</th><th>Ingested</th><th>Failed</th><th>Contract</th><th>Error</th></tr></thead><tbody>${rows}</tbody>`;
+  document.querySelectorAll("#runs tr.run-pick").forEach(tr => tr.onclick = () => watch(tr.dataset.run));
 }
 function toast(text) {
   const t = document.getElementById("toast"); t.textContent = text; t.hidden = false;
@@ -306,6 +388,7 @@ async function ask(sourceId, kind) {
   try {
     const run = await api(`/sources/${sourceId}/runs?kind=${kind}`, "POST");
     toast(`Run ${run.id} ${run.kind}: ${run.status} — the scheduler takes it on its next tick`);
+    watch(run.id);
   } catch (e) { toast(`Not queued: ${e.message}`); }
   refresh();
 }
@@ -321,6 +404,9 @@ async function refresh() {
   } catch (e) { document.getElementById("sub").innerHTML += ` · <span class="bad">refresh failed: ${esc(e.message)}</span>`; }
 }
 draw();
-if (D.live) { refresh(); setInterval(refresh, 3000); }
+// `#run=314` opens straight onto that run.
+const linked = /run=(\d+)/.exec(location.hash);
+if (D.live && linked) watch(linked[1]);
+if (D.live) { refresh(); setInterval(refresh, 3000); setInterval(pollRun, 2000); }
 </script>
 </body></html>

@@ -32,6 +32,7 @@ from app.features.runs.schemas import (
     Due,
     Job,
     Kind,
+    RunProgress,
     RunRead,
     RunResult,
     SchedulerStatus,
@@ -226,6 +227,25 @@ class RunService:
             .values(status=Status.INTERRUPTED.value, finished_at=datetime.now(UTC))
         )
         return result.rowcount or 0
+
+    async def report_progress(self, run_id: int, progress: RunProgress) -> None:
+        """What a running run has done so far, from its worker."""
+        run = await self._run(run_id)
+        if run.status != Status.RUNNING.value:
+            raise ConflictError(f"Run {run_id} is {run.status}, not running")
+        run.progress = {**(run.progress or {}), **progress.model_dump(exclude_none=True)}
+        await self.session.flush()
+
+    async def record_settled(self, run_id: int, settled: dict[str, int] | None) -> None:
+        """What settling a finished run placed, from the scheduler; `None` as it begins."""
+        run = await self.session.get(Run, run_id)
+        if run is None:
+            return
+        if settled is None:
+            run.progress = {**(run.progress or {}), "phase": "settling"}
+        else:
+            run.progress = {**(run.progress or {}), "phase": "settled", "settled": settled}
+        await self.session.flush()
 
     async def queued(self) -> list[int]:
         """The runs asked for by hand, oldest first."""

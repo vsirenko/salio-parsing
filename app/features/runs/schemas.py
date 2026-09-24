@@ -56,6 +56,7 @@ class RunRead(BaseModel):
     coverage: dict
     contract: dict
     error: str | None
+    progress: dict
 
 
 class RunResult(BaseModel):
@@ -153,3 +154,15 @@ class SchedulerStatus(BaseModel):
     progress: dict[int, int]
     due: list[Due]
     channels: list[ChannelSchedule]
+
+
+class RunProgress(BaseModel):
+    """What a worker has done so far. Counts only; each report replaces the last one's."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phase: str = Field(max_length=20)
+    discovered: int | None = Field(default=None, ge=0)
+    read: int = Field(default=0, ge=0)
+    failed: int = Field(default=0, ge=0)
+    handed_over: int = Field(default=0, ge=0)

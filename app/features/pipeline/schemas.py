@@ -1,5 +1,7 @@
 """The collection-to-catalogue pipeline as nodes and the edges between them."""
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -49,3 +51,27 @@ class Pipeline(BaseModel):
     stages: list[Stage]
     edges: list[Edge]
     sources: list[SourceFlow]
+
+
+class RunFlow(BaseModel):
+    """One run through the same nodes, filling in while it runs.
+
+    The first half is what the worker reported (`progress`): how many product pages it found,
+    read and handed over. The second half is counted from the tables: what became of the
+    listings this run saw, and what settling it placed. Both are there as the run goes, so a
+    page polling this watches the nodes fill in order.
+    """
+
+    run_id: int
+    source: str
+    shop: str
+    category: str | None
+    kind: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    phase: str
+    progress: dict
+    stages: list[Stage]
+    edges: list[Edge]

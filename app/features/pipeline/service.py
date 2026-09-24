@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.features.pipeline.schemas import Edge, Pipeline, SourceFlow, Stage
+from app.features.pipeline.schemas import Edge, Pipeline, RunFlow, SourceFlow, Stage
 
 # One row per listing: its channel, whether the shop still lists it, its newest reading
 # from a pass that carried the catalogue — the rule the matcher reads by — and where it
@@ -81,6 +81,62 @@ where (cast(:category_id as integer) is null or v.category_id = :category_id)
       select 1 from offer_matches m
       join raw_offers r on r.offer_id = m.offer_id
       where m.variant_id = v.id and m.superseded_at is null and r.source_id = :source_id))
+"""
+
+RUN = """
+select ru.id, ru.kind, ru.status, ru.started_at, ru.finished_at, ru.error, ru.progress,
+       ru.items_seen, ru.items_ingested, ru.items_failed,
+       s.id as source_id, s.slug as source, sh.name as shop, c.slug as category
+from runs ru
+join sources s on s.id = ru.source_id
+join shops sh on sh.id = s.shop_id
+left join categories c on c.id = s.category_id
+where ru.id = :run_id
+"""
+
+# The listings a run saw: the channel's stored readings whose bytes it delivered, changed or
+# not — an unchanged page bumps `last_seen_at` and nothing else — while the run was open.
+# A quick pass inside that window would count too; one channel runs one pass at a time.
+RUN_LISTINGS = """
+with seen as (
+    select distinct on (r.offer_id) r.offer_id, r.id as raw_id, r.run_id
+    from raw_offers r
+    where r.source_id = :source_id
+      and r.last_seen_at >= :started
+      and r.last_seen_at <= coalesce(cast(:finished as timestamptz), now())
+    order by r.offer_id, r.last_seen_at desc, r.id desc
+),
+reading as (
+    select distinct on (n.raw_offer_id) n.raw_offer_id, n.model, n.gtin, n.identity
+    from normalized_offers n
+    where n.raw_offer_id in (select raw_id from seen)
+    order by n.raw_offer_id, n.id desc
+),
+required as (
+    select ca.category_id, array_agg(a.key) as axes
+    from category_attributes ca join attributes a on a.id = ca.attribute_id
+    where ca.identity_bearing
+    group by ca.category_id
+)
+select o.first_seen_at >= :started as new_listing,
+       se.run_id = :run_id as changed,
+       rd.raw_offer_id is not null as read,
+       coalesce(rd.model, '') <> '' as with_model,
+       rd.gtin is not null as with_gtin,
+       coalesce(rd.identity ?& req.axes, false) as all_axes,
+       m.method,
+       m.decided_at >= :started as placed_now,
+       v.created_at >= :started as new_entry,
+       m.variant_id,
+       q.reason
+from seen se
+join offers o on o.id = se.offer_id
+join sources s on s.id = :source_id
+left join reading rd on rd.raw_offer_id = se.raw_id
+left join required req on req.category_id = s.category_id
+left join offer_matches m on m.offer_id = se.offer_id and m.superseded_at is null
+left join variants v on v.id = m.variant_id
+left join match_queue q on q.offer_id = se.offer_id
 """
 
 
@@ -201,6 +257,119 @@ class PipelineService:
             stages=stages,
             edges=edges,
             sources=sorted(flows.values(), key=lambda f: (f.shop, f.source)),
+        )
+
+    async def run(self, run_id: int) -> RunFlow:
+        """One run's own pass, from the worker's counts to what settling it placed."""
+        run = (await self.session.execute(text(RUN), {"run_id": run_id})).mappings().first()
+        if run is None:
+            raise NotFoundError(f"Run {run_id} not found")
+        rows = (
+            (
+                await self.session.execute(
+                    text(RUN_LISTINGS),
+                    {
+                        "run_id": run_id,
+                        "source_id": run["source_id"],
+                        "started": run["started_at"],
+                        "finished": run["finished_at"],
+                    },
+                )
+            )
+            .mappings()
+            .all()
+        )
+        progress = run["progress"] or {}
+        methods: Counter[str] = Counter()
+        reasons: Counter[str] = Counter()
+        counts: Counter[str] = Counter()
+        entries: set[int] = set()
+        for row in rows:
+            counts["seen"] += 1
+            for key in ("new_listing", "changed", "read", "with_model", "with_gtin", "all_axes"):
+                counts[key] += bool(row[key])
+            if row["method"]:
+                counts["placed"] += 1
+                counts["placed_now"] += bool(row["placed_now"])
+                methods[row["method"]] += 1
+                if row["new_entry"]:
+                    entries.add(row["variant_id"])
+            elif row["reason"]:
+                counts["queued"] += 1
+                reasons[row["reason"]] += 1
+
+        finished = run["status"] not in ("queued", "running")
+        # While the worker runs its own report is the only word on how far it got; once it
+        # has finished, the run's row carries the final count.
+        discovered = run["items_seen"] if finished else progress.get("discovered")
+        fetched = run["items_seen"] - run["items_failed"] if finished else progress.get("read", 0)
+        failed = run["items_failed"] if finished else progress.get("failed", 0)
+        handed = run["items_ingested"] if finished else progress.get("handed_over", 0)
+        phase = progress.get("phase") or run["status"]
+        if finished and phase == "reading":
+            phase = run["status"]
+
+        stages = [
+            Stage(key="queued", label="Asked for", count=1, parts={}),
+            Stage(key="discovered", label="Found on the shop", count=discovered or 0, parts={}),
+            Stage(
+                key="fetched", label="Read by the worker", count=fetched, parts={"failed": failed}
+            ),
+            Stage(key="handed_over", label="Handed over", count=handed, parts={}),
+            Stage(
+                key="read",
+                label="Read by us",
+                count=counts["read"],
+                parts={
+                    "new_listings": counts["new_listing"],
+                    "changed": counts["changed"],
+                    "with_model": counts["with_model"],
+                    "with_gtin": counts["with_gtin"],
+                    "all_axes": counts["all_axes"],
+                },
+            ),
+            Stage(
+                key="placed",
+                label="Placed",
+                count=counts["placed"],
+                parts={"by_this_run": counts["placed_now"], **dict(methods.most_common())},
+            ),
+            Stage(
+                key="waiting",
+                label="Queued for review",
+                count=counts["queued"],
+                parts=dict(reasons.most_common()),
+            ),
+            Stage(
+                key="new_entries",
+                label="New catalogue entries",
+                count=len(entries),
+                parts=progress.get("settled") or {},
+            ),
+        ]
+        edges = [
+            Edge(source="queued", target="discovered", count=discovered or 0),
+            Edge(source="discovered", target="fetched", count=fetched),
+            Edge(source="fetched", target="handed_over", count=handed),
+            Edge(source="handed_over", target="read", count=counts["read"]),
+            Edge(source="read", target="placed", count=counts["placed"]),
+            Edge(source="read", target="waiting", count=counts["queued"]),
+            Edge(source="placed", target="new_entries", count=len(entries)),
+        ]
+        return RunFlow(
+            run_id=run["id"],
+            source=run["source"],
+            shop=run["shop"],
+            category=run["category"],
+            kind=run["kind"],
+            status=run["status"],
+            started_at=run["started_at"],
+            finished_at=run["finished_at"],
+            error=run["error"],
+            phase=phase,
+            progress=progress,
+            stages=stages,
+            edges=edges,
         )
 
 

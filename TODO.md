@@ -869,8 +869,14 @@ and the questions that have to be answered with real data first, are written dow
       at all.
 - [x] Batch ingestion, gzipped, partial on failure, one audit entry per batch, carrying
       the run that collected it
-- [x] A collector audience: `aud=worker`, its own account, five routes and no more, so a
+- [x] A collector audience: `aud=worker`, its own account, six routes and no more, so a
       parser does not hold an administrator's credentials while chewing hostile input
+- [x] A run can be watched as it goes: the worker reports found / read / handed over after
+      discovery and after every slice, settling records what it placed, and
+      `GET /api/admin/pipeline/runs/{id}` draws one run from the queue to the catalogue
+- [ ] **The throwaway canvas takes ~8 s to open** (`tools/canvas.py --serve`): it traces
+      every queued listing up front and ships 6 MB. Fine for a test page; the admin panel
+      should ask for traces on demand.
 - [ ] **Workers still run only where the scheduler is.** They reach the service over HTTP
       now, so moving them onto another machine needs a claim endpoint — the scheduler
       currently spawns subprocesses rather than handing work out.

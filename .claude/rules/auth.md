@@ -9,7 +9,7 @@
   here that runs hostile input through itself all day; holding an admin token it could do
   anything an administrator can. Collector routes live on `worker_router` in
   `app/api/worker_router.py` and are deliberately few — read the job, hand over a pass,
-  report how the run went. Adding one is a decision, and `tests/test_worker.py` asserts the
+  say how far it has got, report how the run went. Adding one is a decision, and `tests/test_worker.py` asserts the
   exact set so that it cannot be made by accident.
 - Admin routes go on `admin_router` in `app/api/admin_router.py`, which carries
   `Depends(get_current_admin)` at router level — never guard admin endpoints one by one.
