@@ -113,19 +113,38 @@ class Scheduler:
             await self.shutdown()
 
     async def tick(self) -> int:
-        """Start whatever is due and there is room for."""
+        """Start what was asked for by hand, then whatever is due, while there is room."""
         room = settings.scheduler_max_running - len(self.workers)
         if room <= 0:
             return 0
 
+        started = 0
+        async with session_factory() as session:
+            asked = await RunService(session).queued()
+        for run_id in asked[:room]:
+            if await self._take(run_id):
+                started += 1
+        room -= started
+        if room <= 0:
+            return started
+
         async with session_factory() as session:
             due = await RunService(session).due()
 
-        started = 0
         for item in due[:room]:
             if await self._spawn(item.source_id, item.kind):
                 started += 1
         return started
+
+    async def _take(self, run_id: int) -> bool:
+        """A queued run: running from now, with a worker of its own."""
+        async with session_factory() as session:
+            service = RunService(session)
+            if not await service.begin(run_id):
+                return False
+            run = await service.get(run_id)
+            await session.commit()
+        return await self._worker_for(run.id, run.source_id, Kind(run.kind))
 
     async def beat(self, started: int) -> None:
         """Say this scheduler is alive. A failure to say so is logged and never fatal: the
@@ -154,21 +173,23 @@ class Scheduler:
                 log.info("not starting %s/%s: %s", source_id, kind.value, error)
                 return False
             await session.commit()
+        return await self._worker_for(run.id, source_id, kind)
 
+    async def _worker_for(self, run_id: int, source_id: int, kind: Kind) -> bool:
         command = settings.worker_command.format(
-            run_id=run.id, source_id=source_id, kind=kind.value
+            run_id=run_id, source_id=source_id, kind=kind.value
         )
         try:
             process = await asyncio.create_subprocess_exec(
                 *shlex.split(command),
-                env={**os.environ, "RUN_ID": str(run.id)},
+                env={**os.environ, "RUN_ID": str(run_id)},
             )
         except OSError as error:
-            await self._finish(run.id, f"could not spawn worker: {error}")
+            await self._finish(run_id, f"could not spawn worker: {error}")
             return False
 
-        self.workers[run.id] = Worker(run.id, source_id, kind, process)
-        log.info("started run %d: %s", run.id, command)
+        self.workers[run_id] = Worker(run_id, source_id, kind, process)
+        log.info("started run %d: %s", run_id, command)
         return True
 
     async def reap(self) -> None:

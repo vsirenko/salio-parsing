@@ -1340,13 +1340,15 @@ class Run(Base):
     __table_args__ = (
         CheckConstraint("kind in ('full', 'quick', 'reparse')", name="kind_known"),
         CheckConstraint(
-            "status in ('running', 'ok', 'rejected', 'failed', 'interrupted')",
+            "status in ('queued', 'running', 'ok', 'rejected', 'failed', 'interrupted')",
             name="status_known",
         ),
-        # A live run is exactly a row without finished_at. Without this the status and the
-        # timestamp drift apart and "what is running" stops being one query.
+        # A live run — waiting or working — is exactly a row without finished_at. Without
+        # this the status and the timestamp drift apart and "what is live" stops being one
+        # query.
         CheckConstraint(
-            "(status = 'running') = (finished_at is null)", name="finished_matches_status"
+            "(status in ('queued', 'running')) = (finished_at is null)",
+            name="finished_matches_status",
         ),
         # One live run per channel and kind, held by the database rather than by the hope
         # that there is only ever one scheduler.

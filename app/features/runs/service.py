@@ -41,7 +41,10 @@ class RunService:
 
     # --- starting ---
 
-    async def start(self, source_id: int, kind: Kind) -> RunRead:
+    async def start(self, source_id: int, kind: Kind, *, queued: bool = False) -> RunRead:
+        """A run of a channel: running, when the scheduler starts it and spawns its worker
+        in the same breath, or queued, when a person asks and the scheduler's next tick
+        gives it one."""
         source = await self._source(source_id)
         audit.set_target("source", source_id)
         if kind is Kind.QUICK and not source.delivers_quick:
@@ -55,7 +58,8 @@ class RunService:
         # for it while handling the failure sends it back to the database mid-rollback.
         slug = source.slug
 
-        run = Run(source_id=source_id, kind=kind.value, status=Status.RUNNING.value)
+        status = Status.QUEUED if queued else Status.RUNNING
+        run = Run(source_id=source_id, kind=kind.value, status=status.value)
         self.session.add(run)
         try:
             await self.session.flush()
@@ -208,10 +212,27 @@ class RunService:
         """
         result = await self.session.execute(
             update(Run)
-            .where(Run.finished_at.is_(None))
+            # A queued run has no process behind it by design; it waits for this scheduler.
+            .where(Run.finished_at.is_(None), Run.status == Status.RUNNING.value)
             .values(status=Status.INTERRUPTED.value, finished_at=datetime.now(UTC))
         )
         return result.rowcount or 0
+
+    async def queued(self) -> list[int]:
+        """The runs asked for by hand, oldest first."""
+        rows = await self.session.scalars(
+            select(Run.id).where(Run.status == Status.QUEUED.value).order_by(Run.started_at, Run.id)
+        )
+        return list(rows.all())
+
+    async def begin(self, run_id: int) -> bool:
+        """Take a queued run: running from now. False if somebody took it first."""
+        result = await self.session.execute(
+            update(Run)
+            .where(Run.id == run_id, Run.status == Status.QUEUED.value)
+            .values(status=Status.RUNNING.value, started_at=datetime.now(UTC))
+        )
+        return bool(result.rowcount)
 
     async def due(self, *, now: datetime | None = None) -> list[Due]:
         """Which channels should be started right now.
@@ -275,7 +296,7 @@ class RunService:
         """Alive or not, what is running, what is due, and every channel's next slot."""
         now = now or datetime.now(UTC)
         beat = await self.session.get(SchedulerHeartbeat, 1)
-        running = (
+        live = (
             await self.session.scalars(
                 select(Run).where(Run.finished_at.is_(None)).order_by(Run.started_at)
             )
@@ -322,7 +343,8 @@ class RunService:
             ticked_at=beat.ticked_at if beat else None,
             pid=beat.pid if beat else None,
             tick_seconds=settings.scheduler_tick_seconds,
-            running=[RunRead.model_validate(run) for run in running],
+            queued=[RunRead.model_validate(r) for r in live if r.status == Status.QUEUED.value],
+            running=[RunRead.model_validate(r) for r in live if r.status == Status.RUNNING.value],
             due=await self.due(now=now),
             channels=channels,
         )

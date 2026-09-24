@@ -68,9 +68,10 @@ async def run(run_id: int, service: RunServiceDep) -> RunRead:
     },
 )
 async def start(source_id: int, kind: Kind, service: RunServiceDep) -> RunRead:
-    """One live run per channel and kind, refused by the database rather than by the hope
-    that only one scheduler exists."""
-    return await service.start(source_id, kind)
+    """Queued: the scheduler's next tick gives it a worker, ahead of anything scheduled.
+    One live run per channel and kind — queued or running — refused by the database rather
+    than by the hope that only one scheduler exists."""
+    return await service.start(source_id, kind, queued=True)
 
 
 @router.post(

@@ -9,7 +9,7 @@ One execution of one channel: starting it, judging it, and deciding what is due.
 | `GET /api/admin/runs` | what has been collected, newest first, filterable by `source_id` and `status` |
 | `GET /api/admin/runs/due` | what the scheduler would start right now |
 | `GET /api/admin/runs/{run_id}` | one run, with its coverage and verdict |
-| `POST /api/admin/sources/{source_id}/runs` | start one by hand |
+| `POST /api/admin/sources/{source_id}/runs` | ask for one by hand — `full`, `quick` or `reparse`; queued for the next tick |
 | `POST /api/admin/runs/{run_id}/finish` | a worker reporting back |
 | `GET /api/admin/scheduler` | alive or not, what runs, what is due, and every channel's schedule, last run and next slot |
 
@@ -22,6 +22,13 @@ schedule, the log was empty, and the container's health check probed an HTTP por
 process does not open, so it read `unhealthy` whatever the scheduler did. Each tick now
 rewrites one row, `GET /scheduler` calls it alive within three ticks, and the container
 check is `python -m app.features.runs.scheduler --healthy`, which asks the same question.
+
+**A run asked for by hand is queued, not started.** It used to be created `running` with
+nothing behind it: the scheduler spawns workers for what is due, and a row nobody scheduled
+is not due, so it sat until the next startup swept it — every collection on 23.09.2026 ran
+because somebody started its worker in a shell. `queued` is live — it holds the channel's one
+live slot and the startup sweep leaves it — and the next tick takes it ahead of anything
+scheduled. Starting a worker by hand for a queued run as well would run it twice.
 
 **`runs` is the scheduler's entire memory of schedules.** It answers both questions the scheduler has:
 when did this channel last run, and is it running now. There is no scheduler state anywhere
@@ -101,7 +108,9 @@ start   take the lock, or exit
         sweep: anything still running has no process behind it
 
 tick    reap finished workers
-        ask due(), start what there is room for, spawn one process per run
+        take what was queued by hand, oldest first, then ask due();
+        start what there is room for, spawn one process per run
+        rewrite the heartbeat
 
 stop    wait for what is running, then reap so each one keeps its own verdict
 ```

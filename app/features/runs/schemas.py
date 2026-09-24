@@ -23,6 +23,10 @@ class Kind(StrEnum):
 
 
 class Status(StrEnum):
+    # Asked for by hand, and waiting for the scheduler to give it a worker on its next tick.
+    # A run started from the panel used to be created running with nothing behind it, and
+    # sat there until the next startup swept it: nobody spawns a worker for a row.
+    QUEUED = "queued"
     RUNNING = "running"
     # Finished, contract passed. Together with a collecting kind, the only thing that earns
     # the right to treat what was not seen as gone — a reparse sees whatever happens to be
@@ -139,6 +143,7 @@ class SchedulerStatus(BaseModel):
     ticked_at: datetime | None
     pid: int | None
     tick_seconds: int
+    queued: list[RunRead]
     running: list[RunRead]
     due: list[Due]
     channels: list[ChannelSchedule]

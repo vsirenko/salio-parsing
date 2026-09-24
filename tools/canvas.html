@@ -58,6 +58,14 @@ select, input { font:inherit; padding:6px 9px; border-radius:8px; border:1px sol
 .change .now { color:var(--ok); }
 pre { margin:0; white-space:pre-wrap; word-break:break-word; font-size:11.5px; }
 details summary { cursor:pointer; color:var(--muted); font-size:12px; }
+.run-btn { font:inherit; font-size:11.5px; padding:2px 8px; border-radius:6px; border:1px solid var(--line);
+  background:var(--card); color:var(--accent); cursor:pointer; margin-left:3px; }
+.run-btn:hover { border-color:var(--accent); }
+.live { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; background:var(--ok); color:#fff; }
+.toast { position:fixed; right:18px; bottom:18px; background:var(--card); border:1px solid var(--line);
+  border-radius:10px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,.15); font-size:13px; max-width:420px; }
+.status-queued { color:var(--warn); } .status-running { color:var(--accent); } .status-ok { color:var(--ok); }
+.status-failed, .status-rejected, .status-interrupted { color:var(--bad); }
 </style></head>
 <body>
 <header>
@@ -67,6 +75,8 @@ details summary { cursor:pointer; color:var(--muted); font-size:12px; }
 </header>
 <main>
   <section><h2 id="canvas-title">Pipeline</h2><div class="panel canvas" id="canvas"></div></section>
+  <section id="runs-section" hidden><h2>Runs <span class="muted" style="font-weight:400;font-size:12px">— queued by the buttons below, taken by the scheduler on its next tick</span></h2>
+    <div class="panel" style="overflow-x:auto"><table id="runs"></table></div></section>
   <section><h2>Channels <span class="muted" style="font-weight:400;font-size:12px">— click one to draw its own path</span></h2>
     <div class="panel" style="overflow-x:auto"><table id="sources"></table></div></section>
   <section><h2>One listing, step by step</h2>
@@ -78,6 +88,7 @@ details summary { cursor:pointer; color:var(--muted); font-size:12px; }
       <div class="flow" id="trace"></div>
     </div></section>
 </main>
+<div class="toast" id="toast" hidden></div>
 <script id="data" type="application/json">__DATA__</script>
 <script>
 const D = JSON.parse(document.getElementById("data").textContent);
@@ -86,13 +97,17 @@ const pct = (n, d) => d ? Math.round(100 * n / d) + "%" : "—";
 let TAB = "all", SOURCE = null;
 
 // --- header ---
-const S = D.scheduler;
-const scheduled = S.channels.filter(c => c.cron_full || c.cron_quick).length;
-document.getElementById("sub").innerHTML =
-  `Scheduler <b class="${S.alive ? "ok" : "bad"}">${S.alive ? "alive" : "not ticking"}</b>` +
-  ` · last tick ${esc(S.ticked_at || "never")} · ${S.running.length} running · ${S.due.length} due` +
-  ` · <b class="${scheduled ? "" : "warn"}">${scheduled} of ${S.channels.length} channels scheduled</b>` +
-  ` · generated ${esc(D.generated_at)}`;
+let S = D.scheduler;
+let scheduled = 0;
+function header() {
+  S = D.scheduler;
+  scheduled = S.channels.filter(c => c.cron_full || c.cron_quick).length;
+  document.getElementById("sub").innerHTML = (D.live ? `<span class="live">live</span> ` : "") +
+    `Scheduler <b class="${S.alive ? "ok" : "bad"}">${S.alive ? "alive" : "not ticking"}</b>` +
+    ` · last tick ${esc(S.ticked_at || "never")} · ${(S.queued || []).length} queued · ${S.running.length} running · ${S.due.length} due` +
+    ` · <b class="${scheduled ? "" : "warn"}">${scheduled} of ${S.channels.length} channels scheduled</b>` +
+    ` · ${D.live ? "updated " + new Date().toLocaleTimeString() : "generated " + esc(D.generated_at)}`;
+}
 
 function tabs() {
   const keys = Object.keys(D.pipeline);
@@ -154,23 +169,30 @@ function sources(p) {
       <td>${f.collected}</td><td>${f.listed}</td><td class="muted">${f.delisted}</td>
       <td>${f.with_model}</td><td>${f.with_gtin}</td><td>${f.all_axes}</td>
       <td>${f.placed}</td><td class="${f.queued ? "warn" : "muted"}">${f.queued}</td>
-      <td><span class="bar" style="width:${Math.round(share * 60)}px"></span> ${pct(f.placed, f.listed)}</td></tr>`;
+      <td><span class="bar" style="width:${Math.round(share * 60)}px"></span> ${pct(f.placed, f.listed)}</td>
+      ${D.live ? `<td>${["full", "quick", "reparse"].map(k => `<button class="run-btn" data-id="${f.source_id}" data-kind="${k}">${k}</button>`).join("")}</td>` : ""}</tr>`;
   }).join("");
   document.getElementById("sources").innerHTML = `<thead><tr><th>Shop</th><th>Channel</th><th>Scheduled</th>
     <th>Last run</th><th>Collected</th><th>Listed</th><th>Delisted</th><th>Model</th><th>Barcode</th>
-    <th>All axes</th><th>Placed</th><th>Queued</th><th>Share</th></tr></thead><tbody>${rows}</tbody>`;
-  document.querySelectorAll("#sources tr.pick").forEach(tr => tr.onclick = () => {
+    <th>All axes</th><th>Placed</th><th>Queued</th><th>Share</th>${D.live ? "<th>Run</th>" : ""}</tr></thead><tbody>${rows}</tbody>`;
+  document.querySelectorAll("#sources tr.pick").forEach(tr => tr.onclick = e => {
+    if (e.target.closest && e.target.closest(".run-btn")) return;
     SOURCE = SOURCE === tr.dataset.s ? null : tr.dataset.s; draw(); });
+  document.querySelectorAll("#sources .run-btn").forEach(b => b.onclick = () => ask(b.dataset.id, b.dataset.kind));
 }
 
+let VIEW = "";
 function draw() {
+  header();
   tabs();
+  runsPanel();
   const base = D.pipeline[TAB];
   const p = SOURCE ? D.by_source[SOURCE] : base;
   document.getElementById("canvas-title").textContent = SOURCE ? `Pipeline — ${SOURCE}` : `Pipeline — ${TAB === "all" ? "everything" : TAB}`;
   document.getElementById("canvas").innerHTML = canvas(p);
   sources(base);
-  pickList();
+  const view = TAB + "|" + (SOURCE || "");
+  if (view !== VIEW) { VIEW = view; pickList(); }
 }
 
 // --- one listing ---
@@ -198,8 +220,13 @@ function change(ch) {
 }
 const arrow = () => `<div class="arrow">↓</div>`;
 
-function trace() {
-  const t = D.traces[document.getElementById("trace-pick").value];
+async function trace() {
+  const id = document.getElementById("trace-pick").value;
+  if (D.live && id) {
+    document.getElementById("trace").innerHTML = `<div class="muted">reading offer ${esc(id)}…</div>`;
+    try { D.traces[id] = await api(`/offers/${id}/trace`); } catch (e) { /* keep the snapshot */ }
+  }
+  const t = D.traces[id];
   const box = document.getElementById("trace");
   if (!t) { box.innerHTML = `<div class="muted">No listing traced for this view.</div>`; return; }
   const quiet = document.getElementById("show-quiet").checked;
@@ -232,6 +259,50 @@ function trace() {
 }
 document.getElementById("trace-pick").onchange = trace;
 document.getElementById("show-quiet").onchange = trace;
+
+// --- live: poll the API through the local server, and ask for runs ---
+async function api(path, method = "GET") {
+  const r = await fetch(`/api/admin${path}`, { method });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(body.error ? body.error.message : r.statusText), { status: r.status, body });
+  return body;
+}
+let RUNS = [];
+function runsPanel() {
+  const sec = document.getElementById("runs-section");
+  if (!D.live) return;
+  sec.hidden = false;
+  const name = id => (S.channels.find(c => c.source_id === id) || {}).source || id;
+  const rows = RUNS.map(r => `<tr><td>${r.id}</td><td>${esc(name(r.source_id))}</td><td>${esc(r.kind)}</td>
+    <td class="status-${esc(r.status)}"><b>${esc(r.status)}</b></td><td>${esc((r.started_at || "").replace("T", " ").slice(0, 19))}</td>
+    <td>${esc((r.finished_at || "").replace("T", " ").slice(0, 19))}</td><td>${r.items_seen}</td><td>${r.items_ingested}</td>
+    <td>${r.items_failed}</td><td class="muted">${esc((r.contract || {}).verdict || "")}</td><td class="bad">${esc(r.error || "")}</td></tr>`).join("");
+  document.getElementById("runs").innerHTML = `<thead><tr><th>Run</th><th>Channel</th><th>Kind</th><th>Status</th>
+    <th>Started</th><th>Finished</th><th>Seen</th><th>Ingested</th><th>Failed</th><th>Contract</th><th>Error</th></tr></thead><tbody>${rows}</tbody>`;
+}
+function toast(text) {
+  const t = document.getElementById("toast"); t.textContent = text; t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.hidden = true, 5000);
+}
+async function ask(sourceId, kind) {
+  try {
+    const run = await api(`/sources/${sourceId}/runs?kind=${kind}`, "POST");
+    toast(`Run ${run.id} ${run.kind}: ${run.status} — the scheduler takes it on its next tick`);
+  } catch (e) { toast(`Not queued: ${e.message}`); }
+  refresh();
+}
+async function refresh() {
+  try {
+    D.scheduler = await api("/scheduler");
+    const q = SOURCE ? `?source=${encodeURIComponent(SOURCE)}` : TAB === "all" ? "" : `?category=${encodeURIComponent(TAB)}`;
+    const p = await api(`/pipeline${q}`);
+    if (SOURCE) D.by_source[SOURCE] = p; else D.pipeline[TAB] = p;
+    if (SOURCE) D.pipeline[TAB] = await api(TAB === "all" ? "/pipeline" : `/pipeline?category=${encodeURIComponent(TAB)}`);
+    RUNS = (await api("/runs?limit=12")).items;
+    draw();
+  } catch (e) { document.getElementById("sub").innerHTML += ` · <span class="bad">refresh failed: ${esc(e.message)}</span>`; }
+}
 draw();
+if (D.live) { refresh(); setInterval(refresh, 3000); }
 </script>
 </body></html>

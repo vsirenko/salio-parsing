@@ -1,20 +1,29 @@
 """A throwaway canvas over the pipeline endpoints, written as one HTML file.
 
-    .venv/bin/python -m tools.canvas
+    .venv/bin/python -m tools.canvas            # a snapshot, var/preview/canvas.html
+    .venv/bin/python -m tools.canvas --serve    # live, on http://localhost:8781
 
 Temporary, to be deleted once the admin panel draws the same thing. It calls the running
 API — `/api/admin/scheduler`, `/api/admin/pipeline` for everything, each category and each
 channel, and `/api/admin/offers/{id}/trace` for every listing that did not place plus a few
 that did from each channel — and writes `var/preview/canvas.html` with the answers inside
 it, so the page needs no token and no server of its own. Running it again is the refresh.
+
+`--serve` is the same page, live: a local server hands it out and passes `/api/admin/*` on
+to the API with a token it mints itself, so the browser needs neither a token nor CORS. The
+page polls the scheduler, the pipeline and the latest runs, and every channel has buttons to
+queue a `full`, `quick` or `reparse` run — which the scheduler takes on its next tick.
 """
 
+import argparse
 import asyncio
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
 from datetime import UTC, datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from sqlalchemy import select, text
@@ -44,6 +53,12 @@ select l.offer_id, l.source_id,
 from latest l join offers o on o.id = l.offer_id
 order by l.source_id, l.offer_id
 """
+
+
+async def mint() -> str:
+    async with session_factory() as session:
+        admin = await session.scalar(select(User).where(User.role == "admin").limit(1))
+        return create_access_token(admin.id, admin.token_epoch, Audience.ADMIN)
 
 
 async def token_and_samples() -> tuple[str, list[int]]:
@@ -99,14 +114,78 @@ def collect() -> dict:
     }
 
 
+def render(data: dict) -> str:
+    blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    return PAGE.read_text(encoding="utf-8").replace("__DATA__", blob)
+
+
 def main() -> None:
     data = collect()
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-    OUT.write_text(PAGE.read_text(encoding="utf-8").replace("__DATA__", blob), encoding="utf-8")
+    OUT.write_text(render(data), encoding="utf-8")
     print(OUT)
     print(f"{len(data['traces'])} listings traced, {len(data['by_source'])} channels")
 
 
+def serve(port: int) -> None:
+    """The page, live: `/` is the page, `/api/admin/*` is the API with a token added."""
+    state = {"token": asyncio.run(mint())}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:  # the terminal is for the operator
+            return
+
+        def _proxy(self, method: str) -> None:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length else None
+            for attempt in (1, 2):
+                request = urllib.request.Request(
+                    f"http://localhost:8080{self.path}",
+                    data=body,
+                    method=method,
+                    headers={
+                        "Authorization": f"Bearer {state['token']}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                try:
+                    with urllib.request.urlopen(request, timeout=120) as response:
+                        status, payload = response.status, response.read()
+                except urllib.error.HTTPError as error:
+                    status, payload = error.code, error.read()
+                if status == 401 and attempt == 1:
+                    state["token"] = asyncio.run(mint())  # expired: mint and ask again
+                    continue
+                break
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_GET(self) -> None:
+            if self.path.startswith("/api/admin/"):
+                return self._proxy("GET")
+            page = render({**collect(), "live": True}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(page)
+
+        def do_POST(self) -> None:
+            if self.path.startswith("/api/admin/"):
+                return self._proxy("POST")
+            self.send_error(404)
+
+    print(f"live canvas on http://localhost:{port}  (ctrl-c to stop)")
+    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--serve", action="store_true", help="serve it live instead")
+    parser.add_argument("--port", type=int, default=8781)
+    arguments = parser.parse_args()
+    if arguments.serve:
+        serve(arguments.port)
+    else:
+        main()

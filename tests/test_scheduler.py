@@ -81,14 +81,33 @@ def test_startup_closes_runs_nobody_is_working_on(client, event_loop, tuned):
     """Not a timeout: the scheduler is single, so a live row at its startup is a corpse."""
     token = admin_token(client)
     source = channel(client, token, cron_full=None, cron_quick=None)
-    orphan = start(client, token, source["id"])
+    orphan = event_loop.run_until_complete(_running(source["id"]))
 
     tuned.worker_command = EXIT_BADLY
     event_loop.run_until_complete(scheduler().run_forever(once=True))
 
-    closed = next(r for r in runs_of(client, token) if r["id"] == orphan["id"])
+    closed = next(r for r in runs_of(client, token) if r["id"] == orphan)
     assert closed["status"] == "interrupted"
     assert closed["finished_at"] is not None
+
+
+def test_a_run_asked_for_by_hand_waits_and_is_taken_on_the_next_tick(client, event_loop, tuned):
+    """It used to be created running with no worker, and sat there until a startup swept
+    it. Queued now: the sweep leaves it, and the tick gives it a worker before anything
+    scheduled."""
+    token = admin_token(client)
+    source = channel(client, token, cron_full=None, cron_quick=None)
+    asked = start(client, token, source["id"])
+    assert asked["status"] == "queued"
+    status = client.get("/api/admin/scheduler", headers=auth(token)).json()
+    assert [r["id"] for r in status["queued"]] == [asked["id"]]
+
+    tuned.worker_command = SELF_CLOSING
+    event_loop.run_until_complete(_one_tick_waiting())
+
+    taken = next(r for r in runs_of(client, token) if r["id"] == asked["id"])
+    # Closed by the worker the tick spawned, with that worker's own verdict.
+    assert taken["error"] == "reported by the worker", taken
 
 
 # --- what it owes a worker ---
@@ -190,3 +209,28 @@ def test_a_tick_leaves_a_heartbeat_the_panel_and_the_container_can_read(client, 
     (row,) = [c for c in after["channels"] if c["source_id"] == source["id"]]
     assert row["cron_full"] == "0 3 * * *"
     assert row["next_full_at"] is not None and row["next_quick_at"] is not None
+
+
+async def _running(source_id: int) -> int:
+    """A run left running with no process behind it, the way a killed scheduler leaves one."""
+    from app.db.session import session_factory
+    from app.features.runs.schemas import Kind
+    from app.features.runs.service import RunService
+
+    async with session_factory() as session:
+        run = await RunService(session).start(source_id, Kind.FULL)
+        await session.commit()
+        return run.id
+
+
+async def _one_tick_waiting() -> None:
+    """One whole scheduler pass, waiting for the worker it started to report."""
+    sched = scheduler()
+    await sched.acquire()
+    try:
+        await sched.tick()
+        for worker in list(sched.workers.values()):
+            await worker.process.wait()
+        await sched.reap()
+    finally:
+        await sched.release()
