@@ -994,6 +994,14 @@ class Offer(Base):
     availability: Mapped[str] = mapped_column(
         String(15), default="unknown", server_default="unknown"
     )
+    # What the newest catalogue-carrying reading made of it, copied here for the same
+    # reason as the price: a list of listings has to name and filter every row, and walking
+    # the observations for each one cost 0.4 s a page over 18660 of them. A cheap pass is
+    # passed over, because it carries no title — taken as current it would blank the name.
+    title: Mapped[str | None] = mapped_column(String(1000))
+    brand_raw: Mapped[str | None] = mapped_column(String(200))
+    gtin: Mapped[str | None] = mapped_column(String(14))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
     first_seen_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
     # A shop taking a listing down stops this moving. The offer stays, and so does every
     # price it ever had.
@@ -1009,6 +1017,8 @@ class Offer(Base):
         CheckConstraint("price is null or price >= 0", name="price_not_negative"),
         Index("ix_offers_market_code", "market_code"),
         Index("ix_offers_last_seen_at", "last_seen_at"),
+        Index("ix_offers_gtin", "gtin"),
+        Index("ix_offers_category_id", "category_id"),
     )
 
 

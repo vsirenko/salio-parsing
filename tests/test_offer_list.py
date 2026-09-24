@@ -129,3 +129,122 @@ def test_entries_sort_and_search_like_families(client):
     assert refused.status_code == 422
     listed = client.get("/api/admin/variants", headers=auth(token), params={"sort": "-min_price"})
     assert listed.status_code == 200
+
+
+# --- the list a person reviews placements from ---
+
+
+def a_quick_run(event_loop, source_id: int) -> int:
+    from app.db.models import Run
+    from app.db.session import session_factory
+
+    async def run() -> int:
+        async with session_factory() as session:
+            quick = Run(source_id=source_id, kind="quick", status="running")
+            session.add(quick)
+            await session.commit()
+            return quick.id
+
+    return event_loop.run_until_complete(run())
+
+
+def a_review_list(client, token):
+    """Three placed listings, one the matcher queued, one nobody has tried to place."""
+    source, variant_id, first, second, worn = an_entry_with_listings(client, token)
+    stranger = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Nokia 3310 dual SIM", "brand": "Nokia", "price": "59.00"},
+        external_id="N-1",
+    )
+    client.post(f"/api/admin/offers/{stranger}/match", headers=auth(token))
+    untried = offer_from(
+        client,
+        token,
+        source["id"],
+        {"name": "Zzz charger", "price": "9.00", "availability": "out of stock"},
+        external_id="Z-1",
+    )
+    return source, variant_id, (first, second, worn), stranger, untried
+
+
+def offer_ids(client, token, **params):
+    response = client.get("/api/admin/offers", headers=auth(token), params=params)
+    assert response.status_code == 200, response.text
+    return [row["id"] for row in response.json()["items"]]
+
+
+def test_a_listing_row_says_what_the_shop_called_it_and_where_the_matcher_left_it(client):
+    token = admin_token(client)
+    source, variant_id, placed, stranger, untried = a_review_list(client, token)
+    rows = {
+        row["id"]: row
+        for row in client.get("/api/admin/offers", headers=auth(token)).json()["items"]
+    }
+    one = rows[placed[1]]
+    assert (one["title"], one["brand_raw"], one["gtin"]) == (
+        "Apple iPhone 15 256 GB",
+        "Apple",
+        "04006381333931",
+    )
+    assert one["brand"]["name"] == "Apple"
+    assert one["category"]["name"] == "Phones"
+    assert (one["match_state"], one["queue_reason"]) == ("placed", None)
+
+    queued = rows[stranger]
+    assert (queued["match_state"], queued["queue_reason"]) == ("queued", "brand_unknown")
+    # Not placed, so no brand of ours — but what its channel collects is known.
+    assert queued["brand"] is None and queued["brand_raw"] == "Nokia"
+    assert queued["category"]["name"] == "Phones"
+    assert rows[untried]["match_state"] == "unplaced"
+    assert rows[untried]["title"] == "Zzz charger"
+
+
+def test_the_review_filters(client):
+    token = admin_token(client)
+    source, variant_id, placed, stranger, untried = a_review_list(client, token)
+    brand_id = client.get(f"/api/admin/offers/{placed[0]}", headers=auth(token)).json()["brand"][
+        "id"
+    ]
+
+    assert offer_ids(client, token, match_state="queued") == [stranger]
+    assert sorted(offer_ids(client, token, match_state=["queued", "unplaced"])) == [
+        stranger,
+        untried,
+    ]
+    assert offer_ids(client, token, queue_reason="brand_unknown") == [stranger]
+    assert offer_ids(client, token, queue_reason="ambiguous") == []
+    assert sorted(offer_ids(client, token, method="gtin")) == sorted(placed)
+    assert offer_ids(client, token, method="brand_model") == []
+    assert sorted(offer_ids(client, token, brand_id=brand_id)) == sorted(placed)
+    assert offer_ids(client, token, availability="out_of_stock") == [untried]
+    assert sorted(offer_ids(client, token, price_min="100", price_max="750")) == sorted(placed[1:])
+    assert offer_ids(client, token, search="nokia") == [stranger]
+    assert offer_ids(client, token, search="Z-1") == [untried]
+    assert sorted(offer_ids(client, token, search="4006381333931")) == sorted(placed)
+    # A barcode is equal or not: a fragment of one names nothing.
+    assert offer_ids(client, token, search="40063813") == []
+    everything = offer_ids(client, token, sort="title")
+    assert everything[:3] == sorted(placed) and everything[3:] == [stranger, untried]
+    bad = client.get("/api/admin/offers", headers=auth(token), params={"match_state": "maybe"})
+    assert bad.status_code == 422
+
+
+def test_a_quick_pass_does_not_blank_the_name(client, event_loop):
+    token = admin_token(client)
+    source, _, placed, *_ = a_review_list(client, token)
+    run_id = a_quick_run(event_loop, source["id"])
+    response = client.post(
+        f"/api/admin/sources/{source['id']}/offers/batch",
+        headers=auth(token),
+        json={
+            "market_code": "LV",
+            "run_id": run_id,
+            "offers": [{"external_id": "A-2", "payload": {"price": "699.00"}}],
+        },
+    )
+    assert response.status_code == 202, response.text
+    row = client.get(f"/api/admin/offers/{placed[1]}", headers=auth(token)).json()
+    assert row["price"] == "699.00"
+    assert (row["title"], row["gtin"]) == ("Apple iPhone 15 256 GB", "04006381333931")

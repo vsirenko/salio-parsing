@@ -13,6 +13,7 @@ placeholder: a sample can be loaded by hand and measured before a line of crawli
 written, and the measurement is what decides what the matcher should be.
 """
 
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -21,13 +22,17 @@ from app.api.deps import OfferServiceDep
 from app.api.pagination import pagination_params
 from app.features.offers.schemas import (
     OFFER_SORT,
+    Availability,
     BatchResult,
     Condition,
     Coverage,
     IngestResult,
+    MatchMethod,
+    MatchState,
     NormalizedOfferRead,
     OfferRead,
     OfferTrace,
+    QueueReason,
     RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
@@ -120,9 +125,43 @@ async def list_offers(
         bool | None,
         Query(description="On sale now: seen by its channel's newest full pass that ended ok"),
     ] = None,
+    match_state: Annotated[
+        list[MatchState] | None,
+        Query(
+            description="`placed`; `queued` — the matcher could not decide; `unplaced` —"
+            " neither. Repeat for several"
+        ),
+    ] = None,
+    queue_reason: Annotated[
+        list[QueueReason] | None, Query(description="Why it is queued. Repeat for several")
+    ] = None,
+    method: Annotated[
+        list[MatchMethod] | None, Query(description="What placed it. Repeat for several")
+    ] = None,
+    availability: Annotated[
+        list[Availability] | None, Query(description="Repeat for several")
+    ] = None,
+    brand_id: Annotated[
+        list[int] | None,
+        Query(description="The placed product's brand. Repeat for several"),
+    ] = None,
+    category_id: Annotated[
+        list[int] | None,
+        Query(
+            description="The placed product's category, else what its channel collects."
+            " Repeat for several"
+        ),
+    ] = None,
+    price_min: Annotated[Decimal | None, Query(ge=0)] = None,
+    price_max: Annotated[Decimal | None, Query(ge=0)] = None,
+    search: Annotated[
+        str | None,
+        Query(max_length=200, description="Title or the shop's id contains; barcode equals"),
+    ] = None,
 ) -> Page[OfferRead]:
     """A product card asks `product_id=…&listed=true&condition=new&sort=price`: who sells the
-    thing new today, cheapest first."""
+    thing new today, cheapest first. Review asks `match_state=queued&queue_reason=ambiguous`,
+    or `method=brand_model` for the placements that rest on a model name alone."""
     items, total = await service.list_offers(
         pagination,
         seller_id=seller_id,
@@ -132,6 +171,15 @@ async def list_offers(
         product_ids=product_id,
         condition=condition.value if condition else None,
         listed=listed,
+        match_states=[state.value for state in match_state or []],
+        queue_reasons=[reason.value for reason in queue_reason or []],
+        methods=[value.value for value in method or []],
+        availabilities=[value.value for value in availability or []],
+        brand_ids=brand_id,
+        category_ids=category_id,
+        price_min=price_min,
+        price_max=price_max,
+        search=search,
     )
     return Page[OfferRead].of(items, total, pagination)
 

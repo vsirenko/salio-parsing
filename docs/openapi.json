@@ -2629,6 +2629,18 @@
         "title": "MatchDoubtRead",
         "type": "object"
       },
+      "MatchMethod": {
+        "enum": [
+          "gtin",
+          "brand_mpn",
+          "brand_model",
+          "identity_key",
+          "judge",
+          "human"
+        ],
+        "title": "MatchMethod",
+        "type": "string"
+      },
       "MatchOutcome": {
         "description": "What running the matcher over one listing did.",
         "properties": {
@@ -2734,6 +2746,16 @@
         ],
         "title": "MatchQueueRead",
         "type": "object"
+      },
+      "MatchState": {
+        "description": "Where the matcher left a listing. `queued` holds the ambiguous ones too — which kind\nof stuck it is, is the queue's `reason`.",
+        "enum": [
+          "placed",
+          "queued",
+          "unplaced"
+        ],
+        "title": "MatchState",
+        "type": "string"
       },
       "MergeReport": {
         "description": "What a pass of merges did.\n\nA barcode is the strongest thing this system has, so two catalogue entries both holding\nlistings that carry one and the same barcode are not two products. `refused` is the\ninteresting number: a pair the barcode named and something else contradicted.",
@@ -2854,6 +2876,24 @@
           "origin"
         ],
         "title": "ModelAliasRead",
+        "type": "object"
+      },
+      "NamedRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "NamedRef",
         "type": "object"
       },
       "NormalizedOfferRead": {
@@ -3088,6 +3128,40 @@
           "availability": {
             "$ref": "#/components/schemas/Availability"
           },
+          "brand": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The placed product's brand; null unplaced"
+          },
+          "brand_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The brand as the shop wrote it",
+            "title": "Brand Raw"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The placed product's category, else what the channel collects"
+          },
           "condition": {
             "$ref": "#/components/schemas/Condition"
           },
@@ -3122,6 +3196,18 @@
             "title": "First Seen At",
             "type": "string"
           },
+          "gtin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The barcode the reading accepted",
+            "title": "Gtin"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -3138,6 +3224,9 @@
           "market_code": {
             "title": "Market Code",
             "type": "string"
+          },
+          "match_state": {
+            "$ref": "#/components/schemas/MatchState"
           },
           "placed_on": {
             "anyOf": [
@@ -3161,11 +3250,33 @@
             ],
             "title": "Price"
           },
+          "queue_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueueReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "seller": {
             "$ref": "#/components/schemas/SellerRef"
           },
           "shop": {
             "$ref": "#/components/schemas/ShopRef"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "As the shop wrote it, from its newest full pass",
+            "title": "Title"
           },
           "url": {
             "anyOf": [
@@ -3183,6 +3294,13 @@
           "id",
           "shop",
           "seller",
+          "title",
+          "brand_raw",
+          "gtin",
+          "brand",
+          "category",
+          "match_state",
+          "queue_reason",
           "placed_on",
           "listed",
           "market_code",
@@ -4848,6 +4966,19 @@
         ],
         "title": "PromotionReport",
         "type": "object"
+      },
+      "QueueReason": {
+        "enum": [
+          "brand_unknown",
+          "brand_ambiguous",
+          "no_signals",
+          "signals_unmatched",
+          "ambiguous",
+          "low_confidence",
+          "axis_unpublished"
+        ],
+        "title": "QueueReason",
+        "type": "string"
       },
       "QueueSummary": {
         "description": "The breakdown that answers what to build next.\n\nIf most listings sit in `signals_unmatched`, the work is creating variants. In\n`brand_unknown`, it is reading raw strings and naming the brand behind them. In\n`brand_ambiguous` or `ambiguous`, the candidates are already there and the work is\nchoosing — the two buckets a judge can help with, and if both are nearly empty, a judge\nis not what this needs. In `no_signals`, it is pulling identity out of titles.",
@@ -12740,7 +12871,7 @@
     },
     "/api/admin/offers": {
       "get": {
-        "description": "A product card asks `product_id=…&listed=true&condition=new&sort=price`: who sells the\nthing new today, cheapest first.",
+        "description": "A product card asks `product_id=…&listed=true&condition=new&sort=price`: who sells the\nthing new today, cheapest first. Review asks `match_state=queued&queue_reason=ambiguous`,\nor `method=brand_model` for the placements that rest on a model name alone.",
         "operationId": "list_offers_api_admin_offers_get",
         "parameters": [
           {
@@ -12874,6 +13005,193 @@
             }
           },
           {
+            "description": "`placed`; `queued` — the matcher could not decide; `unplaced` — neither. Repeat for several",
+            "in": "query",
+            "name": "match_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchState"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`placed`; `queued` — the matcher could not decide; `unplaced` — neither. Repeat for several",
+              "title": "Match State"
+            }
+          },
+          {
+            "description": "Why it is queued. Repeat for several",
+            "in": "query",
+            "name": "queue_reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/QueueReason"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Why it is queued. Repeat for several",
+              "title": "Queue Reason"
+            }
+          },
+          {
+            "description": "What placed it. Repeat for several",
+            "in": "query",
+            "name": "method",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchMethod"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What placed it. Repeat for several",
+              "title": "Method"
+            }
+          },
+          {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "availability",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/Availability"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Availability"
+            }
+          },
+          {
+            "description": "The placed product's brand. Repeat for several",
+            "in": "query",
+            "name": "brand_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The placed product's brand. Repeat for several",
+              "title": "Brand Id"
+            }
+          },
+          {
+            "description": "The placed product's category, else what its channel collects. Repeat for several",
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The placed product's category, else what its channel collects. Repeat for several",
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "price_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Price Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "price_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Price Max"
+            }
+          },
+          {
+            "description": "Title or the shop's id contains; barcode equals",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Title or the shop's id contains; barcode equals",
+              "title": "Search"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -12897,7 +13215,7 @@
             }
           },
           {
-            "description": "Comma-separated, `-` for descending. Allowed: id, price, last_seen_at, first_seen_at, shop.",
+            "description": "Comma-separated, `-` for descending. Allowed: id, price, last_seen_at, first_seen_at, shop, title.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -12911,7 +13229,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated, `-` for descending. Allowed: id, price, last_seen_at, first_seen_at, shop.",
+              "description": "Comma-separated, `-` for descending. Allowed: id, price, last_seen_at, first_seen_at, shop, title.",
               "examples": [
                 "id"
               ],

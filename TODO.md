@@ -86,6 +86,12 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **Images are hotlinked.** `variant.image_url` points at a shop's CDN, so it rots
       when that shop removes the file and we serve it from someone else's server in the
       meantime. The answer is to store the image, and there is no file storage.
+- [ ] **Nothing reads a picture.** No reading has an image field, so neither a listing row
+      nor `variant.image_url` (null on all 6193) has one. The shops write it five ways — a
+      list under `images` (bigbox, dateks, euronics, rd, tet, ksenukai/1a), relative paths
+      at ksenukai and 1a, an `svg` icon inside dateks's list, a single `image` at discover,
+      none at bm, cec, m79, mdata — so it is a reading field with shop rules, a version bump
+      and a reparse, then a copy onto `offers` beside `title`.
 - [ ] **The candidate queues are not built.** `attribute_candidate`,
       `attribute_value_candidate` and `brand_candidate` are what turns an unknown string
       into a mapping, and they are filled by ingestion — which does not exist yet. Build

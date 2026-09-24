@@ -129,10 +129,43 @@ class IngestResult(BaseModel):
 
 
 # What a list of listings may be sorted by, `?sort=`.
-OFFER_SORT = ("id", "price", "last_seen_at", "first_seen_at", "shop")
+OFFER_SORT = ("id", "price", "last_seen_at", "first_seen_at", "shop", "title")
+
+
+class MatchState(StrEnum):
+    """Where the matcher left a listing. `queued` holds the ambiguous ones too — which kind
+    of stuck it is, is the queue's `reason`."""
+
+    PLACED = "placed"
+    QUEUED = "queued"
+    UNPLACED = "unplaced"
+
+
+class MatchMethod(StrEnum):
+    GTIN = "gtin"
+    BRAND_MPN = "brand_mpn"
+    BRAND_MODEL = "brand_model"
+    IDENTITY_KEY = "identity_key"
+    JUDGE = "judge"
+    HUMAN = "human"
+
+
+class QueueReason(StrEnum):
+    BRAND_UNKNOWN = "brand_unknown"
+    BRAND_AMBIGUOUS = "brand_ambiguous"
+    NO_SIGNALS = "no_signals"
+    SIGNALS_UNMATCHED = "signals_unmatched"
+    AMBIGUOUS = "ambiguous"
+    LOW_CONFIDENCE = "low_confidence"
+    AXIS_UNPUBLISHED = "axis_unpublished"
 
 
 class ShopRef(BaseModel):
+    id: int
+    name: str
+
+
+class NamedRef(BaseModel):
     id: int
     name: str
 
@@ -163,6 +196,15 @@ class OfferRead(BaseModel):
     id: int
     shop: ShopRef
     seller: SellerRef
+    title: str | None = Field(description="As the shop wrote it, from its newest full pass")
+    brand_raw: str | None = Field(description="The brand as the shop wrote it")
+    gtin: str | None = Field(description="The barcode the reading accepted")
+    brand: NamedRef | None = Field(description="The placed product's brand; null unplaced")
+    category: NamedRef | None = Field(
+        description="The placed product's category, else what the channel collects"
+    )
+    match_state: MatchState
+    queue_reason: QueueReason | None
     placed_on: PlacedOn | None
     listed: bool
     market_code: str

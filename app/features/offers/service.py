@@ -6,7 +6,7 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +41,7 @@ from app.db.query import offer_is_listed, ordered, paginated_rows
 from app.features.brands.normalization import normalize_brand
 from app.features.offers.normalization import (
     Vocabulary,
+    barcodes,
     content_hash,
     read,
     version_for,
@@ -51,6 +52,7 @@ from app.features.offers.schemas import (
     BatchResult,
     Coverage,
     IngestResult,
+    NamedRef,
     NormalizedOfferRead,
     OfferRead,
     OfferTrace,
@@ -95,7 +97,7 @@ class OfferService:
         # carries five hundred of them and they all want the same words.
         self._vocabularies: dict[int, Vocabulary] = {}
         # One lookup per run for the life of a request, not one per observation.
-        self._reparse_runs: dict[int, bool] = {}
+        self._run_kinds: dict[int, str | None] = {}
         # Ingestion records a price change; it does not decide when one counts. That rule
         # is the same knowledge as what the history means, so it lives with the table.
         self.prices = PriceService(session)
@@ -236,7 +238,7 @@ class OfferService:
                 )
             ):
                 reading = await self._store_reading(existing, source=source)
-                self._apply_reading_to_offer(offer, reading)
+                await self._apply_reading_to_offer(offer, reading, raw=existing)
             return IngestResult(
                 offer_id=offer.id,
                 raw_offer_id=existing.id,
@@ -259,7 +261,7 @@ class OfferService:
         await self.session.flush()
 
         reading = await self._store_reading(raw, source=source)
-        self._apply_reading_to_offer(offer, reading)
+        await self._apply_reading_to_offer(offer, reading, raw=raw)
         await self._record_series(offer, reading, source_id=source.id)
         await self.session.flush()
 
@@ -287,7 +289,7 @@ class OfferService:
         source = await self._source(raw.source_id)
         reading = await self._store_reading(raw, source=source)
         offer = await self.session.get(Offer, raw.offer_id)
-        self._apply_reading_to_offer(offer, reading)
+        await self._apply_reading_to_offer(offer, reading, raw=raw)
         if offer is not None:
             # A re-read can change what we think was quoted. If it does, that is a change
             # in the series like any other.
@@ -462,8 +464,41 @@ class OfferService:
         product_ids: list[int] | None = None,
         condition: str | None = None,
         listed: bool | None = None,
+        match_states: list[str] | None = None,
+        queue_reasons: list[str] | None = None,
+        methods: list[str] | None = None,
+        availabilities: list[str] | None = None,
+        brand_ids: list[int] | None = None,
+        category_ids: list[int] | None = None,
+        price_min: Decimal | None = None,
+        price_max: Decimal | None = None,
+        search: str | None = None,
     ) -> tuple[list[OfferRead], int]:
         stmt = _offer_rows()
+        if match_states:
+            stmt = stmt.where(_match_state().in_(match_states))
+        if queue_reasons:
+            stmt = stmt.where(MatchQueue.reason.in_(queue_reasons))
+        if methods:
+            stmt = stmt.where(OfferMatch.method.in_(methods))
+        if availabilities:
+            stmt = stmt.where(Offer.availability.in_(availabilities))
+        if brand_ids:
+            stmt = stmt.where(Product.brand_id.in_(brand_ids))
+        if category_ids:
+            stmt = stmt.where(_category_id().in_(category_ids))
+        if price_min is not None:
+            stmt = stmt.where(Offer.price >= price_min)
+        if price_max is not None:
+            stmt = stmt.where(Offer.price <= price_max)
+        if search and search.strip():
+            text = search.strip()
+            pattern = f"%{text}%"
+            matches = [Offer.title.ilike(pattern), Offer.external_id.ilike(pattern)]
+            if barcodes.valid(text):
+                # Stored padded to fourteen digits, so an EAN-13 typed as printed is found.
+                matches.append(Offer.gtin == barcodes.canonical(text))
+            stmt = stmt.where(or_(*matches))
         if seller_id is not None:
             stmt = stmt.where(Offer.seller_id == seller_id)
         if market_code is not None:
@@ -488,6 +523,7 @@ class OfferService:
                 "last_seen_at": Offer.last_seen_at,
                 "first_seen_at": Offer.first_seen_at,
                 "shop": Shop.name,
+                "title": Offer.title,
             },
             Offer.id,
         )
@@ -664,15 +700,26 @@ class OfferService:
             offer, availability=reading.availability, source_id=source_id
         )
 
-    @staticmethod
-    def _apply_reading_to_offer(offer: Offer | None, reading: NormalizedOffer) -> None:
+    async def _apply_reading_to_offer(
+        self, offer: Offer | None, reading: NormalizedOffer, *, raw: RawOffer
+    ) -> None:
         """The offer's price is the latest reading — derived, and kept only so a card does
-        not have to walk the observations to show a number."""
+        not have to walk the observations to show a number.
+
+        What it is called and what it was read as come from a pass that carried the
+        catalogue only, for the reason `MatchingService._reading` gives: a quick pass has
+        no title and no barcode, and taken as current it would blank both.
+        """
         if offer is None:
             return
         offer.price = reading.price
         offer.currency_code = reading.currency_code
         offer.availability = reading.availability
+        if await self._run_kind(raw.run_id) != Kind.QUICK.value:
+            offer.title = reading.title
+            offer.brand_raw = reading.brand_raw
+            offer.gtin = reading.gtin
+            offer.category_id = reading.category_id
 
     async def _is_reparse(self, run_id: int | None) -> bool:
         """Whether this batch is a re-reading of what is already stored.
@@ -682,12 +729,16 @@ class OfferService:
         Cached for the life of the request because a batch is five hundred observations of
         one run.
         """
+        return await self._run_kind(run_id) == Kind.REPARSE.value
+
+    async def _run_kind(self, run_id: int | None) -> str | None:
         if run_id is None:
-            return False
-        if run_id not in self._reparse_runs:
-            kind = await self.session.scalar(select(Run.kind).where(Run.id == run_id))
-            self._reparse_runs[run_id] = kind == Kind.REPARSE.value
-        return self._reparse_runs[run_id]
+            return None
+        if run_id not in self._run_kinds:
+            self._run_kinds[run_id] = await self.session.scalar(
+                select(Run.kind).where(Run.id == run_id)
+            )
+        return self._run_kinds[run_id]
 
     async def _vocabulary(self, source: Source) -> Vocabulary:
         """The words the rules need, loaded once for the batch rather than per listing.
@@ -859,6 +910,20 @@ def _axis(number: Decimal | None) -> str:
     return _number(number) if number is not None else ""
 
 
+def _match_state() -> Any:
+    """An active match, else a queue row, else neither — the invariant keeps them apart."""
+    return case(
+        (OfferMatch.id.is_not(None), "placed"),
+        (MatchQueue.offer_id.is_not(None), "queued"),
+        else_="unplaced",
+    )
+
+
+def _category_id() -> Any:
+    """The product's category once placed, else what the listing's channel collects."""
+    return func.coalesce(Product.category_id, Offer.category_id)
+
+
 def _offer_rows() -> Any:
     """Each listing with its shop and seller named, and the entry it is placed on, if any."""
     return (
@@ -870,6 +935,12 @@ def _offer_rows() -> Any:
             OfferMatch.variant_id.label("variant_id"),
             OfferMatch.method.label("method"),
             Variant.title.label("variant_title"),
+            Brand.id.label("brand_id"),
+            Brand.canonical_name.label("brand_name"),
+            Category.id.label("category_id"),
+            Category.name.label("category_name"),
+            _match_state().label("match_state"),
+            MatchQueue.reason.label("queue_reason"),
             offer_is_listed().label("listed"),
         )
         .join(Seller, Seller.id == Offer.seller_id)
@@ -878,6 +949,10 @@ def _offer_rows() -> Any:
             OfferMatch, (OfferMatch.offer_id == Offer.id) & OfferMatch.superseded_at.is_(None)
         )
         .outerjoin(Variant, Variant.id == OfferMatch.variant_id)
+        .outerjoin(Product, Product.id == Variant.product_id)
+        .outerjoin(Brand, Brand.id == Product.brand_id)
+        .outerjoin(Category, Category.id == _category_id())
+        .outerjoin(MatchQueue, MatchQueue.offer_id == Offer.id)
     )
 
 
@@ -887,6 +962,13 @@ def _offer_read(row: Any) -> OfferRead:
         id=offer.id,
         shop=ShopRef(id=row.shop_id, name=row.shop_name),
         seller=SellerRef(id=offer.seller_id, name=row.seller_name),
+        title=offer.title,
+        brand_raw=offer.brand_raw,
+        gtin=offer.gtin,
+        brand=NamedRef(id=row.brand_id, name=row.brand_name) if row.brand_id else None,
+        category=NamedRef(id=row.category_id, name=row.category_name) if row.category_id else None,
+        match_state=row.match_state,
+        queue_reason=row.queue_reason,
         placed_on=PlacedOn(
             variant_id=row.variant_id, variant_title=row.variant_title, method=row.method
         )

@@ -11,7 +11,7 @@ Everything downstream is derived from them and can be thrown away.
 |---|---|
 | `POST /api/admin/sources/{source_id}/offers` | submit one observation |
 | `POST /api/admin/sources/{source_id}/offers/batch` | submit many, gzipped |
-| `GET /api/admin/offers` | the listings — by shop, entry (`variant_id`), family (`product_id`), condition, `listed`; sorted by price, first or last seen, shop |
+| `GET /api/admin/offers` | the listings — by shop, entry (`variant_id`), family (`product_id`), condition, `listed`, `match_state`, `queue_reason`, `method`, `availability`, `brand_id`, `category_id`, price range, `search`; sorted by price, first or last seen, shop, title |
 | `GET /api/admin/offers/coverage` | how far a deterministic matcher could get |
 | `GET /api/admin/offers/{offer_id}` | one listing |
 | `GET /api/admin/offers/{offer_id}/raw` | every observation of it |
@@ -57,6 +57,27 @@ one channel showing one market, and repeating it per item only invites them to d
 `product_id=…&listed=true&condition=new&sort=price`: who sells the thing new today,
 cheapest first. The placement is read from `offer_matches`, which is `matching`'s table;
 reading it is not a cross-feature import.
+
+**A row is named, and says where the matcher left it.** `title`, `brand_raw` and `gtin` are
+the shop's own, from the newest reading of a pass that carried the catalogue; `brand` and
+`category` are ours — the placed product's, and for a listing not placed the category its
+channel collects (it has no brand of ours: resolving one is what failed). `match_state` is
+`placed` (an active match), `queued` (a `match_queue` row, with its `queue_reason` — the
+ambiguous ones are `queued` with `ambiguous`, `brand_ambiguous` or `low_confidence`) or
+`unplaced`, neither: a refurbished or used listing the matcher leaves out, or one only a
+quick pass has seen. Review asks `match_state=queued&queue_reason=ambiguous`, or
+`method=brand_model` for the placements resting on a model name alone. `search` is a
+fragment of the title or the shop's id, or a whole barcode, compared padded to fourteen
+digits as it is stored — a fragment of a barcode names nothing.
+
+**Those names are copied onto `offers`, like the price.** Picked out of the observations per
+row, a page sorted by title took 0.4 s over 18660 listings, before counting its total. They
+are written wherever a reading is applied to its offer, and **not by a quick pass**: it
+carries a price and a stock flag, no title and no barcode, and taken as current it would
+blank both — the matcher passes over it for the same reason (`MatchingService._reading`).
+A listing only ever seen by a quick pass therefore has no title, which is true: nobody has
+read its card. No picture yet: nothing reads one out of a payload, and the shops write it
+five ways (relative paths, icons in the list) — see `TODO.md`.
 
 **`run_id` is carried through to `raw_offers`.** Null when a sample is loaded by hand. It
 earns its column because when a run is rejected, or its coverage falls off a cliff, the
