@@ -44,6 +44,7 @@ from app.features.catalog.schemas import (
     ProductUpdate,
     VariantAttributeRead,
     VariantAttributeSet,
+    VariantAttributeShown,
     VariantCreate,
     VariantGtinRead,
     VariantMpnRead,
@@ -857,6 +858,44 @@ def _variant_rows() -> Select[Any]:
         .where(VariantAttribute.variant_id == outer.c.id)
         .scalar_subquery()
     )
+    shown = (
+        select(
+            func.jsonb_agg(
+                func.jsonb_build_object(
+                    "key",
+                    Attribute.key,
+                    "name",
+                    Attribute.name,
+                    "unit",
+                    Attribute.unit_dimension,
+                    "label",
+                    CategoryAttribute.label_override,
+                    "position",
+                    CategoryAttribute.position,
+                    "identity",
+                    func.coalesce(CategoryAttribute.identity_bearing, False),
+                    "number",
+                    VariantAttribute.value_num,
+                    "canonical",
+                    AttributeValue.canonical,
+                    "flag",
+                    VariantAttribute.value_bool,
+                    "text",
+                    VariantAttribute.value_text,
+                )
+            )
+        )
+        .select_from(VariantAttribute)
+        .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+        .outerjoin(AttributeValue, AttributeValue.id == VariantAttribute.value_id)
+        .outerjoin(
+            CategoryAttribute,
+            (CategoryAttribute.attribute_id == VariantAttribute.attribute_id)
+            & (CategoryAttribute.category_id == outer.c.category_id),
+        )
+        .where(VariantAttribute.variant_id == outer.c.id)
+        .scalar_subquery()
+    )
     return (
         select(
             outer,
@@ -864,6 +903,7 @@ def _variant_rows() -> Select[Any]:
             Category.name.label("category_name"),
             Product.title.label("product_title"),
             axes.label("axes"),
+            shown.label("shown"),
             offers.label("offers_count"),
             shops.label("shops_count"),
             lowest.label("min_price"),
@@ -871,6 +911,37 @@ def _variant_rows() -> Select[Any]:
         .join(Brand, Brand.id == outer.c.brand_id)
         .join(Category, Category.id == outer.c.category_id)
         .outerjoin(Product, Product.id == outer.c.product_id)
+    )
+
+
+def _shown(items: list[dict[str, Any]]) -> list[VariantAttributeShown]:
+    """The entry's attributes as its category shows them, in the category's order."""
+    shown = []
+    for item in items:
+        if item["number"] is not None:
+            number = Decimal(str(item["number"]))
+            value: Any = _plain_number(float(number))
+            display = display_number(number, item["unit"])
+        elif item["canonical"] is not None:
+            value = display = item["canonical"]
+        elif item["flag"] is not None:
+            value, display = item["flag"], "yes" if item["flag"] else "no"
+        else:
+            value = display = item["text"] or ""
+        shown.append(
+            VariantAttributeShown(
+                key=item["key"],
+                label=item["label"] or item["name"],
+                value=value,
+                display=display,
+                unit=item["unit"],
+                position=item["position"],
+                identity_bearing=bool(item["identity"]),
+            )
+        )
+    return sorted(
+        shown,
+        key=lambda a: (a.position is None, a.position if a.position is not None else 0, a.key),
     )
 
 
@@ -903,6 +974,7 @@ def _variant_read(row: Any) -> VariantRead:
         is_visible=row.is_visible,
         created_at=row.created_at,
         axes={key: _plain_number(value) for key, value in (row.axes or {}).items()},
+        attributes=_shown(row.shown or []),
         offers_count=row.offers_count,
         shops_count=row.shops_count,
         min_price=row.min_price,

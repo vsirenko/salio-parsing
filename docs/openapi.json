@@ -207,6 +207,47 @@
         "title": "AttributeRead",
         "type": "object"
       },
+      "AttributeRef": {
+        "description": "The attribute a binding is of, as a table row needs it.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "unit_dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Dimension"
+          },
+          "value_type": {
+            "title": "Value Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "value_type",
+          "unit_dimension"
+        ],
+        "title": "AttributeRef",
+        "type": "object"
+      },
       "AuditEntry": {
         "properties": {
           "actor_email": {
@@ -904,7 +945,11 @@
         "type": "object"
       },
       "CategoryAttributeRead": {
+        "description": "An attribute bound to a category, the attribute named: a row can print `RAM`.",
         "properties": {
+          "attribute": {
+            "$ref": "#/components/schemas/AttributeRef"
+          },
           "attribute_id": {
             "title": "Attribute Id",
             "type": "integer"
@@ -947,6 +992,7 @@
         "required": [
           "category_id",
           "attribute_id",
+          "attribute",
           "identity_bearing",
           "position",
           "label_override",
@@ -1058,8 +1104,43 @@
         "title": "CategoryCreate",
         "type": "object"
       },
-      "CategoryRead": {
+      "CategoryNode": {
+        "description": "A category in the tree, with its children and the totals of its whole branch.",
         "properties": {
+          "aliases_count": {
+            "description": "Names shops give it",
+            "title": "Aliases Count",
+            "type": "integer"
+          },
+          "attributes_count": {
+            "description": "Attributes bound to it",
+            "title": "Attributes Count",
+            "type": "integer"
+          },
+          "branch_offers_count": {
+            "title": "Branch Offers Count",
+            "type": "integer"
+          },
+          "branch_products_count": {
+            "description": "Its own and every descendant's",
+            "title": "Branch Products Count",
+            "type": "integer"
+          },
+          "branch_variants_count": {
+            "title": "Branch Variants Count",
+            "type": "integer"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryNode"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "children_count": {
+            "title": "Children Count",
+            "type": "integer"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -1089,6 +1170,11 @@
             "title": "Name",
             "type": "string"
           },
+          "offers_count": {
+            "description": "New listings on sale placed on its entries",
+            "title": "Offers Count",
+            "type": "integer"
+          },
           "parent_id": {
             "anyOf": [
               {
@@ -1100,18 +1186,36 @@
             ],
             "title": "Parent Id"
           },
+          "products_count": {
+            "title": "Products Count",
+            "type": "integer"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "variants_count": {
+            "title": "Variants Count",
+            "type": "integer"
           }
         },
         "required": [
           "name",
           "id",
           "slug",
-          "is_visible_effective"
+          "is_visible_effective",
+          "products_count",
+          "variants_count",
+          "offers_count",
+          "children_count",
+          "aliases_count",
+          "attributes_count",
+          "branch_products_count",
+          "branch_variants_count",
+          "branch_offers_count",
+          "children"
         ],
-        "title": "CategoryRead",
+        "title": "CategoryNode",
         "type": "object"
       },
       "CategoryRef": {
@@ -1130,6 +1234,96 @@
           "name"
         ],
         "title": "CategoryRef",
+        "type": "object"
+      },
+      "CategoryRow": {
+        "description": "A category with how much of the catalogue it holds and how far it is set up.\n\nIts own counts, not its branch's: `GET /categories/tree` adds the branch. `offers_count`\nis new listings on sale placed on its entries, the catalogue's rule.",
+        "properties": {
+          "aliases_count": {
+            "description": "Names shops give it",
+            "title": "Aliases Count",
+            "type": "integer"
+          },
+          "attributes_count": {
+            "description": "Attributes bound to it",
+            "title": "Attributes Count",
+            "type": "integer"
+          },
+          "children_count": {
+            "title": "Children Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "identity_ready": {
+            "default": false,
+            "title": "Identity Ready",
+            "type": "boolean"
+          },
+          "is_visible": {
+            "default": true,
+            "title": "Is Visible",
+            "type": "boolean"
+          },
+          "is_visible_effective": {
+            "title": "Is Visible Effective",
+            "type": "boolean"
+          },
+          "model_match_needs_full_identity": {
+            "default": false,
+            "title": "Model Match Needs Full Identity",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "offers_count": {
+            "description": "New listings on sale placed on its entries",
+            "title": "Offers Count",
+            "type": "integer"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "products_count": {
+            "title": "Products Count",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "variants_count": {
+            "title": "Variants Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "slug",
+          "is_visible_effective",
+          "products_count",
+          "variants_count",
+          "offers_count",
+          "children_count",
+          "aliases_count",
+          "attributes_count"
+        ],
+        "title": "CategoryRow",
         "type": "object"
       },
       "CategoryUpdate": {
@@ -3172,7 +3366,7 @@
         "title": "Page[BrandRow]",
         "type": "object"
       },
-      "Page_CategoryRead_": {
+      "Page_CategoryRow_": {
         "properties": {
           "has_more": {
             "description": "Whether another page exists",
@@ -3182,7 +3376,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/CategoryRead"
+              "$ref": "#/components/schemas/CategoryRow"
             },
             "title": "Items",
             "type": "array"
@@ -3220,7 +3414,7 @@
           "offset",
           "has_more"
         ],
-        "title": "Page[CategoryRead]",
+        "title": "Page[CategoryRow]",
         "type": "object"
       },
       "Page_CountryRead_": {
@@ -6860,6 +7054,77 @@
         "title": "VariantAttributeSet",
         "type": "object"
       },
+      "VariantAttributeShown": {
+        "description": "One thing known about an entry, as its category shows it.\n\nThe label is the category's own for the attribute, else the attribute's name; the order\nis the category's; `display` is the value as a title prints it — `16 GB`, `13.6\"` — in\nthe attribute's unit. `value` is the stored one, for a front end that formats its own.",
+        "properties": {
+          "display": {
+            "title": "Display",
+            "type": "string"
+          },
+          "identity_bearing": {
+            "title": "Identity Bearing",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "display",
+          "unit",
+          "position",
+          "identity_bearing"
+        ],
+        "title": "VariantAttributeShown",
+        "type": "object"
+      },
       "VariantCreate": {
         "additionalProperties": false,
         "properties": {
@@ -6985,6 +7250,14 @@
       "VariantRead": {
         "description": "An entry — the thing that is bought — with what a list of them needs.\n\nNamed brand, category and family; the axes it is told apart by, so the entries of one\nfamily are not rows with one title; and what it sells for now.",
         "properties": {
+          "attributes": {
+            "description": "The same, labelled and ordered as its category shows them",
+            "items": {
+              "$ref": "#/components/schemas/VariantAttributeShown"
+            },
+            "title": "Attributes",
+            "type": "array"
+          },
           "axes": {
             "additionalProperties": {
               "anyOf": [
@@ -7156,6 +7429,7 @@
           "is_visible",
           "created_at",
           "axes",
+          "attributes",
           "offers_count",
           "shops_count",
           "min_price"
@@ -9345,6 +9619,46 @@
             }
           },
           {
+            "description": "Name, slug or a name a shop gives it",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Name, slug or a name a shop gives it",
+              "title": "Search"
+            }
+          },
+          {
+            "description": "Only these. Repeat for several",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these. Repeat for several",
+              "title": "Ids"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -9366,6 +9680,28 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, name, slug, products_count, variants_count, offers_count, children_count, aliases_count, attributes_count.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, name, slug, products_count, variants_count, offers_count, children_count, aliases_count, attributes_count.",
+              "examples": [
+                "name"
+              ],
+              "title": "Sort"
+            }
           }
         ],
         "responses": {
@@ -9373,7 +9709,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_CategoryRead_"
+                  "$ref": "#/components/schemas/Page_CategoryRow_"
                 }
               }
             },
@@ -9417,7 +9753,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CategoryRead"
+                  "$ref": "#/components/schemas/CategoryRow"
                 }
               }
             },
@@ -9465,6 +9801,37 @@
         ]
       }
     },
+    "/api/admin/categories/tree": {
+      "get": {
+        "description": "Every category, nested under its parent, each with its own counts and its branch's\ntotals — for a tree page and for the category filter of the product and entry lists.",
+        "operationId": "tree_api_admin_categories_tree_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryNode"
+                  },
+                  "title": "Response Tree Api Admin Categories Tree Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The whole tree at once",
+        "tags": [
+          "admin: categories"
+        ]
+      }
+    },
     "/api/admin/categories/{category_id}": {
       "get": {
         "operationId": "get_category_api_admin_categories__category_id__get",
@@ -9484,7 +9851,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CategoryRead"
+                  "$ref": "#/components/schemas/CategoryRow"
                 }
               }
             },
@@ -9550,7 +9917,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CategoryRead"
+                  "$ref": "#/components/schemas/CategoryRow"
                 }
               }
             },
@@ -9720,6 +10087,66 @@
           }
         ],
         "summary": "Add a name a shop gives this category",
+        "tags": [
+          "admin: categories"
+        ]
+      }
+    },
+    "/api/admin/categories/{category_id}/aliases/{alias_id}": {
+      "delete": {
+        "description": "The name stops being cut off the front of titles and stops naming the section a\nlisting came from — on the next reading; what is stored is read again by a reparse.",
+        "operationId": "remove_alias_api_admin_categories__category_id__aliases__alias_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "title": "Category Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "alias_id",
+            "required": true,
+            "schema": {
+              "title": "Alias Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such alias on this category"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop reading a name as this category",
         "tags": [
           "admin: categories"
         ]

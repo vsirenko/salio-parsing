@@ -6,11 +6,13 @@ The tree products hang from, and the lever over what the storefront shows.
 
 | | |
 |---|---|
-| `GET /api/admin/categories` | list, filterable by `parent_id`, `roots_only`, `is_visible_effective` |
+| `GET /api/admin/categories` | list with counts, filterable by `parent_id`, `roots_only`, `is_visible_effective`, `search`, `ids`; `?sort=` |
+| `GET /api/admin/categories/tree` | the whole tree, nested, with each branch's totals |
 | `POST /api/admin/categories` | add one |
 | `GET · PATCH /api/admin/categories/{id}` | read or edit |
 | `GET /api/admin/categories/{id}/aliases` | what shops call this category |
 | `POST /api/admin/categories/{id}/aliases` | add a name a shop gives it |
+| `DELETE /api/admin/categories/{id}/aliases/{alias_id}` | stop reading a name as it |
 
 No delete: a category products hang from cannot go, and one nothing hangs from costs nothing
 to keep. Retiring a branch is what visibility is for.
@@ -34,6 +36,13 @@ configurations: on bigbox's first laptop run, 234 of 392 model matches were made
 some were plainly wrong. With the flag on, the rung places by model only when every identity
 axis is known on both sides and equal; what is left goes on as unmatched, and a listing with
 a barcode becomes an entry of its own. Off by default, on for laptops.
+
+**A row counts what the category holds and how far it is set up**: products, variants,
+offers (new listings on sale on its entries, the catalogue's rule), children, aliases and
+attributes — its own, not its branch's. `GET /categories/tree` hands the whole tree over at
+once, each node with its children and its branch's totals (`branch_products_count`, …):
+there are few categories, and paging a hundred at a time to build a tree or a filter was the
+alternative. `search` finds a category by its name, its slug or a name a shop gives it.
 
 **Visibility cascades.** Hiding a parent hides everything under it without editing a single
 child, and unhiding restores the branch with its history rather than a hole in it.

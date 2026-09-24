@@ -142,11 +142,24 @@ class CategoryAttributeUpdate(BaseModel):
     display_unit: str | None = Field(default=None, max_length=20)
 
 
-class CategoryAttributeRead(BaseModel):
+class AttributeRef(BaseModel):
+    """The attribute a binding is of, as a table row needs it."""
+
     model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    key: str
+    name: str
+    value_type: str
+    unit_dimension: str | None
+
+
+class CategoryAttributeRead(BaseModel):
+    """An attribute bound to a category, the attribute named: a row can print `RAM`."""
 
     category_id: int
     attribute_id: int
+    attribute: AttributeRef
     identity_bearing: bool
     position: int
     label_override: str | None

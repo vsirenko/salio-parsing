@@ -162,6 +162,23 @@ class VariantUpdate(BaseModel):
     is_visible: bool | None = None
 
 
+class VariantAttributeShown(BaseModel):
+    """One thing known about an entry, as its category shows it.
+
+    The label is the category's own for the attribute, else the attribute's name; the order
+    is the category's; `display` is the value as a title prints it — `16 GB`, `13.6"` — in
+    the attribute's unit. `value` is the stored one, for a front end that formats its own.
+    """
+
+    key: str
+    label: str
+    value: bool | int | float | str
+    display: str
+    unit: str | None
+    position: int | None
+    identity_bearing: bool
+
+
 class VariantRead(BaseModel):
     """An entry — the thing that is bought — with what a list of them needs.
 
@@ -191,6 +208,9 @@ class VariantRead(BaseModel):
     axes: dict[str, bool | int | float | str] = Field(
         description='What is known about it, by attribute key: `{"cpu": "Intel Core Ultra 5'
         ' 226V", "ram_mb": 16384}`'
+    )
+    attributes: list[VariantAttributeShown] = Field(
+        description="The same, labelled and ordered as its category shows them"
     )
     offers_count: int = Field(description="New listings on sale placed on it")
     shops_count: int = Field(description="Shops those listings are at")

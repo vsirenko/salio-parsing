@@ -37,7 +37,10 @@ second, and a stored summary per entry is the step after that (TODO.md).
 
 **The list of entries is built the same way**, with its family named (`product: {id,
 title}`) and its axes in the row — `axes: {cpu: …, ram_mb: 16384, …}` — because the entries
-of one family otherwise read as rows with one title.
+of one family otherwise read as rows with one title. `axes` is the plain map; `attributes`
+is the same, as the category shows it: labelled with the category's own label or the
+attribute's name, in the category's order, with `display` printed the way a title prints it
+— `256 GB`, `13.6"` — by the same `display_number`.
 It sorts by `?sort=` over the keys in `PRODUCT_SORT`, filters by several brands or
 categories, visibility and a creation window, and searches words in the title, model or
 slug, an id (up to seven digits), a barcode (eight to fourteen, compared padded to fourteen

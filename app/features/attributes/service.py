@@ -20,6 +20,7 @@ from app.features.attributes.schemas import (
     AliasRead,
     AttributeCreate,
     AttributeRead,
+    AttributeRef,
     CategoryAttributeCreate,
     CategoryAttributeRead,
     CategoryAttributeUpdate,
@@ -161,12 +162,13 @@ class AttributeService:
 
     async def list_for_category(self, category_id: int) -> list[CategoryAttributeRead]:
         await self._category(category_id)
-        rows = await self.session.scalars(
-            select(CategoryAttribute)
+        rows = await self.session.execute(
+            select(CategoryAttribute, Attribute)
+            .join(Attribute, Attribute.id == CategoryAttribute.attribute_id)
             .where(CategoryAttribute.category_id == category_id)
             .order_by(CategoryAttribute.position, CategoryAttribute.attribute_id)
         )
-        return [CategoryAttributeRead.model_validate(row) for row in rows]
+        return [_link_read(link, attribute) for link, attribute in rows.all()]
 
     async def attach(
         self, category_id: int, payload: CategoryAttributeCreate
@@ -190,7 +192,7 @@ class AttributeService:
 
         await self.session.refresh(link)
         audit.record_changes(attached_attribute=key, **payload.model_dump(mode="json"))
-        return CategoryAttributeRead.model_validate(link)
+        return _link_read(link, attribute)
 
     async def update_link(
         self, category_id: int, attribute_id: int, payload: CategoryAttributeUpdate
@@ -214,7 +216,7 @@ class AttributeService:
         await self.session.flush()
         await self.session.refresh(link)
         audit.record_changes(attribute_id=attribute_id, **sent)
-        return CategoryAttributeRead.model_validate(link)
+        return _link_read(link, await self._attribute(attribute_id))
 
     async def detach(self, category_id: int, attribute_id: int) -> None:
         await self._link(category_id, attribute_id)
@@ -262,3 +264,15 @@ class AttributeService:
         if link is None:
             raise NotFoundError(f"Attribute {attribute_id} is not on category {category_id}")
         return link
+
+
+def _link_read(link: CategoryAttribute, attribute: Attribute) -> CategoryAttributeRead:
+    return CategoryAttributeRead(
+        category_id=link.category_id,
+        attribute_id=link.attribute_id,
+        attribute=AttributeRef.model_validate(attribute),
+        identity_bearing=link.identity_bearing,
+        position=link.position,
+        label_override=link.label_override,
+        display_unit=link.display_unit,
+    )

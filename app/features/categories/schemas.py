@@ -51,6 +51,44 @@ class CategoryRead(CategoryBase):
     is_visible_effective: bool
 
 
+# What a list of categories may be sorted by, `?sort=`.
+CATEGORY_SORT = (
+    "id",
+    "name",
+    "slug",
+    "products_count",
+    "variants_count",
+    "offers_count",
+    "children_count",
+    "aliases_count",
+    "attributes_count",
+)
+
+
+class CategoryRow(CategoryRead):
+    """A category with how much of the catalogue it holds and how far it is set up.
+
+    Its own counts, not its branch's: `GET /categories/tree` adds the branch. `offers_count`
+    is new listings on sale placed on its entries, the catalogue's rule.
+    """
+
+    products_count: int
+    variants_count: int
+    offers_count: int = Field(description="New listings on sale placed on its entries")
+    children_count: int
+    aliases_count: int = Field(description="Names shops give it")
+    attributes_count: int = Field(description="Attributes bound to it")
+
+
+class CategoryNode(CategoryRow):
+    """A category in the tree, with its children and the totals of its whole branch."""
+
+    branch_products_count: int = Field(description="Its own and every descendant's")
+    branch_variants_count: int
+    branch_offers_count: int
+    children: list["CategoryNode"]
+
+
 class AliasOrigin(StrEnum):
     RULE = "rule"
     JUDGE = "judge"

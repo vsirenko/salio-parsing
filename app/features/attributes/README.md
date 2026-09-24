@@ -17,6 +17,10 @@ One canonical registry of attributes, because sources name the same thing a doze
 
 ## How it works
 
+**A category's binding names its attribute** — `attribute: {id, key, name, value_type,
+unit_dimension}` beside `attribute_id` — so a table of them prints `RAM` without loading
+every attribute to look it up.
+
 **One registry, used per category.** `Цвет`, `Color`, `Krāsa` and `Spalva` all resolve to
 one attribute, which is what makes a feed param and a phrase cut out of a title
 interchangeable: once both become `capacity = 256 GB`, where the value came from stops
