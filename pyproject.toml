@@ -51,3 +51,6 @@ update_changelog_on_bump = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Eight workers, each on a database of its own (`app_test_gw0` …; see tests/conftest.py).
+# `-n 0` runs in one process, for a debugger.
+addopts = "-n 8"

@@ -16,6 +16,16 @@ Tick items off here when they land so the list stays honest.
 
 ## Operations
 
+- [ ] **Concurrent admin requests can exhaust the pool and wait on each other.** An admin
+      request holds its session's connection until the response is done, and the audit
+      middleware opens a second one to write the entry before that. With the pool at 5 + 10,
+      eight or more admin requests at once can hold every connection while each waits for
+      its second: 30 s, then `QueuePool limit … reached`. Found on 24.09.2026 when the tests
+      moved onto a pool — `test_concurrent_requests_do_not_mix_actors` fired twenty at once
+      and hung. Under `NullPool` nothing capped it, which is why it never showed. Write the
+      entry after the request's session is back in the pool, or give the audit writer a
+      pool of its own.
+
 - [ ] **Tests read the developer's `.env`.** Settings are one module-level instance built
       from it, so a value set locally changes what the suite asserts — it has already made
       one test pass or fail depending on whose machine ran it. The fix is a settings

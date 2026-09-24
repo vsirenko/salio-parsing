@@ -82,10 +82,12 @@ class Scheduler:
     # --- being the only one ---
 
     async def acquire(self) -> None:
-        """Take the advisory lock, on a connection of its own.
+        """Take the advisory lock, on a connection held for as long as the lock is.
 
-        A pooled connection would be recycled and take the lock with it, which is the
-        quiet version of running two schedulers.
+        The connection comes from the pool, and a session-level advisory lock outlives a
+        connection being handed back to it: closing is not releasing. So `release` unlocks
+        first. Until 24.09.2026 it only closed, and the lock went back into the pool with the
+        connection — invisible while the process exited after, and the tests' pool found it.
         """
         connection = await engine.connect()
         held = await connection.scalar(text("select pg_try_advisory_lock(:key)"), {"key": LOCK_KEY})
@@ -96,8 +98,11 @@ class Scheduler:
 
     async def release(self) -> None:
         if self._lock is not None:
-            await self._lock.close()
-            self._lock = None
+            try:
+                await self._lock.scalar(text("select pg_advisory_unlock(:key)"), {"key": LOCK_KEY})
+            finally:
+                await self._lock.close()
+                self._lock = None
 
     # --- the loop ---
 

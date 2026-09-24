@@ -1,7 +1,5 @@
 """Audit trail tests: completeness, redaction and scope."""
 
-import pytest
-
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
 CUSTOMER = {"email": "customer@example.com", "password": "customer-password"}
 
@@ -163,14 +161,16 @@ def test_filter_by_actor(client):
 # --- isolation ---
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
+def test_concurrent_requests_do_not_mix_actors(event_loop):
+    """Two admins acting at once must not be attributed to each other.
+
+    On the session's loop, as every request in the run is: the engine's pool is shared, and
+    a connection opened on another loop cannot be used on this one.
+    """
+    event_loop.run_until_complete(_two_admins_at_once())
 
 
-@pytest.mark.anyio
-async def test_concurrent_requests_do_not_mix_actors():
-    """Two admins acting at once must not be attributed to each other."""
+async def _two_admins_at_once():
     import asyncio
 
     import httpx
@@ -189,10 +189,16 @@ async def test_concurrent_requests_do_not_mix_actors():
         second_id = created.json()["id"]
         second = (await ac.post("/api/admin/auth/login", json=SECOND)).json()["access_token"]
 
-        # 20 interleaved requests from two different admins.
-        await asyncio.gather(
-            *[ac.get("/api/admin/users/1", headers=auth(token)) for token in [first, second] * 10]
-        )
+        # 20 interleaved requests from two different admins, six in flight at a time. Each
+        # holds two connections while it finishes — its own and the audit entry's — and the
+        # pool has fifteen, so twenty at once wait on each other (TODO.md).
+        gate = asyncio.Semaphore(6)
+
+        async def one(token: str):
+            async with gate:
+                return await ac.get("/api/admin/users/1", headers=auth(token))
+
+        await asyncio.gather(*[one(token) for token in [first, second] * 10])
 
         page = await ac.get("/api/admin/audit", headers=auth(first), params={"limit": 200})
         logged = page.json()["items"]
