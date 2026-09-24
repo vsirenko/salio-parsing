@@ -12,11 +12,13 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from app.api.deps import BrandServiceDep
 from app.api.pagination import pagination_params
 from app.features.brands.schemas import (
+    BRAND_HAS,
+    BRAND_SORT,
     BrandAliasCreate,
     BrandAliasRead,
     BrandCreate,
     BrandMatch,
-    BrandRead,
+    BrandRow,
     BrandUpdate,
     ModelAliasCreate,
     ModelAliasRead,
@@ -27,12 +29,15 @@ from app.schemas.pagination import Page, Pagination
 router = APIRouter(prefix="/brands", tags=["admin: brands"])
 
 PageParams = Annotated[Pagination, Depends(pagination_params())]
+BrandPageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=BRAND_SORT, default_sort="name"))
+]
 
 
-@router.get("", response_model=Page[BrandRead], summary="List brands")
+@router.get("", response_model=Page[BrandRow], summary="List brands")
 async def list_brands(
     service: BrandServiceDep,
-    pagination: PageParams,
+    pagination: BrandPageParams,
     search: Annotated[str | None, Query(max_length=200, description="Name contains")] = None,
     ids: Annotated[
         list[int] | None,
@@ -40,9 +45,30 @@ async def list_brands(
             description="Only these brands — the ones a filter in a URL names. Repeat for several."
         ),
     ] = None,
-) -> Page[BrandRead]:
-    items, total = await service.list_brands(pagination, search=search, ids=ids)
-    return Page[BrandRead].of(items, total, pagination)
+    has_products: Annotated[bool | None, Query()] = None,
+    has_variants: Annotated[bool | None, Query()] = None,
+    has_offers: Annotated[
+        bool | None, Query(description="New listings on sale placed on its entries")
+    ] = None,
+    has_aliases: Annotated[bool | None, Query(description="Any spelling resolves to it")] = None,
+    has_models: Annotated[bool | None, Query()] = None,
+) -> Page[BrandRow]:
+    """`has_products=false` finds the brands to clear out; `has_aliases=false` the ones no
+    shop's string can reach yet; `sort=-offers_count` the ones that matter."""
+    asked = {
+        "products": has_products,
+        "variants": has_variants,
+        "offers": has_offers,
+        "aliases": has_aliases,
+        "models": has_models,
+    }
+    items, total = await service.list_brands(
+        pagination,
+        search=search,
+        ids=ids,
+        has={BRAND_HAS[key]: value for key, value in asked.items() if value is not None},
+    )
+    return Page[BrandRow].of(items, total, pagination)
 
 
 @router.get(
@@ -67,12 +93,12 @@ async def resolve(
 
 @router.post(
     "",
-    response_model=BrandRead,
+    response_model=BrandRow,
     status_code=status.HTTP_201_CREATED,
     summary="Add a brand",
     responses={409: {"model": ErrorResponse, "description": "Slug already taken"}},
 )
-async def create_brand(payload: BrandCreate, service: BrandServiceDep) -> BrandRead:
+async def create_brand(payload: BrandCreate, service: BrandServiceDep) -> BrandRow:
     """The name is not unique on purpose: Delta is taps and machine tools, two companies
     sharing a string. The slug separates them."""
     return await service.create_brand(payload)
@@ -80,24 +106,24 @@ async def create_brand(payload: BrandCreate, service: BrandServiceDep) -> BrandR
 
 @router.get(
     "/{brand_id}",
-    response_model=BrandRead,
+    response_model=BrandRow,
     summary="Get a brand",
     responses={404: {"model": ErrorResponse, "description": "Brand not found"}},
 )
-async def get_brand(brand_id: int, service: BrandServiceDep) -> BrandRead:
+async def get_brand(brand_id: int, service: BrandServiceDep) -> BrandRow:
     return await service.get_brand(brand_id)
 
 
 @router.patch(
     "/{brand_id}",
-    response_model=BrandRead,
+    response_model=BrandRow,
     summary="Update a brand",
     responses={
         404: {"model": ErrorResponse, "description": "Brand not found"},
         409: {"model": ErrorResponse, "description": "Slug already taken"},
     },
 )
-async def update_brand(brand_id: int, payload: BrandUpdate, service: BrandServiceDep) -> BrandRead:
+async def update_brand(brand_id: int, payload: BrandUpdate, service: BrandServiceDep) -> BrandRow:
     return await service.update_brand(brand_id, payload)
 
 

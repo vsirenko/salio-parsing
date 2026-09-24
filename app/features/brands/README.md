@@ -6,7 +6,7 @@ What is written on the box, and every string a source might write instead.
 
 | | |
 |---|---|
-| `GET · POST /api/admin/brands` | list and create |
+| `GET · POST /api/admin/brands` | list — with counts, `has_*` filters and `?sort=` — and create |
 | `GET /api/admin/brands/resolve` | what a string resolves to — `q`, `titles_only` |
 | `GET · PATCH /api/admin/brands/{brand_id}` | read or edit |
 | `GET · POST /api/admin/brands/{brand_id}/aliases` | list and add aliases |
@@ -18,6 +18,14 @@ No delete on a brand: one variants point at cannot go, and one nothing points at
 nothing to keep. A wrong brand is merged, which is catalogue work and does not exist yet.
 
 ## How it works
+
+**A brand row says how much it holds and how far it is set up**: `products_count`,
+`variants_count`, `offers_count` (new listings on sale placed on its entries — the
+catalogue's rule), `aliases_count` and `models_count`. Without them the list is an alphabet
+of thousands with the busy beside the empty. `?sort=` takes any of them and `name`;
+`has_products=false` finds brands left over from a merge, `has_aliases=false` brands no
+shop's string can reach. The counts are correlated subqueries (`_brand_rows`), so a page
+costs its own rows; `BrandRead` without them stays what `/resolve` nests.
 
 **A brand is what is on the box, not who owns the factory.** Procter & Gamble is not a
 brand, Ariel is. The string that appears in a title and in a feed's brand field is the one

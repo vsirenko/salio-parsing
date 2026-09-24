@@ -693,6 +693,60 @@
         "title": "BrandRef",
         "type": "object"
       },
+      "BrandRow": {
+        "description": "A brand with how much of the catalogue it holds and how far it is set up.\n\n`offers_count` counts new listings on sale placed on its entries, the rule the catalogue's\ncounts go by. A brand with no aliases resolves no shop's string; one with no products is\neither new or left over from a merge, and both are worth finding.",
+        "properties": {
+          "aliases_count": {
+            "description": "Spellings that resolve to it",
+            "title": "Aliases Count",
+            "type": "integer"
+          },
+          "canonical_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Canonical Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "models_count": {
+            "description": "Model names entered for it, in every category",
+            "title": "Models Count",
+            "type": "integer"
+          },
+          "offers_count": {
+            "description": "New listings on sale placed on its entries",
+            "title": "Offers Count",
+            "type": "integer"
+          },
+          "products_count": {
+            "title": "Products Count",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "variants_count": {
+            "title": "Variants Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "canonical_name",
+          "id",
+          "slug",
+          "products_count",
+          "variants_count",
+          "offers_count",
+          "aliases_count",
+          "models_count"
+        ],
+        "title": "BrandRow",
+        "type": "object"
+      },
       "BrandUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -3067,7 +3121,7 @@
         "title": "Page[AvailabilityEventRead]",
         "type": "object"
       },
-      "Page_BrandRead_": {
+      "Page_BrandRow_": {
         "properties": {
           "has_more": {
             "description": "Whether another page exists",
@@ -3077,7 +3131,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/BrandRead"
+              "$ref": "#/components/schemas/BrandRow"
             },
             "title": "Items",
             "type": "array"
@@ -3115,7 +3169,7 @@
           "offset",
           "has_more"
         ],
-        "title": "Page[BrandRead]",
+        "title": "Page[BrandRow]",
         "type": "object"
       },
       "Page_CategoryRead_": {
@@ -8396,6 +8450,7 @@
     },
     "/api/admin/brands": {
       "get": {
+        "description": "`has_products=false` finds the brands to clear out; `has_aliases=false` the ones no\nshop's string can reach yet; `sort=-offers_count` the ones that matter.",
         "operationId": "list_brands_api_admin_brands_get",
         "parameters": [
           {
@@ -8440,6 +8495,90 @@
           },
           {
             "in": "query",
+            "name": "has_products",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Products"
+            }
+          },
+          {
+            "in": "query",
+            "name": "has_variants",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Variants"
+            }
+          },
+          {
+            "description": "New listings on sale placed on its entries",
+            "in": "query",
+            "name": "has_offers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "New listings on sale placed on its entries",
+              "title": "Has Offers"
+            }
+          },
+          {
+            "description": "Any spelling resolves to it",
+            "in": "query",
+            "name": "has_aliases",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Any spelling resolves to it",
+              "title": "Has Aliases"
+            }
+          },
+          {
+            "in": "query",
+            "name": "has_models",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Models"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -8460,6 +8599,28 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, name, products_count, variants_count, offers_count, aliases_count, models_count.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, name, products_count, variants_count, offers_count, aliases_count, models_count.",
+              "examples": [
+                "name"
+              ],
+              "title": "Sort"
+            }
           }
         ],
         "responses": {
@@ -8467,7 +8628,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_BrandRead_"
+                  "$ref": "#/components/schemas/Page_BrandRow_"
                 }
               }
             },
@@ -8512,7 +8673,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BrandRead"
+                  "$ref": "#/components/schemas/BrandRow"
                 }
               }
             },
@@ -8637,7 +8798,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BrandRead"
+                  "$ref": "#/components/schemas/BrandRow"
                 }
               }
             },
@@ -8702,7 +8863,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BrandRead"
+                  "$ref": "#/components/schemas/BrandRow"
                 }
               }
             },

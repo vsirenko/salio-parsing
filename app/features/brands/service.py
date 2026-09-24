@@ -1,13 +1,24 @@
 """Brands and the strings that resolve to them."""
 
-from sqlalchemy import delete, select
+from typing import Any
+
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
 from app.core.exceptions import ConflictError, NotFoundError
-from app.db.models import Brand, BrandAlias, Category, ModelAlias
-from app.db.query import paginated
+from app.db.models import (
+    Brand,
+    BrandAlias,
+    Category,
+    ModelAlias,
+    Offer,
+    OfferMatch,
+    Product,
+    Variant,
+)
+from app.db.query import offer_is_listed, ordered, paginated_rows
 from app.features.brands.normalization import normalize_brand, normalize_model_name
 from app.features.brands.schemas import (
     AliasKind,
@@ -16,6 +27,7 @@ from app.features.brands.schemas import (
     BrandCreate,
     BrandMatch,
     BrandRead,
+    BrandRow,
     BrandUpdate,
     ModelAliasCreate,
     ModelAliasRead,
@@ -28,23 +40,35 @@ class BrandService:
         self.session = session
 
     async def list_brands(
-        self, pagination: Pagination, *, search: str | None = None, ids: list[int] | None = None
-    ) -> tuple[list[BrandRead], int]:
-        stmt = select(Brand)
+        self,
+        pagination: Pagination,
+        *,
+        search: str | None = None,
+        ids: list[int] | None = None,
+        has: dict[str, bool] | None = None,
+    ) -> tuple[list[BrandRow], int]:
+        stmt = _brand_rows()
         if search:
             stmt = stmt.where(Brand.canonical_name.ilike(f"%{search}%"))
         if ids:
             stmt = stmt.where(Brand.id.in_(ids))
+        columns = {c.name: c for c in stmt.selected_columns}
+        for count, wanted in (has or {}).items():
+            stmt = stmt.where(columns[count] > 0 if wanted else columns[count] == 0)
 
-        rows, total = await paginated(
-            self.session, stmt.order_by(Brand.canonical_name, Brand.id), pagination
+        stmt = ordered(
+            stmt,
+            pagination,
+            {"id": Brand.id, "name": Brand.canonical_name, **columns},
+            Brand.id,
         )
-        return [BrandRead.model_validate(row) for row in rows], total
+        rows, total = await paginated_rows(self.session, stmt, pagination)
+        return [_brand_row(row) for row in rows], total
 
-    async def get_brand(self, brand_id: int) -> BrandRead:
-        return BrandRead.model_validate(await self._brand(brand_id))
+    async def get_brand(self, brand_id: int) -> BrandRow:
+        return await self._read_brand(brand_id)
 
-    async def create_brand(self, payload: BrandCreate) -> BrandRead:
+    async def create_brand(self, payload: BrandCreate) -> BrandRow:
         brand = Brand(**payload.model_dump())
         self.session.add(brand)
         try:
@@ -56,9 +80,9 @@ class BrandService:
         await self.session.refresh(brand)
         audit.set_target("brand", brand.id)
         audit.record_changes(**payload.model_dump(mode="json"))
-        return BrandRead.model_validate(brand)
+        return await self._read_brand(brand.id)
 
-    async def update_brand(self, brand_id: int, payload: BrandUpdate) -> BrandRead:
+    async def update_brand(self, brand_id: int, payload: BrandUpdate) -> BrandRow:
         brand = await self._brand(brand_id)
         audit.set_target("brand", brand.id)
 
@@ -74,9 +98,8 @@ class BrandService:
             await self.session.rollback()
             raise ConflictError(f"The slug '{payload.slug}' is already taken") from exc
 
-        await self.session.refresh(brand)
         audit.record_changes(**sent)
-        return BrandRead.model_validate(brand)
+        return await self._read_brand(brand.id)
 
     # --- aliases ---
 
@@ -216,8 +239,53 @@ class BrandService:
             for alias, brand in rows
         ]
 
+    async def _read_brand(self, brand_id: int) -> BrandRow:
+        row = (await self.session.execute(_brand_rows().where(Brand.id == brand_id))).first()
+        if row is None:
+            raise NotFoundError(f"Brand {brand_id} not found")
+        return _brand_row(row)
+
     async def _brand(self, brand_id: int) -> Brand:
         brand = await self.session.get(Brand, brand_id)
         if brand is None:
             raise NotFoundError(f"Brand {brand_id} not found")
         return brand
+
+
+def _brand_rows() -> Select[Any]:
+    """Each brand with five counts, correlated so that a page costs only its own rows."""
+
+    def count(column: Any, *where: Any) -> Any:
+        return select(func.count(column)).where(*where).correlate(Brand).scalar_subquery()
+
+    offers = (
+        select(func.count(Offer.id))
+        .select_from(Offer)
+        .join(OfferMatch, (OfferMatch.offer_id == Offer.id) & OfferMatch.superseded_at.is_(None))
+        .join(Variant, Variant.id == OfferMatch.variant_id)
+        .where(Variant.brand_id == Brand.id, Offer.condition == "new", offer_is_listed())
+        .correlate(Brand)
+        .scalar_subquery()
+    )
+    return select(
+        Brand,
+        count(Product.id, Product.brand_id == Brand.id).label("products_count"),
+        count(Variant.id, Variant.brand_id == Brand.id).label("variants_count"),
+        offers.label("offers_count"),
+        count(BrandAlias.id, BrandAlias.brand_id == Brand.id).label("aliases_count"),
+        count(ModelAlias.id, ModelAlias.brand_id == Brand.id).label("models_count"),
+    )
+
+
+def _brand_row(row: Any) -> BrandRow:
+    brand = row[0]
+    return BrandRow(
+        id=brand.id,
+        slug=brand.slug,
+        canonical_name=brand.canonical_name,
+        products_count=row.products_count,
+        variants_count=row.variants_count,
+        offers_count=row.offers_count,
+        aliases_count=row.aliases_count,
+        models_count=row.models_count,
+    )

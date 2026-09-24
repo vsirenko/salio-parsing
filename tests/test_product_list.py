@@ -94,3 +94,30 @@ def test_brands_can_be_asked_for_by_id(client):
     apple, samsung, *_ = families(client, token)
     response = client.get("/api/admin/brands", headers=auth(token), params={"ids": [samsung["id"]]})
     assert [b["canonical_name"] for b in response.json()["items"]] == ["Samsung"]
+
+
+def test_a_brand_row_says_how_much_it_holds_and_how_far_it_is_set_up(client):
+    """Without counts a brand list is an alphabet of thousands, the empty beside the busy."""
+    token = admin_token(client)
+    apple, samsung, *_ = families(client, token)
+    post(client, token, f"/api/admin/brands/{apple['id']}/aliases", {"alias": "Apple"})
+    empty = post(
+        client, token, "/api/admin/brands", {"slug": "leftover", "canonical_name": "Leftover"}
+    )
+
+    rows = client.get("/api/admin/brands", headers=auth(token), params={"sort": "-products_count"})
+    by_name = {row["canonical_name"]: row for row in rows.json()["items"]}
+    assert [row["canonical_name"] for row in rows.json()["items"]][:2] == ["Apple", "Samsung"]
+    assert (by_name["Apple"]["products_count"], by_name["Apple"]["variants_count"]) == (2, 1)
+    assert by_name["Apple"]["aliases_count"] == 1
+    assert by_name["Leftover"]["products_count"] == 0
+
+    def named(**params):
+        page = client.get("/api/admin/brands", headers=auth(token), params=params).json()
+        return [row["canonical_name"] for row in page["items"]]
+
+    assert named(has_products="false") == ["Leftover"]
+    assert "Apple" not in named(has_aliases="false")
+    assert named(has_products="true", has_aliases="true") == ["Apple"]
+    one = client.get(f"/api/admin/brands/{empty['id']}", headers=auth(token)).json()
+    assert one["models_count"] == 0

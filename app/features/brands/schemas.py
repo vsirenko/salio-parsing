@@ -60,6 +60,41 @@ class BrandRead(BrandBase):
     slug: str
 
 
+# What a list of brands may be sorted by, `?sort=`.
+BRAND_SORT = (
+    "id",
+    "name",
+    "products_count",
+    "variants_count",
+    "offers_count",
+    "aliases_count",
+    "models_count",
+)
+# What `has_*` filters exist, each keyed to the count it tests.
+BRAND_HAS = {
+    "products": "products_count",
+    "variants": "variants_count",
+    "offers": "offers_count",
+    "aliases": "aliases_count",
+    "models": "models_count",
+}
+
+
+class BrandRow(BrandRead):
+    """A brand with how much of the catalogue it holds and how far it is set up.
+
+    `offers_count` counts new listings on sale placed on its entries, the rule the catalogue's
+    counts go by. A brand with no aliases resolves no shop's string; one with no products is
+    either new or left over from a merge, and both are worth finding.
+    """
+
+    products_count: int
+    variants_count: int
+    offers_count: int = Field(description="New listings on sale placed on its entries")
+    aliases_count: int = Field(description="Spellings that resolve to it")
+    models_count: int = Field(description="Model names entered for it, in every category")
+
+
 class BrandUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
