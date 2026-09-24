@@ -543,7 +543,7 @@ def test_capacities_of_one_model_are_variants_of_one_product(client):
     products = client.get("/api/admin/products", headers=auth(token)).json()
     assert variants["total"] == 2
     assert products["total"] == 1
-    assert {v["product_id"] for v in variants["items"]} == {products["items"][0]["id"]}
+    assert {v["product"]["id"] for v in variants["items"]} == {products["items"][0]["id"]}
 
 
 def test_a_model_that_agrees_but_a_capacity_that_does_not_is_not_a_match(client):
@@ -2090,7 +2090,7 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     )
     variant_id = promote(client, token, offer)["variant_id"]
     before = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
-    old_family = before["product_id"]
+    old_family = before["product"]["id"]
 
     ingest(
         client,
@@ -2112,8 +2112,8 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     assert report["rehomed"] == 1
 
     after = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
-    assert after["product_id"] != old_family
-    family = client.get(f"/api/admin/products/{after['product_id']}", headers=auth(token)).json()
+    assert after["product"]["id"] != old_family
+    family = client.get(f"/api/admin/products/{after['product']['id']}", headers=auth(token)).json()
     assert family["model"] == "iPhone 15"
     # The family the old name made is empty now, and hidden rather than deleted.
     left = client.get(f"/api/admin/products/{old_family}", headers=auth(token)).json()
@@ -2145,7 +2145,7 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     back = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
     assert back["rehomed"] == 1, back
     home = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
-    assert home["product_id"] == old_family
+    assert home["product"]["id"] == old_family
     shown = client.get(f"/api/admin/products/{old_family}", headers=auth(token)).json()
     assert shown["is_visible"] is True
 

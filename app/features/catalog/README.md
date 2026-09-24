@@ -27,9 +27,17 @@ Once it does, most of this becomes read-and-correct rather than create.
 **The list of families is built to be read without further requests.** A row names its
 brand and category (`{id, canonical_name}`, `{id, name}`) instead of carrying ids a table
 would print as `#15`, and three counts say whether the family is comparable at all:
-`variants_count`, `shops_count` — shops with a *new* listing placed on one of its entries —
-and `min_price` among those listings. They are grouped once over the catalogue, which is
-what lets the list sort and filter by them; at a few thousand families that costs nothing.
+`variants_count`, `offers_count` and `shops_count` — the *new* listings *on sale now*
+placed on its entries, and the shops they are at — and `min_price` among them. On sale is
+`offer_is_listed` in `app/db/query.py`, the pipeline's rule: seen by the channel's newest
+full pass that ended ok; a refurbished listing or a card the shop took down is not a price
+of this product. They are correlated subqueries, so a page costs its own rows (20–90 ms on
+24.09.2026's catalogue); sorting by one of them computes it for every row, about half a
+second, and a stored summary per entry is the step after that (TODO.md).
+
+**The list of entries is built the same way**, with its family named (`product: {id,
+title}`) and its axes in the row — `axes: {cpu: …, ram_mb: 16384, …}` — because the entries
+of one family otherwise read as rows with one title.
 It sorts by `?sort=` over the keys in `PRODUCT_SORT`, filters by several brands or
 categories, visibility and a creation window, and searches words in the title, model or
 slug, an id (up to seven digits), a barcode (eight to fourteen, compared padded to fourteen

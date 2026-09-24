@@ -64,7 +64,18 @@ class ProductUpdate(BaseModel):
 
 
 # What a list of families may be sorted by, `?sort=`.
-PRODUCT_SORT = ("id", "title", "created_at", "brand", "variants_count", "shops_count", "min_price")
+PRODUCT_SORT = (
+    "id",
+    "title",
+    "created_at",
+    "brand",
+    "variants_count",
+    "offers_count",
+    "shops_count",
+    "min_price",
+)
+# And a list of entries.
+VARIANT_SORT = ("id", "title", "created_at", "brand", "offers_count", "shops_count", "min_price")
 
 
 class BrandRef(BaseModel):
@@ -79,12 +90,20 @@ class CategoryRef(BaseModel):
     name: str
 
 
+class ProductRef(BaseModel):
+    """The family an entry belongs to."""
+
+    id: int
+    title: str
+
+
 class ProductRead(BaseModel):
     """A family, with what a list of them needs to be read without further requests.
 
     The brand and the category come named, so a table shows `Lenovo` rather than `#15`, and
     three counts say whether the family is comparable at all: how many entries it holds,
-    how many shops sell one of them new, and the lowest price any of them asks.
+    how many listings on sale new are placed on them and at how many shops, and the lowest
+    price any of them asks.
     """
 
     id: int
@@ -99,7 +118,8 @@ class ProductRead(BaseModel):
     is_visible: bool
     created_at: datetime
     variants_count: int = Field(description="Catalogue entries in the family")
-    shops_count: int = Field(description="Shops with a new listing placed on one of them")
+    offers_count: int = Field(description="New listings on sale placed on one of them")
+    shops_count: int = Field(description="Shops those listings are at")
     min_price: Decimal | None = Field(
         description="The lowest price of those listings, in the shop's currency (EUR)"
     )
@@ -143,13 +163,17 @@ class VariantUpdate(BaseModel):
 
 
 class VariantRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """An entry — the thing that is bought — with what a list of them needs.
+
+    Named brand, category and family; the axes it is told apart by, so the entries of one
+    family are not rows with one title; and what it sells for now.
+    """
 
     id: int
     slug: str
-    product_id: int | None
-    brand_id: int
-    category_id: int
+    product: ProductRef | None
+    brand: BrandRef
+    category: CategoryRef
     model: str
     model_normalized: str
     title: str
@@ -164,6 +188,13 @@ class VariantRead(BaseModel):
     identity_key: str | None
     is_visible: bool
     created_at: datetime
+    axes: dict[str, bool | int | float | str] = Field(
+        description='What is known about it, by attribute key: `{"cpu": "Intel Core Ultra 5'
+        ' 226V", "ram_mb": 16384}`'
+    )
+    offers_count: int = Field(description="New listings on sale placed on it")
+    shops_count: int = Field(description="Shops those listings are at")
+    min_price: Decimal | None = Field(description="The lowest of their prices (EUR)")
 
 
 # --- what is known about a variant ---

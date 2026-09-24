@@ -333,7 +333,7 @@ def test_a_variant_may_have_no_family(client):
         "/api/admin/variants",
         {"brand_id": brand["id"], "category_id": category["id"], "model": "iPhone 15 Pro"},
     )
-    assert variant["product_id"] is None
+    assert variant["product"] is None
 
     product = post(
         client,
@@ -346,7 +346,7 @@ def test_a_variant_may_have_no_family(client):
         headers=auth(token),
         json={"product_id": product["id"]},
     ).json()
-    assert grouped["product_id"] == product["id"]
+    assert grouped["product"]["id"] == product["id"]
 
 
 def test_unit_count_only_goes_with_a_multipack(client):

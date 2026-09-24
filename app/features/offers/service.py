@@ -37,7 +37,7 @@ from app.db.models import (
     Variant,
     VariantAttribute,
 )
-from app.db.query import paginated
+from app.db.query import offer_is_listed, ordered, paginated_rows
 from app.features.brands.normalization import normalize_brand
 from app.features.offers.normalization import (
     Vocabulary,
@@ -54,9 +54,12 @@ from app.features.offers.schemas import (
     NormalizedOfferRead,
     OfferRead,
     OfferTrace,
+    PlacedOn,
     RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
+    SellerRef,
+    ShopRef,
     TraceEntry,
     TraceMatch,
     TraceObservation,
@@ -454,18 +457,48 @@ class OfferService:
         *,
         seller_id: int | None = None,
         market_code: str | None = None,
+        shop_ids: list[int] | None = None,
+        variant_ids: list[int] | None = None,
+        product_ids: list[int] | None = None,
+        condition: str | None = None,
+        listed: bool | None = None,
     ) -> tuple[list[OfferRead], int]:
-        stmt = select(Offer)
+        stmt = _offer_rows()
         if seller_id is not None:
             stmt = stmt.where(Offer.seller_id == seller_id)
         if market_code is not None:
             stmt = stmt.where(Offer.market_code == market_code.upper())
+        if shop_ids:
+            stmt = stmt.where(Shop.id.in_(shop_ids))
+        if variant_ids:
+            stmt = stmt.where(OfferMatch.variant_id.in_(variant_ids))
+        if product_ids:
+            stmt = stmt.where(Variant.product_id.in_(product_ids))
+        if condition is not None:
+            stmt = stmt.where(Offer.condition == condition)
+        if listed is not None:
+            stmt = stmt.where(offer_is_listed() if listed else ~offer_is_listed())
 
-        rows, total = await paginated(self.session, stmt.order_by(Offer.id), pagination)
-        return [OfferRead.model_validate(row) for row in rows], total
+        stmt = ordered(
+            stmt,
+            pagination,
+            {
+                "id": Offer.id,
+                "price": Offer.price,
+                "last_seen_at": Offer.last_seen_at,
+                "first_seen_at": Offer.first_seen_at,
+                "shop": Shop.name,
+            },
+            Offer.id,
+        )
+        rows, total = await paginated_rows(self.session, stmt, pagination)
+        return [_offer_read(row) for row in rows], total
 
     async def get_offer(self, offer_id: int) -> OfferRead:
-        return OfferRead.model_validate(await self._offer(offer_id))
+        row = (await self.session.execute(_offer_rows().where(Offer.id == offer_id))).first()
+        if row is None:
+            raise NotFoundError(f"Offer {offer_id} not found")
+        return _offer_read(row)
 
     async def list_observations(self, offer_id: int) -> list[RawOfferRead]:
         await self._offer(offer_id)
@@ -824,3 +857,50 @@ def _trace_match(match: OfferMatch) -> TraceMatch:
 
 def _axis(number: Decimal | None) -> str:
     return _number(number) if number is not None else ""
+
+
+def _offer_rows() -> Any:
+    """Each listing with its shop and seller named, and the entry it is placed on, if any."""
+    return (
+        select(
+            Offer,
+            Shop.id.label("shop_id"),
+            Shop.name.label("shop_name"),
+            Seller.name.label("seller_name"),
+            OfferMatch.variant_id.label("variant_id"),
+            OfferMatch.method.label("method"),
+            Variant.title.label("variant_title"),
+            offer_is_listed().label("listed"),
+        )
+        .join(Seller, Seller.id == Offer.seller_id)
+        .join(Shop, Shop.id == Seller.shop_id)
+        .outerjoin(
+            OfferMatch, (OfferMatch.offer_id == Offer.id) & OfferMatch.superseded_at.is_(None)
+        )
+        .outerjoin(Variant, Variant.id == OfferMatch.variant_id)
+    )
+
+
+def _offer_read(row: Any) -> OfferRead:
+    offer = row[0]
+    return OfferRead(
+        id=offer.id,
+        shop=ShopRef(id=row.shop_id, name=row.shop_name),
+        seller=SellerRef(id=offer.seller_id, name=row.seller_name),
+        placed_on=PlacedOn(
+            variant_id=row.variant_id, variant_title=row.variant_title, method=row.method
+        )
+        if row.variant_id is not None
+        else None,
+        listed=bool(row.listed),
+        market_code=offer.market_code,
+        external_id=offer.external_id,
+        url=offer.url,
+        condition=offer.condition,
+        condition_grade=offer.condition_grade,
+        price=offer.price,
+        currency_code=offer.currency_code,
+        availability=offer.availability,
+        first_seen_at=offer.first_seen_at,
+        last_seen_at=offer.last_seen_at,
+    )

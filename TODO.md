@@ -16,6 +16,11 @@ Tick items off here when they land so the list stays honest.
 
 ## Operations
 
+- [ ] **Sorting families or entries by a count or a price takes about half a second**: the
+      counts are correlated subqueries, cheap for a page and computed for every row when a
+      list is ordered by them. A summary per entry — offers, shops, lowest price — kept
+      current by the matcher and the ingest would make it an index.
+
 - [ ] **Concurrent admin requests can exhaust the pool and wait on each other.** An admin
       request holds its session's connection until the response is done, and the audit
       middleware opens a second one to write the entry before that. With the pool at 5 + 10,

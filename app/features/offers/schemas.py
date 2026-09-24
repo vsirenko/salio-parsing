@@ -128,11 +128,43 @@ class IngestResult(BaseModel):
     read: list[str] = Field(default_factory=list, exclude=True)
 
 
-class OfferRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+# What a list of listings may be sorted by, `?sort=`.
+OFFER_SORT = ("id", "price", "last_seen_at", "first_seen_at", "shop")
+
+
+class ShopRef(BaseModel):
+    id: int
+    name: str
+
+
+class SellerRef(BaseModel):
+    """Who sells it within the shop: the shop itself, or a trader on a marketplace."""
 
     id: int
-    seller_id: int
+    name: str
+
+
+class PlacedOn(BaseModel):
+    """The catalogue entry a listing is placed on, and by what signal."""
+
+    variant_id: int
+    variant_title: str
+    method: str
+
+
+class OfferRead(BaseModel):
+    """One listing, with the shop that has it and where the catalogue placed it.
+
+    `listed` is whether the shop still has it: seen by its channel's newest full pass that
+    ended ok. A listing the shop took down keeps its history and its last price, which is
+    no longer a price anybody can pay.
+    """
+
+    id: int
+    shop: ShopRef
+    seller: SellerRef
+    placed_on: PlacedOn | None
+    listed: bool
     market_code: str
     external_id: str
     url: str | None

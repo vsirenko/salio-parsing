@@ -11,7 +11,7 @@ Everything downstream is derived from them and can be thrown away.
 |---|---|
 | `POST /api/admin/sources/{source_id}/offers` | submit one observation |
 | `POST /api/admin/sources/{source_id}/offers/batch` | submit many, gzipped |
-| `GET /api/admin/offers` | the listings — filter by `seller_id`, `market_code` |
+| `GET /api/admin/offers` | the listings — by shop, entry (`variant_id`), family (`product_id`), condition, `listed`; sorted by price, first or last seen, shop |
 | `GET /api/admin/offers/coverage` | how far a deterministic matcher could get |
 | `GET /api/admin/offers/{offer_id}` | one listing |
 | `GET /api/admin/offers/{offer_id}/raw` | every observation of it |
@@ -49,6 +49,14 @@ fix.
 
 **The market is on the batch, not on each item.** Every observation in one pass comes from
 one channel showing one market, and repeating it per item only invites them to disagree.
+
+**A listing row names its shop and seller and says where it is placed** — `shop`, `seller`,
+`placed_on: {variant_id, variant_title, method}` — and whether the shop still has it,
+`listed`: seen by its channel's newest full pass that ended ok (`offer_is_listed` in
+`app/db/query.py`, the pipeline's rule). A product card asks
+`product_id=…&listed=true&condition=new&sort=price`: who sells the thing new today,
+cheapest first. The placement is read from `offer_matches`, which is `matching`'s table;
+reading it is not a cross-feature import.
 
 **`run_id` is carried through to `raw_offers`.** Null when a sample is loaded by hand. It
 earns its column because when a run is rejected, or its coverage falls off a cliff, the

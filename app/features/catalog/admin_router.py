@@ -20,6 +20,7 @@ from app.api.deps import CatalogServiceDep
 from app.api.pagination import pagination_params
 from app.features.catalog.schemas import (
     PRODUCT_SORT,
+    VARIANT_SORT,
     IdentifierCreate,
     ProductCreate,
     ProductRead,
@@ -39,6 +40,9 @@ products_router = APIRouter(prefix="/products", tags=["admin: catalogue"])
 variants_router = APIRouter(prefix="/variants", tags=["admin: catalogue"])
 
 PageParams = Annotated[Pagination, Depends(pagination_params())]
+VariantPageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=VARIANT_SORT, default_sort="id"))
+]
 ProductPageParams = Annotated[
     Pagination, Depends(pagination_params(sortable=PRODUCT_SORT, default_sort="id"))
 ]
@@ -122,20 +126,33 @@ async def update_product(
 @variants_router.get("", response_model=Page[VariantRead], summary="List variants")
 async def list_variants(
     service: CatalogServiceDep,
-    pagination: PageParams,
-    product_id: Annotated[int | None, Query()] = None,
-    category_id: Annotated[int | None, Query()] = None,
-    brand_id: Annotated[int | None, Query()] = None,
+    pagination: VariantPageParams,
+    product_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    category_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    brand_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
     identified: Annotated[
         bool | None, Query(description="Whether an identity key could be computed")
+    ] = None,
+    is_visible: Annotated[bool | None, Query()] = None,
+    search: Annotated[
+        str | None,
+        Query(
+            max_length=200,
+            description=(
+                "Title, model or slug contains; an id (up to 7 digits); a barcode (8 to 14"
+                " digits, any padding); a part number"
+            ),
+        ),
     ] = None,
 ) -> Page[VariantRead]:
     items, total = await service.list_variants(
         pagination,
-        product_id=product_id,
-        category_id=category_id,
-        brand_id=brand_id,
+        product_ids=product_id,
+        category_ids=category_id,
+        brand_ids=brand_id,
         identified=identified,
+        is_visible=is_visible,
+        search=search,
     )
     return Page[VariantRead].of(items, total, pagination)
 

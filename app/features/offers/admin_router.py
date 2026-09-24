@@ -20,7 +20,9 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.deps import OfferServiceDep
 from app.api.pagination import pagination_params
 from app.features.offers.schemas import (
+    OFFER_SORT,
     BatchResult,
+    Condition,
     Coverage,
     IngestResult,
     NormalizedOfferRead,
@@ -38,6 +40,9 @@ sources_router = APIRouter(prefix="/sources", tags=["admin: offers"])
 raw_router = APIRouter(prefix="/raw-offers", tags=["admin: offers"])
 
 PageParams = Annotated[Pagination, Depends(pagination_params())]
+OfferPageParams = Annotated[
+    Pagination, Depends(pagination_params(sortable=OFFER_SORT, default_sort="id"))
+]
 
 
 @sources_router.post(
@@ -99,12 +104,34 @@ async def coverage(service: OfferServiceDep) -> Coverage:
 @router.get("", response_model=Page[OfferRead], summary="List offers")
 async def list_offers(
     service: OfferServiceDep,
-    pagination: PageParams,
+    pagination: OfferPageParams,
     seller_id: Annotated[int | None, Query()] = None,
     market_code: Annotated[str | None, Query(max_length=2)] = None,
+    shop_id: Annotated[list[int] | None, Query(description="Repeat for several")] = None,
+    variant_id: Annotated[
+        list[int] | None, Query(description="Placed on this entry. Repeat for several")
+    ] = None,
+    product_id: Annotated[
+        list[int] | None,
+        Query(description="Placed on an entry of this family. Repeat for several"),
+    ] = None,
+    condition: Annotated[Condition | None, Query()] = None,
+    listed: Annotated[
+        bool | None,
+        Query(description="On sale now: seen by its channel's newest full pass that ended ok"),
+    ] = None,
 ) -> Page[OfferRead]:
+    """A product card asks `product_id=…&listed=true&condition=new&sort=price`: who sells the
+    thing new today, cheapest first."""
     items, total = await service.list_offers(
-        pagination, seller_id=seller_id, market_code=market_code
+        pagination,
+        seller_id=seller_id,
+        market_code=market_code,
+        shop_ids=shop_id,
+        variant_ids=variant_id,
+        product_ids=product_id,
+        condition=condition.value if condition else None,
+        listed=listed,
     )
     return Page[OfferRead].of(items, total, pagination)
 

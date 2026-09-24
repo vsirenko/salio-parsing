@@ -2609,6 +2609,7 @@
         "type": "object"
       },
       "OfferRead": {
+        "description": "One listing, with the shop that has it and where the catalogue placed it.\n\n`listed` is whether the shop still has it: seen by its channel's newest full pass that\nended ok. A listing the shop took down keeps its history and its last price, which is\nno longer a price anybody can pay.",
         "properties": {
           "availability": {
             "$ref": "#/components/schemas/Availability"
@@ -2656,9 +2657,23 @@
             "title": "Last Seen At",
             "type": "string"
           },
+          "listed": {
+            "title": "Listed",
+            "type": "boolean"
+          },
           "market_code": {
             "title": "Market Code",
             "type": "string"
+          },
+          "placed_on": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlacedOn"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "price": {
             "anyOf": [
@@ -2672,9 +2687,11 @@
             ],
             "title": "Price"
           },
-          "seller_id": {
-            "title": "Seller Id",
-            "type": "integer"
+          "seller": {
+            "$ref": "#/components/schemas/SellerRef"
+          },
+          "shop": {
+            "$ref": "#/components/schemas/ShopRef"
           },
           "url": {
             "anyOf": [
@@ -2690,7 +2707,10 @@
         },
         "required": [
           "id",
-          "seller_id",
+          "shop",
+          "seller",
+          "placed_on",
+          "listed",
           "market_code",
           "external_id",
           "url",
@@ -3944,6 +3964,30 @@
         "title": "Pipeline",
         "type": "object"
       },
+      "PlacedOn": {
+        "description": "The catalogue entry a listing is placed on, and by what signal.",
+        "properties": {
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "integer"
+          },
+          "variant_title": {
+            "title": "Variant Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "variant_title",
+          "method"
+        ],
+        "title": "PlacedOn",
+        "type": "object"
+      },
       "PriceEventRead": {
         "properties": {
           "at": {
@@ -4082,7 +4126,7 @@
         "type": "object"
       },
       "ProductRead": {
-        "description": "A family, with what a list of them needs to be read without further requests.\n\nThe brand and the category come named, so a table shows `Lenovo` rather than `#15`, and\nthree counts say whether the family is comparable at all: how many entries it holds,\nhow many shops sell one of them new, and the lowest price any of them asks.",
+        "description": "A family, with what a list of them needs to be read without further requests.\n\nThe brand and the category come named, so a table shows `Lenovo` rather than `#15`, and\nthree counts say whether the family is comparable at all: how many entries it holds,\nhow many listings on sale new are placed on them and at how many shops, and the lowest\nprice any of them asks.",
         "properties": {
           "brand": {
             "$ref": "#/components/schemas/BrandRef"
@@ -4142,8 +4186,13 @@
             "title": "Model",
             "type": "string"
           },
+          "offers_count": {
+            "description": "New listings on sale placed on one of them",
+            "title": "Offers Count",
+            "type": "integer"
+          },
           "shops_count": {
-            "description": "Shops with a new listing placed on one of them",
+            "description": "Shops those listings are at",
             "title": "Shops Count",
             "type": "integer"
           },
@@ -4185,10 +4234,30 @@
           "is_visible",
           "created_at",
           "variants_count",
+          "offers_count",
           "shops_count",
           "min_price"
         ],
         "title": "ProductRead",
+        "type": "object"
+      },
+      "ProductRef": {
+        "description": "The family an entry belongs to.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "ProductRef",
         "type": "object"
       },
       "ProductUpdate": {
@@ -5067,6 +5136,25 @@
         "title": "SellerRead",
         "type": "object"
       },
+      "SellerRef": {
+        "description": "Who sells it within the shop: the shop itself, or a trader on a marketplace.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SellerRef",
+        "type": "object"
+      },
       "ShopCreate": {
         "additionalProperties": false,
         "properties": {
@@ -5297,6 +5385,24 @@
           "created_at"
         ],
         "title": "ShopRead",
+        "type": "object"
+      },
+      "ShopRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ShopRef",
         "type": "object"
       },
       "ShopUpdate": {
@@ -6823,14 +6929,34 @@
         "type": "object"
       },
       "VariantRead": {
+        "description": "An entry — the thing that is bought — with what a list of them needs.\n\nNamed brand, category and family; the axes it is told apart by, so the entries of one\nfamily are not rows with one title; and what it sells for now.",
         "properties": {
-          "brand_id": {
-            "title": "Brand Id",
-            "type": "integer"
+          "axes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "What is known about it, by attribute key: `{\"cpu\": \"Intel Core Ultra 5 226V\", \"ram_mb\": 16384}`",
+            "title": "Axes",
+            "type": "object"
           },
-          "category_id": {
-            "title": "Category Id",
-            "type": "integer"
+          "brand": {
+            "$ref": "#/components/schemas/BrandRef"
+          },
+          "category": {
+            "$ref": "#/components/schemas/CategoryRef"
           },
           "created_at": {
             "format": "date-time",
@@ -6892,6 +7018,19 @@
           "kind": {
             "$ref": "#/components/schemas/VariantKind"
           },
+          "min_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The lowest of their prices (EUR)",
+            "title": "Min Price"
+          },
           "model": {
             "title": "Model",
             "type": "string"
@@ -6900,16 +7039,25 @@
             "title": "Model Normalized",
             "type": "string"
           },
-          "product_id": {
+          "offers_count": {
+            "description": "New listings on sale placed on it",
+            "title": "Offers Count",
+            "type": "integer"
+          },
+          "product": {
             "anyOf": [
               {
-                "type": "integer"
+                "$ref": "#/components/schemas/ProductRef"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Product Id"
+            ]
+          },
+          "shops_count": {
+            "description": "Shops those listings are at",
+            "title": "Shops Count",
+            "type": "integer"
           },
           "slug": {
             "title": "Slug",
@@ -6938,9 +7086,9 @@
         "required": [
           "id",
           "slug",
-          "product_id",
-          "brand_id",
-          "category_id",
+          "product",
+          "brand",
+          "category",
           "model",
           "model_normalized",
           "title",
@@ -6952,7 +7100,11 @@
           "unit_count",
           "identity_key",
           "is_visible",
-          "created_at"
+          "created_at",
+          "axes",
+          "offers_count",
+          "shops_count",
+          "min_price"
         ],
         "title": "VariantRead",
         "type": "object"
@@ -10883,6 +11035,7 @@
     },
     "/api/admin/offers": {
       "get": {
+        "description": "A product card asks `product_id=…&listed=true&condition=new&sort=price`: who sells the\nthing new today, cheapest first.",
         "operationId": "list_offers_api_admin_offers_get",
         "parameters": [
           {
@@ -10919,6 +11072,103 @@
             }
           },
           {
+            "description": "Repeat for several",
+            "in": "query",
+            "name": "shop_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several",
+              "title": "Shop Id"
+            }
+          },
+          {
+            "description": "Placed on this entry. Repeat for several",
+            "in": "query",
+            "name": "variant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Placed on this entry. Repeat for several",
+              "title": "Variant Id"
+            }
+          },
+          {
+            "description": "Placed on an entry of this family. Repeat for several",
+            "in": "query",
+            "name": "product_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Placed on an entry of this family. Repeat for several",
+              "title": "Product Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "condition",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Condition"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Condition"
+            }
+          },
+          {
+            "description": "On sale now: seen by its channel's newest full pass that ended ok",
+            "in": "query",
+            "name": "listed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "On sale now: seen by its channel's newest full pass that ended ok",
+              "title": "Listed"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -10939,6 +11189,28 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, price, last_seen_at, first_seen_at, shop.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, price, last_seen_at, first_seen_at, shop.",
+              "examples": [
+                "id"
+              ],
+              "title": "Sort"
             }
           }
         ],
@@ -11906,7 +12178,7 @@
             }
           },
           {
-            "description": "Comma-separated, `-` for descending. Allowed: id, title, created_at, brand, variants_count, shops_count, min_price.",
+            "description": "Comma-separated, `-` for descending. Allowed: id, title, created_at, brand, variants_count, offers_count, shops_count, min_price.",
             "in": "query",
             "name": "sort",
             "required": false,
@@ -11920,7 +12192,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated, `-` for descending. Allowed: id, title, created_at, brand, variants_count, shops_count, min_price.",
+              "description": "Comma-separated, `-` for descending. Allowed: id, title, created_at, brand, variants_count, offers_count, shops_count, min_price.",
               "examples": [
                 "id"
               ],
@@ -13931,50 +14203,65 @@
         "operationId": "list_variants_api_admin_variants_get",
         "parameters": [
           {
+            "description": "Repeat for several",
             "in": "query",
             "name": "product_id",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Repeat for several",
               "title": "Product Id"
             }
           },
           {
+            "description": "Repeat for several",
             "in": "query",
             "name": "category_id",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Repeat for several",
               "title": "Category Id"
             }
           },
           {
+            "description": "Repeat for several",
             "in": "query",
             "name": "brand_id",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Repeat for several",
               "title": "Brand Id"
             }
           },
@@ -13998,6 +14285,41 @@
           },
           {
             "in": "query",
+            "name": "is_visible",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Visible"
+            }
+          },
+          {
+            "description": "Title, model or slug contains; an id (up to 7 digits); a barcode (8 to 14 digits, any padding); a part number",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Title, model or slug contains; an id (up to 7 digits); a barcode (8 to 14 digits, any padding); a part number",
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -14017,6 +14339,28 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated, `-` for descending. Allowed: id, title, created_at, brand, offers_count, shops_count, min_price.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated, `-` for descending. Allowed: id, title, created_at, brand, offers_count, shops_count, min_price.",
+              "examples": [
+                "id"
+              ],
+              "title": "Sort"
             }
           }
         ],
