@@ -94,7 +94,8 @@ def test_a_word_marked_as_none_of_the_colours_leaves_the_list(client):
     marked = post(client, token, url, {"value": " Melns, Zils ", "note": "two colours"})
     assert (marked["value"], marked["note"]) == ("melns, zils", "two colours")
     assert marked["dismissed_by"]
-    assert report(client, token)["values"] == []
+    hidden = report(client, token)
+    assert (hidden["values"], hidden["listings"], hidden["by_reason"]) == ([], 0, {})
     [shown] = report(client, token, include_dismissed=True)["values"]
     assert shown["dismissed"] is True
     listed = client.get(url, headers=auth(token)).json()

@@ -967,7 +967,6 @@ class OfferService:
             ]
             unknown = [(name, written) for name, written, found in read if found is None]
             found = {canonical for _, _, canonical in read if canonical}
-            listings += 1
             if unknown:
                 cases = [
                     (name, written, *_why_unknown(written, vocabulary)) for name, written in unknown
@@ -982,6 +981,13 @@ class OfferService:
                     (name, written, "resolves_now", canonical, [])
                     for name, written, canonical in read
                 ]
+            # A listing whose every word was marked as none of the colours is off the list,
+            # and out of its counts: they describe what is left to do.
+            if not include_dismissed and all(
+                AttributeValueDismissal.key(written) in dismissed for _, written, *_ in cases
+            ):
+                continue
+            listings += 1
             by_reason[cases[0][2]] += 1
             for name, written, reason, canonical, others in cases:
                 key = AttributeValueDismissal.key(written)
