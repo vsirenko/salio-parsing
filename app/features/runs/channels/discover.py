@@ -104,7 +104,12 @@ class Discover:
         part = snapshot.part("feed")
         if part is None:
             raise ValueError("snapshot has no export record")
-        return json.loads(part.body)
+        record = json.loads(part.body)
+        # Here as well as in `discover`: a reparse reads the snapshots and never the export,
+        # so a filter only up there would let a screen protector back in.
+        if not self.selects(str(record.get("category") or ""), str(record.get("name") or "")):
+            raise ValueError(f"{snapshot.external_id} is not one of {self.slug}'s products")
+        return record
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:  # pragma: no cover - no quick pass
         return dict(listing.card)
@@ -128,7 +133,15 @@ _LAPTOP = re.compile(r"\b(?:Laptop|MacBook|Notebook)\b", re.IGNORECASE)
 _IPAD = re.compile(r"\biPad\b", re.IGNORECASE)
 
 
+# A tablet names its capacity. 222 of the 223 names in these two sections did on
+# 24.09.2026, and the one that did not was `Aizsargstikls for Apple Ipad gen 7,8,9 …
+# screen protector`, which the word `iPad` let in.
+_CAPACITY = re.compile(r"\d\s?(?:GB|TB)\b", re.IGNORECASE)
+
+
 def a_tablet(section: str, name: str) -> bool:
+    if not _CAPACITY.search(name):
+        return False
     if section == MIXED_SECTION:
         return not _LAPTOP.search(name)
     return section == APPLE_SECTION and bool(_IPAD.search(name))

@@ -179,6 +179,30 @@ def test_a_reparse_cannot_readmit_a_second_hand_phone():
         MData().parse(snapshot)
 
 
+def test_a_second_hand_product_the_name_does_not_admit_is_left_out():
+    """All 20 tablets and 8 phones said it only in the page's property table."""
+    row = (
+        '<div class="product_property_wrapper"><div class="product_option_name"> Stāvoklis:'
+        ' </div><div class="product_option_value">Renew (Atjaunots) </div></div>'
+    )
+
+    def page(body: str) -> Snapshot:
+        return Snapshot(
+            external_id=IPHONE,
+            parts=[
+                Part(role="detail", url=SITE, status=200, body=body),
+                Part(
+                    role="card", url=SITE, status=200, body=json.dumps(card(), ensure_ascii=False)
+                ),
+            ],
+        )
+
+    with pytest.raises(ValueError, match="second-hand"):
+        MData().parse(page(PRODUCT.replace("</body>", row + "</body>")))
+    # A new product's page has no such row, or another state in it, and is read.
+    assert MData().parse(page(PRODUCT))["name"]
+
+
 # --- the shop's own ruleset ---
 
 

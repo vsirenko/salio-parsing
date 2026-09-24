@@ -716,6 +716,16 @@ and the questions that have to be answered with real data first, are written dow
       merged. 189 found, 142 renamed, 47 merged; then 14 more after tet was fixed. Junk
       entries carrying memory in their name: 251 → 62, and some of those 62 are real names
       like `Armor Mini 4`.
+- [ ] **18 of mdata's second-hand listings stand on catalogue entries, 17 of them entries
+      only mdata supports.** Its filter read the name, and on 24.09.2026 all 20 tablets
+      (`Stāvoklis: Renew (Atjaunots)`) and 8 `Galaxy S23 FE` phones (`Stāvoklis: Demo`) said
+      it only in the page's property table. The channel reads that row now and refuses them,
+      so `mdata-tablets` delivers nothing new at all; but the matcher places any unplaced
+      listing, delivered or not, so unlinking them alone would put them back on the next
+      settling. How they come off is the open question of the item below.
+- [ ] **8 of discover's Xiaomi tablets name no radio** — `Redmi Pad 2 Pro 12.1 6/128GB` —
+      and Xiaomi sells 4G and 5G versions of three of those lines. Checked for iPads by part
+      number; discover gives Xiaomi none, so they wait without the axis.
 - [ ] **Six refurbished phones stand on entries for new ones**, showing their lower price
       as the cheapest. Three were tet's, whose filter knew `RENEWD`, `REFURBISHED` and
       `PRE-OWNED` and not the Latvian `[Mazlietots]` — widened, and the ones already

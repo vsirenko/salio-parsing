@@ -193,7 +193,7 @@ def test_the_colour_is_what_follows_the_capacity(event_loop):
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
     assert reading(event_loop)["ruleset_version"].startswith(
-        "generic-3+phones-13+discover-shop-1+discover-5"
+        "generic-3+phones-13+discover-shop-1+discover-6"
     )
 
 
@@ -210,12 +210,12 @@ def test_the_tablets_are_picked_out_of_the_sections_they_share():
     assert not a_tablet("Mobilie telefoni >> Apple", "Apple iPhone 17 256GB Black")
 
 
-def tablet(name: str, brand: str = "") -> dict:
+def tablet(name: str, brand: str = "", line: str = "") -> dict:
     from app.features.offers.normalization import read
     from app.features.offers.normalization.rules import Vocabulary
 
     return read(
-        {"id": "1", "name": name, "brand": brand, "line": ""},
+        {"id": "1", "name": name, "brand": brand, "line": line},
         source_slug="discover-tablets",
         shop_slug="discover",
         category="tablets",
@@ -251,3 +251,46 @@ def test_an_ipad_naming_no_radio_is_the_wifi_one():
     ] == ("cellular")
     # Not checked for any other maker, so not read.
     assert "connectivity" not in tablet("Samsung Galaxy Tab A11 8.7 64GB Gray (Grey)")["identity"]
+
+
+def test_a_samsung_code_names_the_radio_the_name_leaves_out():
+    """Code ending 0 read Wi-Fi 133 times and 5 or 6 cellular 165, across every shop."""
+    wifi = tablet("Samsung X230 Galaxy Tab A11+ 11 128GB Gray (Grey)")
+    assert wifi["identity"]["connectivity"] == "wifi"
+    lte = tablet("Samsung X135 Galaxy Tab A11 8.7 64GB Gray (Grey)")
+    assert lte["identity"]["connectivity"] == "cellular"
+    # A name and a code naming different radios: neither is taken.
+    both = tablet("Samsung Galaxy Tab Active5 Pro WiFi 10.1 128GB Green (SM-X356)", line="SM-X356")
+    assert "connectivity" not in both["identity"]
+    # A resolution is not a code.
+    assert "connectivity" not in tablet("Samsung Galaxy Tab 11 2560x1600 128GB Gray")["identity"]
+
+
+def test_a_whole_part_number_in_the_bracket_is_a_part_number():
+    """13 of 222 brackets were whole part numbers, 9 of them another shop's too."""
+    whole = tablet(
+        'Samsung Galaxy Tab S11 Ultra 14.6" 256GB SM-X930 Grey (SM-X930NZAREUE)',
+        line="SM-X930NZAREUE",
+    )
+    assert whole["mpn"] == "SM-X930NZAREUE"
+    assert whole["identity"]["connectivity"] == "wifi"
+    family = tablet("Samsung Galaxy Tab S10 FE 10.9 128GB Gray (SM-X520)", line="SM-X520")
+    assert not family.get("mpn")
+
+
+def test_a_screen_protector_is_not_a_tablet_even_on_a_reparse():
+    """The word `iPad` let one in; a tablet names its capacity and it did not."""
+    import json as _json
+
+    from app.features.runs.channel import Part
+    from app.features.runs.channels.discover import APPLE_SECTION, TABLETS_CHANNEL, a_tablet
+
+    name = "Aizsargstikls for Apple Ipad gen 7,8,9 (10.2”/10.5”) SCREENOR 9H screen protector"
+    assert not a_tablet(APPLE_SECTION, name)
+    record = {"id": "1", "name": name, "category": APPLE_SECTION, "line": ""}
+    snapshot = Snapshot(
+        external_id="1",
+        parts=[Part(role="feed", url=FEED, status=200, body=_json.dumps(record))],
+    )
+    with pytest.raises(ValueError, match="not one of"):
+        TABLETS_CHANNEL.parse(snapshot)

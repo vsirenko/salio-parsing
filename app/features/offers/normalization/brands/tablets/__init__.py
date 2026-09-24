@@ -4,6 +4,6 @@ Imported for the side effect of registering. A brand with no module here is read
 category and the shop alone.
 """
 
-from app.features.offers.normalization.brands.tablets import apple
+from app.features.offers.normalization.brands.tablets import apple, samsung
 
-__all__ = ("apple",)
+__all__ = ("apple", "samsung")

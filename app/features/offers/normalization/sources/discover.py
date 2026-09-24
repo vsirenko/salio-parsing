@@ -22,7 +22,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "discover-phones"
-VERSION = "discover-5"
+VERSION = "discover-6"
 
 # `256GB`, `1 TB`. The one boundary in a name that has no separators.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -64,6 +64,16 @@ def _line(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
     line = (payload.get("line") or "").strip()
+    return {"_line": line} if line else {}
+
+
+def _line_or_part_number(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """The bracket as a family, unless it is long enough to be a whole part number."""
+    line = (payload.get("line") or "").strip()
+    if len(line) > _LONGEST_FAMILY:
+        return {"mpn": line}
     return {"_line": line} if line else {}
 
 
@@ -153,11 +163,14 @@ RULESET = register(
 # number: `Samsung Galaxy Tab S10 FE WiFi 10.9 128GB Gray (SM-X520)`, `Apple iPad Air 11 M3
 # (2025) 128GB`. Measured on 222 collected on 23.09.2026.
 TABLETS_SLUG = "discover-tablets"
-TABLETS_VERSION = "discover-tablets-2"
+TABLETS_VERSION = "discover-tablets-3"
 
 # `X230`, `T636`: Samsung's short model code, which this shop puts between the maker and
 # `Galaxy` — `Samsung X230 Galaxy Tab A11+`.
 _LEADING_CODE = re.compile(r"^[A-Z]\d{3}[A-Z]?\s+(?=Galaxy\b)")
+# A family code is `SM-X520` or Apple's `MWRJ3`; a part number carries the colour, the
+# capacity and the region after it — `SM-X930NZAREUE`, Lenovo's `ZAG60028PL`.
+_LONGEST_FAMILY = 8
 _BARE_SIZE = re.compile(r"^\d{1,2}(?:[.,]\d{1,2})?\"?$")
 _SMALLEST, _LARGEST = 7, 15
 
@@ -266,8 +279,15 @@ TABLETS_RULESET = register(
             Rule(
                 id="discover-tablets-line",
                 layer=SOURCE,
-                why="The code in brackets is a family here as it is for the phones.",
-                body=_line,
+                why=(
+                    "The code in brackets is a family here as it is for the phones — `SM-X520`"
+                    " on six tablets of three capacities — except where it is longer. 13 of"
+                    " 222 on 24.09.2026 were whole part numbers, `SM-X930NZAREUE`,"
+                    " `ZAG60028PL`, and 9 of the 13 are the part number of the same tablet"
+                    " at another shop; as a family they placed nothing. Every family seen"
+                    " was 8 characters or fewer, every part number longer."
+                ),
+                body=_line_or_part_number,
             ),
             Rule(
                 id="discover-tablets-an-ipad-naming-no-radio-is-wifi",

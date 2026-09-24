@@ -37,6 +37,9 @@ front page says so. Dropping them is what every other channel here does, and it 
 over a gap rather than a policy — `offers.condition` exists, the whole pipe to it is laid,
 and nothing writes anything but `new`. Written down in TODO.md with what has to be settled
 before it changes. What is left is about 95 phones, all of them with a real barcode.
+
+The name is where most of it says so, not all: the page's property table has a `Stāvoklis`
+row, and that is read too. 20 tablets of 20 and 8 phones said it only there.
 """
 
 import asyncio
@@ -129,8 +132,14 @@ class MData:
         # Also here and not only in `discover`: a reparse reads the snapshots on disk and
         # never asks the listing again, so a filter that lived only up there would let a
         # refurbished phone back in the first time the reader improved.
-        if SECOND_HAND.search(str(fields.get("name") or "")):
-            raise ValueError(f"{snapshot.external_id} is a second-hand phone")
+        #
+        # The name is not enough. On 24.09.2026 all 20 tablets and 8 `Galaxy S23 FE` phones
+        # passed it — `Galaxy Tab A8 32GB LTE X205 Grey` — while the page's own property
+        # table said `Stāvoklis: Renew (Atjaunots)` and `Stāvoklis: Demo`, and 10 of those
+        # tablets stood on entries for new ones.
+        stated = " ".join((str(fields.get("name") or ""), _condition(page.body)))
+        if SECOND_HAND.search(stated):
+            raise ValueError(f"{snapshot.external_id} is a second-hand product")
         return fields
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:
@@ -231,6 +240,17 @@ def _from_page(body: str, *, card: dict[str, Any]) -> dict[str, Any]:
         # The card prints the price before a discount first, so the last is what is charged.
         fields["price"] = prices[-1].replace(" ", "").replace(" ", "")
     return fields
+
+
+def _condition(body: str) -> str:
+    """The page's `Stāvoklis` row, as the shop wrote it; empty on a page with none."""
+    doc = lxml.html.fromstring(body)
+    for row in doc.cssselect(".product_property_wrapper"):
+        name = _one(row, ".product_option_name")
+        value = _one(row, ".product_option_value")
+        if name is not None and value is not None and _text(name).startswith("Stāvoklis"):
+            return _text(value)
+    return ""
 
 
 def _product_json(body: str) -> dict[str, Any]:
