@@ -212,13 +212,13 @@ lifecycle changes.
 | `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 521 | 100% |
 | `bigbox-phones` | bigbox.lv | wholesale | private_api | 985 | 93.1% |
 | `bigbox-tablets` | bigbox.lv | wholesale | private_api | 537 | 98.5% placed |
-| `bigbox-laptops` | bigbox.lv | wholesale | private_api | 2169 | 85.0% placed |
+| `bigbox-laptops` | bigbox.lv | wholesale | private_api | 2169 | 85.9% placed |
 | `rdveikals-laptops` | rdveikals.lv | retail | markup | 1443 | 99.6% placed |
 | `dateks-laptops` | dateks.lv | retail | markup | 747 | 94.6% placed |
 | `ksenukai-laptops` | ksenukai.lv | wholesale | private_api | 567 | 92.2% placed |
 | `euronics-laptops` | euronics.lv | retail | markup | 258 | 99.6% placed |
-| `bm-laptops` | bm.market | wholesale | graphql | 396 | 17.4% placed |
-| `onea-laptops` | 1a.lv | wholesale | private_api | 560 | 6.6% placed |
+| `bm-laptops` | bm.market | wholesale | graphql | 396 | 19.7% placed |
+| `onea-laptops` | 1a.lv | wholesale | private_api | 560 | 40.0% placed |
 | `ksenukai-tablets` | ksenukai.lv | wholesale | private_api | 229 | 99.1% placed |
 | `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
 | `onea-tablets` | 1a.lv | wholesale | private_api | 229 | 94.3% placed |

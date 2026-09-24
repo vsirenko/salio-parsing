@@ -979,11 +979,12 @@ and the questions that have to be answered with real data first, are written dow
       euronics 99.6%, rdveikals 99.6%, bigbox 85.9%. 2792 entries, 1192 of them carrying
       listings from two shops or more. On 3083 pairs of listings sharing an entry the chip
       disagrees on 42 — a shop's typo, mostly — and the colour on 171.
-- [ ] **1a's and bm's laptops barely place: 37 of 560 and 69 of 396.** 1a publishes no
-      barcode and bm few (69), and neither states a keyboard layout, so no listing of theirs
-      ever carries the full identity the model rung asks for in this category. A 1a laptop is
-      the same product as a ksenukai one by every axis it does state. Whether an axis a shop
-      never publishes should count as unknown rather than as missing is the question.
+- [x] **1a's and bm's laptops barely placed: 37 of 560 and 69 of 396**, because neither
+      states a keyboard and the model rung asked for every axis. Decided on 24.09.2026: an
+      axis a channel states on under one listing in ten is unknown, not missing. 1a: 224.
+- [ ] **bm's laptops are mostly configurations nobody else sells** — MacBook Pros with M4
+      Max and 8 TB, `Spec. config` — with no barcode (327 of 396) and no layout, so there is
+      nothing to join and nothing to start an entry from. 78 placed.
 - [ ] **A field name that is two attributes in two categories.** dateks' `Atmiņa > Iekšējā
       atmiņa` is a phone's storage and a laptop's working memory; the registry has no way to
       say so, and `sources/dateks_laptops.py` works round it for one shop. An alias scoped to

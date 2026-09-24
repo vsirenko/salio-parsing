@@ -411,3 +411,19 @@ def test_ksenukai_and_1a_leave_their_refurbished_laptops_out():
     assert second_hand({"title": "Atjaunots portatīvais dators Dell Latitude 5400, atjaunots"})
     assert second_hand({"title": "Portatīvais dators Dell", "attributes": {"Atjaunots": "Jā"}})
     assert not second_hand({"title": "Portatīvais dators Dell", "attributes": {"Atjaunots": "Nē"}})
+
+
+def test_a_macbook_is_named_by_its_family_and_its_glass():
+    """bm writes the size into the name with no inch mark."""
+    for title, model in [
+        (
+            "Apple MacBook Pro 16 Apple M4 Max 16C CPU, 40C GPU 48GB RAM 8TB SSD Silver",
+            "MacBook Pro",
+        ),
+        ("Apple MacBook Pro 14 M5 10 CPU 10 GPU 16GB 1TB Silver INT MDE54", "MacBook Pro"),
+        (
+            "Apple MacBook Pro 16 Nano-texture Apple M4 Max 16C CPU, 40C GPU 128GB RAM 1TB SSD",
+            "MacBook Pro Nano-texture",
+        ),
+    ]:
+        assert shop_laptop({"name": title, "brand": "Apple"}, "bm-laptops", "bm")["model"] == model

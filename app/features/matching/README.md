@@ -65,7 +65,12 @@ category with `model_match_needs_full_identity` places by model only on a comple
 and a candidate nothing could check is no candidate at all; the listing goes on as unmatched
 and, carrying a barcode, is promoted to an entry of its own. Laptops need it — a model is
 dozens of configurations there — and phones and tablets do not, which is why it is the
-category's setting and not the rung's (see `categories`).
+category's setting and not the rung's (see `categories`). **An axis the listing's channel never publishes is
+unknown, not missing:** 1a and bm state no keyboard on 96% of their laptops, and asked for it
+none of their listings could be placed by model. An axis a channel carries on fewer than one
+listing in ten, over fifty or more, is excused for that channel's listings; where the
+candidates differ in exactly that axis the listing waits as `axis_unpublished`, and a match
+that excused one learns no barcode, because it confirmed nothing about that axis.
 
 **The brand is a hard filter, and has to be resolved first.** That is the blocking step —
 it turns matching from a scan into a lookup in a small drawer. It is also where it goes

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, NamedTuple
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,6 +87,10 @@ log = logging.getLogger(__name__)
 # The one condition the catalogue's entries are about; `offers.condition` is checked against
 # `new`, `refurbished` and `used` by the database.
 NEW = "new"
+# An axis a channel states on fewer than this share of its listings, over at least this many
+# listings, is one it does not publish (see `_unpublished`).
+UNPUBLISHED_SHARE = Decimal("0.1")
+UNPUBLISHED_OVER = 50
 
 CONFIDENCE = {
     Method.GTIN: Decimal("1.000"),
@@ -145,6 +149,8 @@ class MatchingService:
         self.judge = judge
         # Which categories place by model only on a complete identity, by category id.
         self._strict: dict[int, bool] = {}
+        # Which identity axes each channel does not publish, by source id.
+        self._unpublished_axes: dict[int, frozenset[str]] = {}
 
     # --- running it ---
 
@@ -304,9 +310,11 @@ class MatchingService:
                 # filed fifteen listings spanning a thousand euros as one product. So the
                 # candidates it produces have to agree on the axes before one of them is
                 # accepted.
-                check = await self._identity_agrees(found, identity)
+                strict = await self._needs_full_identity(offer)
+                excused = await self._unpublished(offer) if strict else frozenset()
+                check = await self._identity_agrees(found, identity, excused)
                 agreed, unverifiable = check.agreed, check.unverifiable
-                if await self._needs_full_identity(offer):
+                if strict:
                     # A category whose model names dozens of configurations: agreeing on the
                     # axes both sides happen to carry is not enough, and a candidate nothing
                     # could check is not one at all. What is left goes on as unmatched, and a
@@ -337,7 +345,9 @@ class MatchingService:
                     # capacity while the entry has no colour to disagree with is not the
                     # same thing, and treating it as one is how a black phone's barcode
                     # ended up on a blue one's entry — permanently, at confidence 1.00.
-                    if agreed[0] in check.complete:
+                    # Nor when an axis was excused as one the shop never publishes: the
+                    # entry's keyboard was not confirmed, only not contradicted.
+                    if agreed[0] in check.complete and not excused:
                         await self._learn_gtin(agreed[0], reading)
                     if check.checked:
                         await self._reconcile(agreed[0], reading)
@@ -533,7 +543,10 @@ class MatchingService:
         return identity
 
     async def _identity_agrees(
-        self, variant_ids: list[int], identity: dict[str, Any]
+        self,
+        variant_ids: list[int],
+        identity: dict[str, Any],
+        unpublished: frozenset[str] = frozenset(),
     ) -> IdentityCheck:
         """Split candidates into the ones whose axes agree and the ones nothing can check.
 
@@ -602,7 +615,10 @@ class MatchingService:
                 # to carry was weighed. Two shops that state no colour make a red and a
                 # black phone look identical, and under the weaker reading that silence
                 # counted as agreement.
-                wanted_here = required.get(variant_id) or set(wanted)
+                # An axis the listing's shop never publishes is unknown, not missing: it
+                # cannot be asked of a listing, and the candidates it would split are told
+                # apart below, as a question nobody can answer (`axis_unpublished`).
+                wanted_here = (required.get(variant_id) or set(wanted)) - unpublished
                 if wanted_here <= shared:
                     complete.add(variant_id)
         return IdentityCheck(sorted(agreed), sorted(unverifiable), True, frozenset(complete))
@@ -1545,6 +1561,44 @@ class MatchingService:
                     ),
                     only_if_absent=only_if_absent,
                 )
+
+    async def _unpublished(self, offer: Offer) -> frozenset[str]:
+        """The identity axes the listing's channel almost never states.
+
+        1a and bm state no keyboard layout on 96% of their laptops, so under a full identity
+        none of their listings could ever be placed by model, however much else agreed. An
+        axis a channel carries on fewer than one listing in ten, over fifty listings or
+        more, is one it does not publish; below fifty nothing is excused.
+        """
+        source = await self._source_of(offer)
+        if source is None:
+            return frozenset()
+        if source.id not in self._unpublished_axes:
+            rows = await self.session.execute(
+                text(
+                    """
+                    with latest as (
+                        select distinct on (r.offer_id) n.identity
+                        from raw_offers r join normalized_offers n on n.raw_offer_id = r.id
+                        where r.source_id = :source_id
+                        order by r.offer_id, r.fetched_at desc, n.id desc
+                    )
+                    select a.key, count(*) filter (where latest.identity ? a.key), count(*)
+                    from latest
+                    cross join category_attributes ca
+                    join attributes a on a.id = ca.attribute_id
+                    where ca.category_id = :category_id and ca.identity_bearing
+                    group by a.key
+                    """
+                ),
+                {"source_id": source.id, "category_id": source.category_id},
+            )
+            self._unpublished_axes[source.id] = frozenset(
+                key
+                for key, stated, total in rows.all()
+                if total >= UNPUBLISHED_OVER and stated < total * UNPUBLISHED_SHARE
+            )
+        return self._unpublished_axes[source.id]
 
     async def _needs_full_identity(self, offer: Offer) -> bool:
         """Whether the listing's category places by model only on a complete identity."""

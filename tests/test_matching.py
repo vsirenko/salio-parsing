@@ -1527,6 +1527,65 @@ def test_a_category_can_refuse_to_place_by_model_on_a_partial_identity(client):
     assert (outcome["matched"], outcome["reason"]) == (False, "signals_unmatched")
 
 
+def test_an_axis_a_shop_never_publishes_is_unknown_rather_than_missing(client):
+    """1a and bm state no keyboard on 96% of their laptops, and under a full identity none
+    of their listings could be placed by model. An axis a channel states on fewer than one
+    listing in ten is excused — and a barcode is not learned on a match that excused it."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+    client.patch(
+        f"/api/admin/categories/{category['id']}",
+        headers=auth(token),
+        json={"model_match_needs_full_identity": True},
+    )
+    # A channel that states the capacity and never the colour, over fifty listings.
+    for n in range(50):
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Apple Thing {n} 64 GB",
+                "brand": "Apple",
+                "model": f"Thing {n}",
+                "attributes": {"storage": "64 GB"},
+            },
+            external_id=f"T-{n}",
+        )
+    silent = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "4006381333931",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-1",
+    )
+    variant_id = promote(client, token, silent)["variant_id"]
+    also_silent = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone 15 256 GB",
+            "brand": "Apple",
+            "model": "iPhone 15",
+            "ean": "5902983617747",
+            "attributes": {"storage": "256 GB"},
+        },
+        external_id="A-2",
+    )
+    outcome = run_on(client, token, also_silent)
+    assert (outcome["matched"], outcome["method"]) == (True, "brand_model")
+    assert gtins_of(client, token, variant_id) == {"04006381333931"}, "the barcode was learned"
+
+
 def test_a_category_with_no_declared_axes_keeps_the_older_bar(client):
     """Requiring nothing would make every match complete, which is the opposite of the
     intent. Where a category declares no identity axes, what the listing carried stands."""
