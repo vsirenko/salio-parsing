@@ -1041,6 +1041,11 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **There is no public read API at all.** Everything is behind `/api/admin`; the
       customer panel can sign in and change its password and nothing else. Whatever the
       storefront turns out to be, it reads through something that is not designed yet.
+- [ ] **Footwear.** Researched, not built: `docs/research/footwear.md`. About You, Zalando
+      and eapavi all publish an EAN per size and match on it; only eapavi carries the maker's
+      style code; About You and Zalando need a fetcher with a Chrome TLS fingerprint. Decided
+      in principle: an offer is a model in one colourway, sizes are availability inside it.
+      Next: a 200–300 product sample per shop, measured before any rule is written.
 
 ## Nice to have
 
