@@ -67,7 +67,7 @@ def axis(title: str, key: str, brand: str = "Lenovo", **attributes: str):
         ("ASUS ExpertBook P1503CVA-S72255W - Core 5-210H | 15,6''", "Intel Core 5 210H"),
         ('Acer Nitro V16 Gaming 16" WUXGA, Ryzen R7-260 (16 TOPS), 16GB RAM', "AMD Ryzen 7 260"),
         ('Acer Nitro V14 AI 14,5" WUXGA, Ryzen AI R7-350 (50 TOPS)', "AMD Ryzen 7 350"),
-        ("Lenovo ThinkPad P14s Gen 7 14 WUXGA AMD R5 AI PRO 440/16GB/512GB", "AMD Ryzen 5 PRO 440"),
+        ("Lenovo ThinkPad P14s Gen 7 14 WUXGA AMD R5 AI PRO 440/16GB/512GB", "AMD Ryzen 5 440"),
         ("Dell Inspiron 14 5445 AG FHD+ AR5-8540U/16GB/1TB", "AMD Ryzen 5 8540U"),
         ("Lenovo Legion Pro 7 16AFR10H | AMD Ryzen 9 | 9955HX3D | 64 GB", "AMD Ryzen 9 9955HX3D"),
         (
@@ -106,6 +106,27 @@ def test_a_coarser_name_gives_way_and_another_maker_does_not():
     # bigbox files two Intel ThinkPads as AMD: the two disagree, and neither is taken.
     title = "Lenovo ThinkPad X13 Gen 7 Touch 13.3 WUXGA ULT7-355/32GB/512GB/Intel Graphics"
     assert axis(title, "cpu", **{"Datora procesora tips": "AMD Ryzen 7"}) is None
+
+
+def test_a_chip_is_named_as_intel_names_it_whatever_the_shop_wrote():
+    """An Ultra's number ends in 5, 6 or 8 and a plain Core's in 0; shops write one for the
+    other, and AMD's `PRO` is kept by one shop and dropped by the next."""
+    assert axis("Acer TravelMate TMP215-55 Intel Core 5 225U/16GB/512GB", "cpu", "Acer") == (
+        "Intel Core Ultra 5 225U"
+    )
+    assert axis("ASUS Vivobook 15 - Core Ultra 5 120U | 15,6", "cpu", "Asus") == "Intel Core 5 120U"
+    assert (
+        axis(
+            "ThinkPad X13 G6 21RM003NPB W11Pro 7 PRO 350/32GB/1TB",
+            "cpu",
+            **{"Datora procesora tips": "AMD Ryzen 7"},
+        )
+        == "AMD Ryzen 7 350"
+    )
+    # `256 GB` after the tier is the drive, not a chip.
+    assert axis("ASUS Vivobook 14 Flip OLED TP3407SA-SG142W - Ultra 7 - 256 GB", "cpu", "Asus") != (
+        "Intel Core Ultra 7 256GB"
+    )
 
 
 def test_a_maker_s_code_is_not_a_chip():
@@ -248,3 +269,75 @@ def test_the_laptop_channel_leaves_second_hand_stock_out():
     assert channel.leaves_out("HP PB 4 G1I 16 RENEW GOLD (B)", {})
     assert channel.leaves_out("Dell Latitude 5440", {"Atjaunots": "Jā"})
     assert not channel.leaves_out('Lenovo ThinkPad T14 Gen 6, 14" WUXGA', {"Atjaunots": "Nē"})
+
+
+# --- rdveikals ---
+
+
+def rd_laptop(title: str, **specs: str) -> dict:
+    vocabulary = Vocabulary(
+        category_names=VOCABULARY.category_names,
+        brand_names=VOCABULARY.brand_names,
+        attribute_names={
+            normalize_attribute_name("Tastatūra / Tastatūras valodas"): "keyboard_layout",
+        },
+        values={
+            "keyboard_layout": {
+                **VOCABULARY.values["keyboard_layout"],
+                "rus": "russian",
+                "est": "estonian",
+            }
+        },
+    )
+    return read(
+        {"title": title, "brand": "Lenovo", "specs": specs},
+        source_slug="rdveikals-laptops",
+        shop_slug="rdveikals",
+        category="laptops",
+        vocabulary=vocabulary,
+    )
+
+
+def test_rd_states_the_chip_in_three_fields_that_name_nothing_alone():
+    fields = {
+        "Procesors / Procesora ražotājs": "AMD",
+        "Procesors / Procesora sērija": "Ryzen AI 9 Pro",
+        "Procesors / Procesora modelis": "Pro 375",
+    }
+    title = "portatīvais dators HP EliteBook X G1a 14 OLED 375 64GB 2SSD EN W11Pro Silver"
+    assert rd_laptop(title, **fields)["identity"]["cpu"] == "AMD Ryzen 9 375"
+    # The field and the title naming two chips leave the axis empty.
+    fields = {
+        "Procesors / Procesora ražotājs": "Intel",
+        "Procesors / Procesora sērija": "Core i7",
+        "Procesors / Procesora modelis": "i7-14650HX",
+    }
+    title = "portatīvais dators Acer Nitro V 15 ANV15-52-750T i7-13620H 16GB 512SSD"
+    assert "cpu" not in rd_laptop(title, **fields)["identity"]
+
+
+def test_an_asus_model_is_not_a_chip():
+    """`UX5406SA` read as `Ultra X5 406SA`; `FA608UP-R7165W` as `Ryzen 7 165W`."""
+    from app.features.offers.normalization.categories.laptops import processors
+
+    assert processors("Asus ZenBook S14 UX5406SA-QJ502W 14 OLED 256V 16GB") == set()
+    assert processors("Asus TUF Gaming A16 FA608UP-R7165W 16 165hz 260 16GB") == set()
+
+
+def test_a_keyboard_printed_for_two_languages_is_a_layout_of_its_own():
+    field = {"Tastatūra / Tastatūras valodas": "ENG / RUS (ar apgaismojumu)"}
+    assert rd_laptop("portatīvais dators Lenovo IdeaPad 5", **field)["identity"][
+        "keyboard_layout"
+    ] == ("english+russian")
+    field = {"Tastatūra / Tastatūras valodas": "ENG (ar apgaismojumu)"}
+    assert rd_laptop("portatīvais dators Lenovo IdeaPad 5", **field)["identity"][
+        "keyboard_layout"
+    ] == ("english")
+
+
+def test_rd_s_part_number_field_is_the_maker_s_code():
+    field = "Modeļa sērija / Modeļa nosaukums"
+    assert rd_laptop("portatīvais dators Apple MacBook Air", **{field: "MDVT4KS/ A"})["mpn"] == (
+        "MDVT4KS/A"
+    )
+    assert not rd_laptop("portatīvais dators Dell Pro 14", **{field: "Nav informācijas"}).get("mpn")

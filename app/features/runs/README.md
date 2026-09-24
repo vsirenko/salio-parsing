@@ -212,7 +212,8 @@ lifecycle changes.
 | `ksenukai-phones` | ksenukai.lv | wholesale | private_api | 521 | 100% |
 | `bigbox-phones` | bigbox.lv | wholesale | private_api | 985 | 93.1% |
 | `bigbox-tablets` | bigbox.lv | wholesale | private_api | 537 | 98.5% placed |
-| `bigbox-laptops` | bigbox.lv | wholesale | private_api | 2169 | 83.7% placed |
+| `bigbox-laptops` | bigbox.lv | wholesale | private_api | 2169 | 85.0% placed |
+| `rdveikals-laptops` | rdveikals.lv | retail | markup | 1443 | 99.6% placed |
 | `ksenukai-tablets` | ksenukai.lv | wholesale | private_api | 229 | 99.1% placed |
 | `onea-phones` | 1a.lv | wholesale | private_api | 443 | not measured |
 | `onea-tablets` | 1a.lv | wholesale | private_api | 229 | 94.3% placed |

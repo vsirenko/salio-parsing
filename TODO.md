@@ -962,8 +962,20 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **New chips are skipped until entered.** `cpu` and `gpu` are enums, and a value the
       registry does not hold is left off an entry's axes: the 202 chips and 21 cards bigbox
       read on 24.09.2026 are entered, the next launch is not.
-- [ ] **More shops' laptops**: dateks, rdveikals, 1a/ksenukai, euronics, bm — to read with
-      the category's rules and measure, as for tablets.
+- [x] **rdveikals' laptops**, 24.09.2026: 1443, every one with a barcode, a colour and a
+      layout in its specification table; 1371 read on every axis and 1437 placed (99.6%),
+      773 of them on the same entries as bigbox's. The barcodes the two shops share were the
+      proof that found three reading faults no single shop shows: AMD's `PRO`, kept by one
+      shop and dropped by the other on 11 laptops; Intel's `Ultra`, written for the plain
+      Core and the other way round; and `Ultra 7 - 256 GB` read as a chip. 27 chip
+      disagreements on shared barcodes became 10, all of them a shop's typo (`Ryzen 5 1500`).
+- [ ] **Colour disagrees on 33 of the 773 laptops the two shops share by barcode** — a
+      maker's `Inkwell Gray` is grey at one and black at the other, `Teal` green and blue.
+      The barcode is right and the entry holds; a laptop with no barcode would miss its
+      twin on the model rung, which is the safe way to be wrong.
+- [ ] **rdveikals' laptop category holds a dock** (`ThinkPad OneLink Pro Dock`) and one
+      refurbished laptop (`Datora tips: Atjaunots (ReNew)`); its channel has no filter yet.
+- [ ] **More shops' laptops**: dateks, 1a/ksenukai, euronics, bm.
 
 ## Features
 

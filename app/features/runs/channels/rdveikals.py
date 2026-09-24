@@ -55,6 +55,11 @@ CATEGORY_SLUG = "Mobilie-telefoni"
 TABLETS_SLUG = "rdveikals-tablets"
 TABLET_CATEGORY_ID = 149
 TABLET_CATEGORY_SLUG = "Planšetdatori"
+# `Portatīvie datori`. The shop keeps its refurbished laptops in a leaf of their own,
+# `Atjaunotie portatīvie datori` (2359), which this one does not include.
+LAPTOPS_SLUG = "rdveikals-laptops"
+LAPTOP_CATEGORY_ID = 150
+LAPTOP_CATEGORY_SLUG = "Portatīvie-datori"
 # sort 6 is by price. The default, 5, is by popularity, and under it products move between
 # pages while the walk is in progress — the listing then yields about three quarters of the
 # category however many times it is walked.
@@ -310,4 +315,7 @@ def _id_from(url: str) -> str:
 CHANNEL = register(Rdveikals())
 TABLETS_CHANNEL = register(
     Rdveikals(slug=TABLETS_SLUG, category_id=TABLET_CATEGORY_ID, category_slug=TABLET_CATEGORY_SLUG)
+)
+LAPTOPS_CHANNEL = register(
+    Rdveikals(slug=LAPTOPS_SLUG, category_id=LAPTOP_CATEGORY_ID, category_slug=LAPTOP_CATEGORY_SLUG)
 )

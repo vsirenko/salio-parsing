@@ -6,6 +6,7 @@ sample gets loaded and measured before any rules are written for it.
 
 from app.features.offers.normalization.sources import (
     bigbox,
+    bigbox_laptops,
     bm,
     cec,
     dateks,
@@ -16,11 +17,13 @@ from app.features.offers.normalization.sources import (
     mdata,
     onea,
     rdveikals,
+    rdveikals_laptops,
     tet,
 )
 
 __all__ = (
     "bigbox",
+    "bigbox_laptops",
     "bm",
     "cec",
     "dateks",
@@ -31,5 +34,6 @@ __all__ = (
     "mdata",
     "onea",
     "rdveikals",
+    "rdveikals_laptops",
     "tet",
 )

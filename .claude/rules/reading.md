@@ -30,6 +30,10 @@
   `tests/test_normalization_layers.py` fingerprints the whole module and fails naming the
   ruleset whose version has to go up. Move the version and the fingerprint in the same
   commit; they are two values that have to agree, so forgetting one is loud.
+- **A fingerprint covers what the module imports**, so a shop's rules for a second category
+  go in a module of their own when they import that category: `sources/bigbox_laptops.py`
+  beside `bigbox.py`. Kept in one file, every change to how a laptop is read moved the
+  phones' version and would have recomputed their readings for nothing.
 - **Prose is deliberately not fingerprinted.** A `why` lives inside the ruleset literal and
   editing one changes nothing about what comes out of a reading. Rewriting a comment should
   not recompute three thousand rows.

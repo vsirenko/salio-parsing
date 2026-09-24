@@ -31,7 +31,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "laptops"
-VERSION = "laptops-1"
+VERSION = "laptops-3"
 
 CPU_KEY = "cpu"
 RAM_KEY = "ram_mb"
@@ -52,14 +52,17 @@ _SIZE = r"(\d{1,4}(?:[.,]\d)?)\s?(TB|GB)"
 # AMD's `AI` is left out of the spelling, because the number already says it: its AI chips
 # are the 300s and 400s (`Ryzen AI 7 350`) and the others the 100s and 200s (`Ryzen 7 250`),
 # and shops write the first both ways — `Ryzen AI R7-350`, bigbox's field `AMD Ryzen 7` and
-# a bare `350`. `PRO` stays: a PRO chip is a different part.
+# a bare `350`. `PRO` is left out too: it is a different part, but shops do not keep it —
+# eleven laptops bigbox and rdveikals share by barcode were `Ryzen 7 350` at one and `Ryzen
+# 7 PRO 350` at the other, and a mark nobody keeps cannot tell two laptops apart.
 _MARKS = re.compile(r"[®™]|\(R\)|\(TM\)", re.IGNORECASE)
 # A table a shop wrote its title as, `AMD Ryzen 5 | 220 | 16 GB`: the family and the number
 # in two cells.
 _CELLS = re.compile(r"\s*\|\s*")
 _INTEL_ULTRA = re.compile(
-    r"(?<![\w-])(?:Core\s*)?(?:Ultra\s*|ULT|C?U)([579])(?:\s*Processor)?\s*[-\s]?\s*(\d{3})"
-    r"\s?([A-Z]{0,2})\b(?!\s*(?:GB|TB|SSD))",
+    # The `X` tier only after `Ultra` itself: `UX5406SA` is an ASUS model, not `U X5 406`.
+    r"(?<![\w-])(?:Core\s*)?(?:Ultra\s*(X?[579])|(?:ULT|C?U)([579]))(?:\s*Processor)?\s*[-\s]?\s*(\d{3})"
+    r"(?!\s?(?:GB|TB)\b)\s?([A-Z]{0,2})\b(\s+Plus\b)?(?!\s*(?:GB|TB|SSD))",
     re.IGNORECASE,
 )
 # Intel's Lunar Lake chips all end in `V` and their numbers in 6 or 8 — `226V`, `258V`,
@@ -80,11 +83,17 @@ _INTEL_CELERON = re.compile(
     r"\b(Celeron|Pentium(?:\s+Silver|\s+Gold)?)\s+(N?\d{4}[A-Z]?)\b", re.IGNORECASE
 )
 # `Ryzen 7 7735HS`, `Ryzen AI 7 350`, `R7-260`, `R7 Ai 350`, Dell's `AR5-8540U`, `9955HX3D`.
+# Not inside a maker's code: ASUS's `FA608UP-R7165W` has an `R7 165W` in it.
 _RYZEN = re.compile(
-    r"\b(?:Ryzen\s?(?:AI\s?)?|(?:AI\s?)?A?R)([3579])\s?(?:AI\s?)?[-\s]?\s?(PRO\s)?"
+    r"(?<![\w-])(?:Ryzen\s?(?:AI\s?)?|(?:AI\s?)?A?R|AI\s)([3579])\s?(?:AI\s?)?[-\s]?\s?(PRO\s)?(?:HX\s?)?"
     r"(\d{3,4}(?:[A-Z]{1,3}\d?[A-Z]?)?)\b",
     re.IGNORECASE,
 )
+_ATHLON = re.compile(r"\bAthlon(?:\s+(?:Silver|Gold))?\s+(\d{4}[A-Z]{0,2})\b", re.IGNORECASE)
+_KOMPANIO = re.compile(r"\bKompanio\s?(\d{3,4}[A-Z]?)\b", re.IGNORECASE)
+_INTEL_U = re.compile(r"(?<![\w-])(U3\d{2}E?)\b")
+# `Ryzen Al 7 350`: a lowercase L where the I should be, in the shop's own field.
+_AI_TYPO = re.compile(r"\bAl(?=\s?\d)")
 _RYZEN_AI_MAX = re.compile(r"\bAI\s?MAX(\+?)\s?(?:PRO\s)?(\d{3})\b", re.IGNORECASE)
 _APPLE_M = re.compile(r"\bM([1-5])(?:\s+(Pro|Max|Ultra))?\b")
 _APPLE_A = re.compile(r"\bA(1[5-9])(\s?Pro)?\b")
@@ -110,14 +119,18 @@ _BARE = re.compile(
 _MAKERS = {"intel", "amd", "apple", "qualcomm"}
 
 
-def _processors(text: str) -> set[str]:
+def processors(text: str) -> set[str]:
     """Every processor the text names, each in its canonical spelling."""
-    text = _CELLS.sub(" ", _MARKS.sub("", text))
+    text = _AI_TYPO.sub("AI", _CELLS.sub(" ", _MARKS.sub("", text)))
     found: set[str] = set()
-    for tier, number, suffix in _INTEL_ULTRA.findall(text):
+    for full, short, number, suffix, plus in _INTEL_ULTRA.findall(text):
+        tier = full or short
         if not suffix and _LUNAR_LAKE.fullmatch(number):
             suffix = "V"
-        found.add(f"Intel Core Ultra {tier} {number}{suffix.upper()}")
+        # `290HX Plus` is a chip of its own; there is no `290HX`.
+        found.add(
+            f"Intel Core Ultra {tier.upper()} {number}{suffix.upper()}{' Plus' if plus else ''}"
+        )
     for tier, number in _INTEL_CORE_I.findall(text):
         found.add(f"Intel Core i{tier}-{number.upper()}")
     for tier, number in _INTEL_CORE_N.findall(text):
@@ -129,16 +142,44 @@ def _processors(text: str) -> set[str]:
     for plus, number in _RYZEN_AI_MAX.findall(text):
         found.add(f"AMD Ryzen AI Max{plus} {number}")
     if not _RYZEN_AI_MAX.search(text):
-        for tier, pro, number in _RYZEN.findall(text):
-            found.add(f"AMD Ryzen {tier} {'PRO ' if pro else ''}{number.upper()}")
+        for tier, _pro, number in _RYZEN.findall(text):
+            found.add(f"AMD Ryzen {tier} {number.upper()}")
     if re.search(r"\b(?:Apple|MacBook)\b", text, re.IGNORECASE):
         for generation, grade in _APPLE_M.findall(text):
             found.add(f"Apple M{generation}{f' {grade.title()}' if grade else ''}")
         for generation, pro in _APPLE_A.findall(text):
             found.add(f"Apple A{generation}{' Pro' if pro else ''}")
+    for number in _ATHLON.findall(text):
+        found.add(f"AMD Athlon {number.upper()}")
+    for number in _KOMPANIO.findall(text):
+        found.add(f"MediaTek Kompanio {number.upper()}")
+    if re.search(r"\bIntel\b", text, re.IGNORECASE):
+        for number in _INTEL_U.findall(text):
+            found.add(f"Intel {number.upper()}")
     for series, first, second in _SNAPDRAGON.findall(text):
         found.add(f"Qualcomm Snapdragon X{series}-{first}-{second}")
-    return found
+    return {_in_intel_s_scheme(chip) for chip in found}
+
+
+# Intel's current names say by their number which line a chip is: an Ultra's ends in 5, 6 or
+# 8 — `225U`, `226V`, `258V`, `355`, `386H` — and a plain Core's in 0 — `120U`, `150U`, `210H`,
+# `350`. Shops write the one for the other: across the barcodes bigbox and rdveikals share,
+# `Core 5 225U` and `Core Ultra 5 225U` named one laptop, and `Core 9 275HX` was the Ultra.
+# The exception is `290HX Plus`, an Ultra ending in 0, which is why a number ending in 0 with
+# `HX` and no `Plus` is left as written.
+_NEW_INTEL = re.compile(r"^Intel Core (?:Ultra )?(X?[3579]) (\d{3})([A-Z]{0,2}(?: Plus)?)$")
+
+
+def _in_intel_s_scheme(chip: str) -> str:
+    found = _NEW_INTEL.match(chip)
+    if found is None:
+        return chip
+    tier, number, suffix = found.groups()
+    if (number[-1] not in "0568" or suffix == "HX") and not suffix.endswith("Plus"):
+        # A number the scheme says nothing about: kept as the shop wrote it.
+        return chip
+    ultra = number[-1] in "568" or suffix.endswith("Plus") or tier.startswith("X")
+    return f"Intel Core {'Ultra ' if ultra else ''}{tier} {number}{suffix}"
 
 
 _STORAGE_SIZES = {"128", "256", "512"}
@@ -173,7 +214,7 @@ def _completed(family: str, title: str) -> set[str]:
             for n in numbers
             if re.fullmatch(r"\d{4}[A-Z]{1,2}|[1-4]\d{2}", n)
         }
-    return fits if len(fits) == 1 else set()
+    return {_in_intel_s_scheme(chip) for chip in fits} if len(fits) == 1 else set()
 
 
 def _cpu(payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary) -> dict[str, Any]:
@@ -184,11 +225,11 @@ def _cpu(payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
     begins with gives way to it.
     """
     title = str(fields.get("title") or "")
-    named = _processors(title)
+    named = processors(title)
     families: list[str] = []
     for name, value in (fields.get("attributes") or {}).items():
         if vocabulary.attribute_key(str(name)) == CPU_KEY:
-            named |= _processors(str(value))
+            named |= processors(str(value))
             families.append(str(value))
     if not named:
         for family in families:
@@ -243,6 +284,9 @@ def _stated(fields: dict[str, Any], vocabulary: Vocabulary, key: str) -> set[int
     sizes: set[int] = set()
     for name, value in (fields.get("attributes") or {}).items():
         if vocabulary.attribute_key(str(name)) != key:
+            continue
+        # `1 TB + 2TB` is two drives, and neither of them is the laptop's storage alone.
+        if "+" in str(value):
             continue
         found = re.search(_SIZE, str(value), re.IGNORECASE)
         if found:
@@ -424,9 +468,26 @@ _KEYBOARD_MARKED = re.compile(
 )
 
 
+# A remark after a layout, `ENG (ar apgaismojumu)` — "with a backlight" — and the separator of
+# a keyboard printed for two languages, `ENG / RUS`, `NOR/ENG`.
+_REMARK = re.compile(r"\([^)]*\)")
+_BOTH = re.compile(r"\s*/\s*")
+
+
 def keyboard_word(vocabulary: Vocabulary, word: str) -> str | None:
-    """The layout a shop's word for one means, through the registry."""
-    return vocabulary.value_of(KEYBOARD_KEY, word)
+    """The layout a shop's word for one means, through the registry.
+
+    A keyboard printed for two languages is a layout of its own — `ENG / RUS` is not the
+    English keyboard — so each half is resolved and the two are named together, `english+
+    russian`. A half the registry does not know makes the whole unknown.
+    """
+    halves = [h for h in _BOTH.split(_REMARK.sub(" ", word).strip()) if h.strip()]
+    if not halves:
+        return None
+    meant = [vocabulary.value_of(KEYBOARD_KEY, half.strip()) for half in halves]
+    if None in meant:
+        return None
+    return "+".join(sorted(set(meant)))
 
 
 def _keyboard(
