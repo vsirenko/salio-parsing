@@ -19,6 +19,7 @@ Everything downstream is derived from them and can be thrown away.
 | `GET /api/admin/offers/{offer_id}/trace` | its path from the shop's bytes to the catalogue: the reading recomputed rule by rule, the match, the entry |
 | `GET /api/admin/raw-offers/{raw_offer_id}/reading` | our reading of one observation |
 | `POST /api/admin/raw-offers/{raw_offer_id}/renormalize` | read the stored bytes again |
+| `POST /api/admin/sources/{source_id}/reread` | read a channel's listings again from their stored payloads, for one a reparse cannot reach |
 
 Ingestion is a POST because there is no fetcher yet, and that is the point rather than a
 placeholder: a sample can be loaded by hand and measured before a line of crawling exists,

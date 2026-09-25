@@ -6499,6 +6499,36 @@
         "title": "ReparseRequest",
         "type": "object"
       },
+      "RereadReport": {
+        "description": "What a re-read of a channel's stored payloads did; `next_after_id` pages on.",
+        "properties": {
+          "next_after_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next After Id"
+          },
+          "read": {
+            "title": "Read",
+            "type": "integer"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_id",
+          "read"
+        ],
+        "title": "RereadReport",
+        "type": "object"
+      },
       "ReviewCreate": {
         "additionalProperties": false,
         "properties": {
@@ -20658,6 +20688,89 @@
           }
         ],
         "summary": "Submit many observations",
+        "tags": [
+          "admin: offers"
+        ]
+      }
+    },
+    "/api/admin/sources/{source_id}/reread": {
+      "post": {
+        "description": "Each listing's newest observation, read again from its stored payload with the rules\nand the registry as they are now. For a channel a reparse cannot reach — one collected\nbefore snapshots were kept, whose reparse sees nothing and is rejected. It does not\nplace anything; `POST /matching/rebuild` and `/matching/run` do that after.",
+        "operationId": "reread_source_api_admin_sources__source_id__reread_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "`next_after_id` of the page before",
+            "in": "query",
+            "name": "after_id",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "`next_after_id` of the page before",
+              "minimum": 0,
+              "title": "After Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RereadReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Source not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read a channel's stored listings again, without snapshots",
         "tags": [
           "admin: offers"
         ]

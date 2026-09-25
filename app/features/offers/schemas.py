@@ -423,3 +423,11 @@ class UnresolvedReport(BaseModel):
     listings: int
     by_reason: dict[str, int]
     values: list[UnresolvedValue]
+
+
+class RereadReport(BaseModel):
+    """What a re-read of a channel's stored payloads did; `next_after_id` pages on."""
+
+    source_id: int
+    read: int
+    next_after_id: int | None = None

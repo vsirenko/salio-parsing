@@ -37,6 +37,7 @@ from app.features.offers.schemas import (
     RawOfferBatch,
     RawOfferIngest,
     RawOfferRead,
+    RereadReport,
     UnresolvedReason,
     UnresolvedReport,
 )
@@ -51,6 +52,25 @@ PageParams = Annotated[Pagination, Depends(pagination_params())]
 OfferPageParams = Annotated[
     Pagination, Depends(pagination_params(sortable=OFFER_SORT, default_sort="id"))
 ]
+
+
+@sources_router.post(
+    "/{source_id}/reread",
+    response_model=RereadReport,
+    summary="Read a channel's stored listings again, without snapshots",
+    responses={404: {"model": ErrorResponse, "description": "Source not found"}},
+)
+async def reread_source(
+    source_id: int,
+    service: OfferServiceDep,
+    limit: Annotated[int, Query(ge=1, le=2000)] = 500,
+    after_id: Annotated[int, Query(ge=0, description="`next_after_id` of the page before")] = 0,
+) -> RereadReport:
+    """Each listing's newest observation, read again from its stored payload with the rules
+    and the registry as they are now. For a channel a reparse cannot reach — one collected
+    before snapshots were kept, whose reparse sees nothing and is rejected. It does not
+    place anything; `POST /matching/rebuild` and `/matching/run` do that after."""
+    return await service.reread_source(source_id, limit=limit, after_id=after_id)
 
 
 @sources_router.post(

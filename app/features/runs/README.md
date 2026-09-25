@@ -244,6 +244,12 @@ that is not the one the snapshot belongs to: a quick pass or a card read off a l
 leaves an observation with no snapshot, the listing shows it, and three onea iPads kept an
 old model through a full reparse that way on 25.09.2026.
 
+**A channel with no snapshots is reread from its payloads.** Seven phone channels were
+collected before snapshots were kept, and on 25.09.2026 a reparse of each read nothing and
+was rejected — m79's phones kept reading working memory as storage after the rule was
+fixed. `POST /api/admin/sources/{id}/reread` reads each listing's newest observation again
+from the payload stored with it; a reparse rejected with nothing seen is the sign to use it.
+
 **Registry work is followed by `POST /runs/reparse`.** A word entered moves no ruleset
 version, so no stored reading changes until the snapshots are read again — and doing that a
 channel at a time, or a listing at a time from a script, is how 54000 renormalize calls

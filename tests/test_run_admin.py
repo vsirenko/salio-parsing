@@ -318,3 +318,48 @@ def test_a_reparse_waiting_means_the_one_before_it_leaves_settling_to_it(client,
     assert event_loop.run_until_complete(waiting()) is True
     client.post(f"/api/admin/runs/{run['id']}/cancel", headers=auth(token))
     assert event_loop.run_until_complete(waiting()) is False
+
+
+def test_a_channel_with_no_snapshots_is_reread_from_its_payloads(client, event_loop):
+    """Seven phone channels were collected before snapshots were kept, and a reparse of each
+    read nothing; their stored payloads are enough."""
+    from sqlalchemy import func, select, update
+
+    from app.db.models import NormalizedOffer, RawOffer
+    from app.db.session import session_factory
+
+    token = admin_token(client)
+    source = channel(client, token, cron_full=None, cron_quick=None)
+    for n in range(3):
+        response = client.post(
+            f"/api/admin/sources/{source['id']}/offers",
+            headers=auth(token),
+            json={
+                "external_id": f"R-{n}",
+                "market_code": "LV",
+                "payload": {"name": f"Apple iPhone 15 {n}", "price": "700"},
+            },
+        )
+        assert response.status_code == 202, response.text
+
+    async def age_and_count(age: bool) -> int:
+        async with session_factory() as session:
+            if age:
+                await session.execute(update(NormalizedOffer).values(ruleset_version="old"))
+                await session.commit()
+            return await session.scalar(
+                select(func.count())
+                .select_from(NormalizedOffer)
+                .join(RawOffer, RawOffer.id == NormalizedOffer.raw_offer_id)
+                .where(RawOffer.source_id == source["id"], NormalizedOffer.ruleset_version != "old")
+            )
+
+    assert event_loop.run_until_complete(age_and_count(True)) == 0
+    url = f"/api/admin/sources/{source['id']}/reread"
+    first = client.post(url, headers=auth(token), params={"limit": 2}).json()
+    assert (first["read"], first["next_after_id"] is not None) == (2, True)
+    rest = client.post(
+        url, headers=auth(token), params={"limit": 2, "after_id": first["next_after_id"]}
+    ).json()
+    assert (rest["read"], rest["next_after_id"]) == (1, None)
+    assert event_loop.run_until_complete(age_and_count(False)) == 3
