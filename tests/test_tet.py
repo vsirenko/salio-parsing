@@ -260,7 +260,7 @@ def test_the_colour_comes_out_of_the_specification_table(event_loop):
 
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
-    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-14+tet-shop-1+tet-4")
+    assert reading(event_loop)["ruleset_version"].startswith("generic-3+phones-15+tet-shop-1+tet-4")
 
 
 def test_the_tablet_channel_walks_its_own_leaf():

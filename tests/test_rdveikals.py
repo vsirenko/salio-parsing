@@ -247,7 +247,7 @@ def test_the_shop_s_own_model_field_is_a_line_not_a_model(event_loop):
 
 def test_the_ruleset_version_says_what_was_applied(event_loop):
     assert (
-        read_it(parsed())["ruleset_version"] == "generic-3+phones-14+rdveikals-shop-1+rdveikals-7"
+        read_it(parsed())["ruleset_version"] == "generic-3+phones-15+rdveikals-shop-1+rdveikals-8"
     )
 
 
@@ -331,7 +331,13 @@ def test_colour_comes_from_the_field_and_resolves(event_loop):
     """The shop states it rather than leaving it in a title, in 37 forms rather than the
     358 a title yields — which is what made this rule writable at all."""
     fields = read(
-        {**parsed(), "specs": {"Kopējie parametri / Krāsa": "Melna"}},
+        {
+            **parsed(),
+            # A title naming no colour: where it names one the registry knows, it is taken.
+            "title": "mobilais telefons Samsung Galaxy S26 256GB",
+            "name": "mobilais telefons Samsung Galaxy S26 256GB",
+            "specs": {"Kopējie parametri / Krāsa": "Melna"},
+        },
         source_slug="rdveikals-phones",
         shop_slug="rdveikals",
         category="phones",
@@ -344,7 +350,13 @@ def test_a_two_tone_case_is_its_own_colour(event_loop):
     """`Melna / Oranža` is a different phone from `Melna`, with its own article number.
     Folding it into black would merge two products."""
     fields = read(
-        {**parsed(), "specs": {"Kopējie parametri / Krāsa": "Melna / Oranža"}},
+        {
+            **parsed(),
+            # A title naming no colour: where it names one the registry knows, it is taken.
+            "title": "mobilais telefons Samsung Galaxy S26 256GB",
+            "name": "mobilais telefons Samsung Galaxy S26 256GB",
+            "specs": {"Kopējie parametri / Krāsa": "Melna / Oranža"},
+        },
         source_slug="rdveikals-phones",
         shop_slug="rdveikals",
         category="phones",

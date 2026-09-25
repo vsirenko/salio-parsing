@@ -19,7 +19,7 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-14"
+VERSION = "phones-15"
 
 RULESET = register(
     CATEGORY,

@@ -634,3 +634,29 @@ def test_a_thousand_gigabytes_is_a_terabyte():
     assert megabytes("2000", "GB") == megabytes("2", "TB")
     assert megabytes("512", "GB") == 524288
     assert megabytes("1500", "GB") == 1536000
+
+
+def test_a_nordic_keyboard_on_apple_s_ks_part_number_is_the_swedish_one():
+    """Apple makes no Nordic keyboard; euronics calls its Swedish-Finnish `KS` one that."""
+    words = Vocabulary(
+        category_names=VOCABULARY.category_names,
+        brand_names=VOCABULARY.brand_names,
+        attribute_names={
+            **VOCABULARY.attribute_names,
+            normalize_attribute_name("key arrangement"): "keyboard_layout",
+        },
+        values={"keyboard_layout": {**VOCABULARY.values["keyboard_layout"], "nordic": "nordic"}},
+    )
+    fields = read(
+        {
+            "title": "Apple MacBook Air 13 (2026), M5, 10C/8C, 16 GB, 512 GB, SWE, silver",
+            "brand": "Apple",
+            "mpn": "MDH74KS/A",
+            "attributes": {"key arrangement": "NORDIC"},
+        },
+        source_slug="euronics-laptops",
+        shop_slug="euronics",
+        category="laptops",
+        vocabulary=words,
+    )
+    assert fields["identity"]["keyboard_layout"] == "swedish"

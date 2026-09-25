@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-10"
+VERSION = "tablets-11"
 
 CONNECTIVITY_KEY = "connectivity"
 SCREEN_KEY = "screen_inch"

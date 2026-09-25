@@ -113,11 +113,11 @@ def test_the_version_names_what_was_applied():
     assert version_for(KSENUKAI, shop_slug="ksenukai") == "generic-3+ksenukai-shop-1+ksenukai-7"
     assert (
         version_for(KSENUKAI, shop_slug="ksenukai", category=PHONES)
-        == "generic-3+phones-14+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-15+ksenukai-shop-1+ksenukai-7"
     )
     assert (
         read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)["ruleset_version"]
-        == "generic-3+phones-14+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-15+ksenukai-shop-1+ksenukai-7"
     )
 
 
@@ -287,7 +287,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-3+phones-14+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-3+phones-15+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -505,36 +505,36 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-laptops-14": "5f3fb7ba7351",
+    "apple-laptops-15": "37d84878ce9e",
     "apple-phones-2": "f940eea49212",
     "apple-tablets-3": "c1d38b617cc6",
     "bigbox-10": "4497939fdfce",
-    "bigbox-laptops-11": "66e90eec18b3",
+    "bigbox-laptops-12": "0d5a0370f89d",
     "bigbox-shop-1": "a1194a23b2e7",
     "bigbox-tablets-4": "2cf6e57ea6f2",
     "bm-4": "6117d7e812a9",
-    "bm-laptops-8": "45caff23ebb7",
+    "bm-laptops-9": "4a5c5bef24be",
     "bm-shop-1": "3d09a6688700",
     "bm-tablets-1": "24d34a1063df",
     "cec-3": "958bc58c1fb0",
-    "cec-laptops-4": "db8952d7bd5e",
+    "cec-laptops-5": "6b0f53f04fc3",
     "cec-tablets-2": "336ec202acc2",
     "dateks-5": "0acd87a6666d",
-    "dateks-laptops-8": "0037c48c4d45",
+    "dateks-laptops-9": "2e53eb3b3ef8",
     "dateks-shop-1": "76bf8766fb11",
     "dateks-tablets-1": "abe9d2e77bfe",
     "discover-6": "f6aa33b230a2",
-    "discover-laptops-4": "a9eacee0793f",
+    "discover-laptops-5": "464dd560a738",
     "discover-shop-1": "6065096d8d22",
     "discover-tablets-3": "f8cf45775b77",
-    "euronics-laptops-8": "113de3855c31",
+    "euronics-laptops-9": "526430f31b4c",
     "euronics-shop-1": "07e9d1415e04",
     "euronics-tablets-1": "0deff7ac20bc",
     "google-phones-3": "b13ca41b33fa",
     "ksenukai-7": "c39ae807fae8",
     "ksenukai-shop-1": "b5a073020a15",
     "ksenukai-tablets-2": "343e6a39fd31",
-    "laptops-11": "5679040dcdb7",
+    "laptops-12": "2d80dbcb7ce3",
     "m79-8": "43b109729576",
     "m79-shop-1": "ad962ef2618c",
     "m79-tablets-1": "ca0ff57d51a2",
@@ -545,14 +545,14 @@ FINGERPRINTS = {
     "onea-shop-1": "24e6184df567",
     "onea-tablets-2": "9d9c0dc1733a",
     "oneplus-phones-1": "29eaabd5e1ad",
-    "phones-14": "16c34b40dbb9",
-    "rdveikals-7": "b2b89d98ab3b",
-    "rdveikals-laptops-10": "1d170d2cfc3d",
+    "phones-15": "cc73a69e2fe5",
+    "rdveikals-8": "c10c83870bfc",
+    "rdveikals-laptops-11": "ddb6791ba2fc",
     "rdveikals-shop-1": "e0b3a42600f7",
-    "rdveikals-tablets-2": "e8e76dfbb809",
+    "rdveikals-tablets-3": "d209e87f9410",
     "samsung-phones-2": "9653d4e6a46a",
     "samsung-tablets-1": "dd93c1347519",
-    "tablets-10": "288b78e5cb99",
+    "tablets-11": "697efb0f6f30",
     "tet-4": "751b4c587085",
     "tet-shop-1": "3129e8453377",
     "tet-tablets-1": "7aabd390e9ed",
@@ -668,9 +668,9 @@ def test_a_ruleset_is_hashed_over_every_module_its_rules_come_from(monkeypatch):
     """`laptops` opens with a rule from `devices`; its own module has to count as well."""
     from app.features.offers.normalization.categories import laptops
 
-    before = _fingerprints()["laptops-11"]
+    before = _fingerprints()["laptops-12"]
     monkeypatch.setattr(laptops, "_QUOTES", laptops._QUOTES + "\u2033")
-    assert _fingerprints()["laptops-11"] != before
+    assert _fingerprints()["laptops-12"] != before
 
 
 def test_every_ruleset_is_fingerprinted():

@@ -68,7 +68,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-10"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-11"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
@@ -275,3 +275,33 @@ def test_the_glass_is_an_axis_and_not_part_of_the_model():
         )["model"]
         == "Galaxy Tab S9 FE Standard Edition"
     )
+
+
+def test_the_maker_s_colour_in_the_title_beats_the_shop_s_bucket():
+    """rdveikals files Starlight under `Zelta`; the market sided with the title 168 times in
+    185 disputes."""
+    words = Vocabulary(
+        colours={"starlight": "white", "zelta": "gold", "white": "white", "gold": "gold"},
+        attribute_names={"krāsa": "color"},
+    )
+    fields = read(
+        {
+            "name": "Apple iPad Air 11 M3 Wi-Fi 128GB Starlight",
+            "brand": "Apple",
+            "specs": {"Krāsa": "Zelta"},
+        },
+        category=TABLETS,
+        vocabulary=words,
+    )
+    assert fields["identity"]["color"] == "white"
+
+
+def test_apple_s_matte_glass_is_nano_texture_and_no_one_else_s_is():
+    """euronics writes `matte` for the glass four other shops call nano-texture."""
+    apple = read(
+        {"name": 'Apple iPad Pro 11", M5 (2025), 1 TB, WiFi, matte, space black', "brand": "Apple"},
+        category=TABLETS,
+    )
+    assert apple["identity"]["glass"] == "nano-texture"
+    other = read({"name": "Lenovo Tab P12 matte 128GB", "brand": "Lenovo"}, category=TABLETS)
+    assert other["identity"]["glass"] == "standard"

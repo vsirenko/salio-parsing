@@ -16,7 +16,7 @@ from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocab
 # this shop's is the processor, split over three fields (`Intel`, `Core Ultra 7`, `255H`),
 # and the maker's part number, in a field of its own.
 LAPTOPS_SLUG = "rdveikals-laptops"
-LAPTOPS_VERSION = "rdveikals-laptops-10"
+LAPTOPS_VERSION = "rdveikals-laptops-11"
 CPU_FIELDS = (
     "Procesors / Procesora ražotājs",
     "Procesors / Procesora sērija",

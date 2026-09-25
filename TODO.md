@@ -117,7 +117,7 @@ and the questions that have to be answered with real data first, are written dow
       difference files the listing under an entry of its own. Whether `KS` is nordic or
       swedish is a decision about the vocabulary, not a rule to guess. Merged by Apple's part
       number now, `1000 GB` reads as 1 TB, and `GET /matching/suspects` lists what is left;
-      the `KS` / `NORDIC` question is still open.
+      `KS` / `NORDIC` is settled too: Apple's `KS` is what euronics calls nordic.
 - [x] **A reparse re-reads snapshots, and an observation with none keeps its old reading.**
       On 25.09.2026 three onea iPads read `iPad mini (A17 Pro)` after a full reparse had
       moved every other listing to `iPad mini A17 Pro`: their newest observation, the one

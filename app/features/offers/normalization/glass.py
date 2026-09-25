@@ -18,6 +18,8 @@ NANO_TEXTURE = "nano-texture"
 # `with standard glass`, `w/Standard Glass`, `Nano-texture glass`: Apple's words, the same
 # in every language.
 _NANO = re.compile(r"\bnano[-\s]?texture\b", re.IGNORECASE)
+_MATTE = re.compile(r"\bmatte\b", re.IGNORECASE)
+_APPLE = re.compile(r"^\s*apple\b", re.IGNORECASE)
 _GLASS_WORDS = re.compile(
     r"\s*(?:\b(?:w/|with)\s*)?\b(?:standard\s+glass|nano[-\s]?texture(?:\s+glass)?)\b",
     re.IGNORECASE,
@@ -35,7 +37,13 @@ def the_glass(
     """
     model = str(fields.get("model") or "").strip()
     title = str(fields.get("title") or "")
-    glass = NANO_TEXTURE if (_NANO.search(title) or _NANO.search(model)) else STANDARD
+    nano = bool(_NANO.search(title) or _NANO.search(model))
+    # euronics calls Apple's nano-texture glass `matte`: on 25.09.2026 its three iPad Pros
+    # whose part numbers four other shops list as nano-texture read standard for it. Only
+    # Apple's — on any other laptop a matte screen is the ordinary anti-glare one.
+    if not nano and _APPLE.match(str(fields.get("brand_raw") or "")):
+        nano = bool(_MATTE.search(title))
+    glass = NANO_TEXTURE if nano else STANDARD
     found: dict[str, Any] = {}
     identity = dict(fields.get("identity") or {})
     if identity.get(GLASS_KEY) != glass:

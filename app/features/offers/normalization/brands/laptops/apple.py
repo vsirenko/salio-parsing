@@ -15,17 +15,20 @@ from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabu
 
 CATEGORY = "laptops"
 BRAND_KEY = "apple"
-VERSION = "apple-laptops-14"
+VERSION = "apple-laptops-15"
 
 _PART_NUMBER = re.compile(r"\b[A-Z0-9]{5}([A-Z]{2})/A\b")
 # The code, to the layout the listings beside it named.
 _LAYOUT = {"ZE": "english", "KS": "swedish"}
+# What a shop calls the keyboard a code names, when it calls it something else.
+_SAME_AS = {"swedish": ("nordic",)}
 
 
 def _keyboard_from_the_part_number(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
-    """The layout the part number's code names; where a reading names another, neither."""
+    """The layout the part number's code names; where a reading names another, neither —
+    unless the other is only a shop's name for the same keyboard."""
     text = " ".join(str(fields.get(key) or "") for key in ("title", "mpn"))
     said = {_LAYOUT[code] for code in _PART_NUMBER.findall(text) if code in _LAYOUT}
     if len(said) != 1:
@@ -35,6 +38,11 @@ def _keyboard_from_the_part_number(
     read = identity.get(laptops.KEYBOARD_KEY)
     if read == layout:
         return {}
+    # Apple makes no Nordic keyboard; the one it sells in the Nordic countries is `KS`, the
+    # Swedish-Finnish layout, and euronics names that `NORDIC` on every MacBook it lists.
+    # That is the shop's word for the same keyboard, not a disagreement.
+    if read in _SAME_AS.get(layout, ()):
+        return {"identity": {**identity, laptops.KEYBOARD_KEY: layout}}
     if read is None:
         return {"identity": {**identity, laptops.KEYBOARD_KEY: layout}}
     identity.pop(laptops.KEYBOARD_KEY)

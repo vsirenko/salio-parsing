@@ -236,6 +236,13 @@ into the chip it carried, which is fixed history and so code, not vocabulary: on
 25.09.2026 that was eleven families of the twenty. A generation written in a shop's
 language (`7. paaudzes`) is a word and is not read — it is a row in the model registry.
 
+**Where a shop's colour field and its title disagree, the title is taken.** The field is the
+shop's bucket — rdveikals files Apple's Starlight under `Zelta` and Graphite under grey —
+and the title carries the maker's own name, resolved through the registry like any field.
+Measured over the 185 disputes whose part number other shops sell too, on 25.09.2026: the
+market sided with the title 168 times and with the field 11. A title naming two colours
+still names none.
+
 **The glass is an axis, not a name.** Apple sells an iPad Pro and a MacBook Pro with standard
 or nano-texture glass, two products at two prices. On the model it made `iPad Pro M5
 Nano-texture` and `MacBook Pro Nano-texture` families of their own; as `glass` on the identity
@@ -243,7 +250,10 @@ it is one family with the two as entries, the way two colours are. `normalizatio
 reads it for tablets and laptops alike: nano-texture where the title says so, standard
 everywhere else, because every device has a glass and only Apple sells the other one. The
 value `standard` is kept out of titles (`attribute_values.in_title`), or every tablet and
-laptop would end in it.
+laptop would end in it. euronics writes Apple's nano-texture glass as `matte`, which is read
+as nano-texture on Apple's alone — anyone else's matte screen is the ordinary anti-glare one.
+Its `NORDIC` keyboard on a `KS/A` MacBook is the Swedish-Finnish one: Apple makes no other
+keyboard for the Nordic countries.
 
 **A rule may be declared and not written.** `Rule.pending` is a gap that is visible, and the
 first one is real: colour splits a phone into variants, and across 520 collected products the
