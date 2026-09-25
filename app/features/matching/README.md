@@ -181,14 +181,6 @@ again**: nothing else hides a family, so a hidden one with an entry in it is onl
 pass's leftover — on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the
 storefront that way, their names emptied by one reading and filled again by the next.
 
-**The glass is an entry of a family, not a family.** Nano-texture is another product — another
-part number, a hundred or two more — so it stays on the entry's model and keeps the entry
-apart by its key; but `iPad Pro M5` and `iPad Pro M5 Nano-texture` were two families on the
-storefront, and so were the two MacBook Pros. `family_of` takes the glass off a model before
-a family is found or made, and the misfiled check compares by it too. An axis would have said
-the same thing at the cost of a `standard` in the title of every tablet and laptop and a new
-identity key for each of them.
-
 **A family takes the case its entries write.** The lookup that files an entry under a family
 ignores case, so the spelling that made a family heads it for good: dateks's `PRO MAX 16
 PLUS` stayed the storefront heading over 13 entries that all read `Pro Max 16 Plus` once the

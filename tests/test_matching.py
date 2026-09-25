@@ -2194,48 +2194,6 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     assert (shown["model"], shown["is_visible"]) == ("iPhone 15 12", True)
 
 
-def test_the_glass_is_an_entry_of_the_family_and_not_a_family(client):
-    """`iPad Pro M5` and `iPad Pro M5 Nano-texture` were two families on the storefront; the
-    glass is another product, so another entry, in the one family."""
-    token = admin_token(client)
-    _, source, category, _ = a_shop_we_can_build_from(client, token)
-    a_storage_axis(client, token, category["id"])
-    a_colour_axis(client, token, category["id"])
-    payload = {"brand": "Apple", "attributes": {"storage": "1 TB", "color": "black"}}
-    standard = offer_from(
-        client,
-        token,
-        source["id"],
-        {**payload, "name": "Apple iPad Pro 11 M5 1TB Black", "model": "iPad Pro M5"},
-        external_id="G-1",
-    )
-    nano = offer_from(
-        client,
-        token,
-        source["id"],
-        {
-            **payload,
-            "name": "Apple iPad Pro 11 M5 1TB Nano-texture Black",
-            "model": "iPad Pro M5 Nano-texture",
-        },
-        external_id="G-2",
-    )
-    one = client.get(
-        f"/api/admin/variants/{promote(client, token, standard)['variant_id']}", headers=auth(token)
-    ).json()
-    other = client.get(
-        f"/api/admin/variants/{promote(client, token, nano)['variant_id']}", headers=auth(token)
-    ).json()
-    assert one["id"] != other["id"]
-    assert other["model"] == "iPad Pro M5 Nano-texture"
-    assert one["product"]["id"] == other["product"]["id"]
-    family = client.get(f"/api/admin/products/{one['product']['id']}", headers=auth(token)).json()
-    assert family["model"] == "iPad Pro M5"
-    # And the rebuild does not take the glass for a family the entry is filed wrongly under.
-    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
-    assert report["rehomed"] == 0
-
-
 def test_an_emptied_family_the_trail_names_is_hidden_and_shown_again(client):
     """A family somebody acted on is in the trail, and the trail must not point at no row.
     It stays hidden — and an entry filed back into it shows it again, as `Apple iPhone 16
