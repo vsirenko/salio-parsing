@@ -10,7 +10,7 @@ two barcodes and two prices, and a shop writes which it is into the name.
 import re
 from typing import Any
 
-from app.features.offers.normalization import devices
+from app.features.offers.normalization import devices, glass
 from app.features.offers.normalization.rules import (
     CATEGORY,
     FINISH,
@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-8"
+VERSION = "tablets-9"
 
 CONNECTIVITY_KEY = "connectivity"
 SCREEN_KEY = "screen_inch"
@@ -190,29 +190,6 @@ def _stated_inches(fields: dict[str, Any], vocabulary: Vocabulary) -> int | None
     return None
 
 
-# Apple's two displays for an iPad Pro, which are two products at two prices and share every
-# axis: `with standard glass`, `w/Standard Glass`, `Standard Glass`, `with nano-texture glass`.
-_NANO = re.compile(r"\bnano[-\s]?texture\b", re.IGNORECASE)
-_GLASS_WORDS = re.compile(
-    r"\s*(?:\b(?:w/|with)\s*)?\b(?:standard\s+glass|nano[-\s]?texture(?:\s+glass)?)\b",
-    re.IGNORECASE,
-)
-
-
-def _model_names_its_glass(
-    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
-) -> dict[str, Any]:
-    """`Nano-texture` on the model of a tablet whose title states it, and no other word
-    about the glass: the standard one is what every other listing of the model has."""
-    model = str(fields.get("model") or "").strip()
-    if not model:
-        return {}
-    title = str(fields.get("title") or "")
-    bare = " ".join(_GLASS_WORDS.sub(" ", model).split())
-    named = f"{bare} Nano-texture" if (_NANO.search(title) or _NANO.search(model)) else bare
-    return {"model": named} if named and named != model else {}
-
-
 def _size_is_an_axis(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
@@ -313,19 +290,18 @@ RULESET = register(
                 body=devices.from_the_registry,
             ),
             Rule(
-                id="tablets-model-names-its-glass",
+                id="tablets-glass",
                 layer=FINISH,
                 why=(
                     "An iPad Pro comes with standard glass or nano-texture glass, at two"
-                    " prices, and nothing else tells the two apart. On 23.09.2026 the"
-                    " catalogue held the standard one as `iPad Pro M5` and as `iPad Pro M5"
-                    " With Standard Glass` — two identities for one tablet — while rdveikals"
-                    " writes the glass after the capacity, `… 2TB Nano-texture glass Silver`,"
-                    " and its cut filed the nano one under `iPad Pro M5`. The words about"
-                    " the glass leave the model, and `Nano-texture` is put back on where the"
-                    " title states it."
+                    " prices, and nothing else tells the two apart. It was on the model —"
+                    " `iPad Pro M5 Nano-texture` — which made it a family of its own on the"
+                    " storefront, 16 entries beside the standard one's 32 on 25.09.2026, and"
+                    " `iPad Pro M5 With Standard Glass` a third. It is an axis, as the colour"
+                    " is: nano-texture where the title says so, standard everywhere else,"
+                    " and the words about the glass leave the model."
                 ),
-                body=_model_names_its_glass,
+                body=glass.the_glass,
             ),
             Rule(
                 id="tablets-model-names-the-maker-once",

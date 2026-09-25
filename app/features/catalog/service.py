@@ -591,7 +591,9 @@ class CatalogService:
         for row, attribute, enum_value in rows:
             if enum_value is not None:
                 found[attribute.key] = _Value(
-                    raw=enum_value.canonical, display=enum_value.canonical
+                    raw=enum_value.canonical,
+                    # An empty display leaves it out of the title and in the key.
+                    display=enum_value.canonical if enum_value.in_title else "",
                 )
             elif row.value_num is not None:
                 found[attribute.key] = _Value(

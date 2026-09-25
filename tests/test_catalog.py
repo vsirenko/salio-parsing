@@ -219,6 +219,57 @@ def test_the_key_appears_only_when_every_axis_is_filled(client):
     assert full["title"] == "Apple iPhone 15 Pro 256 bytes black"
 
 
+def test_a_value_left_out_of_titles_still_tells_entries_apart(client):
+    """Every tablet's glass is `standard` but Apple's few: a title would only repeat it."""
+    token = admin_token(client)
+    brand, category, capacity, color, black = phones_setup(client, token)
+    glass = post(
+        client,
+        token,
+        "/api/admin/attributes",
+        {"key": "glass", "name": "Glass", "value_type": "enum"},
+    )
+    standard = post(
+        client,
+        token,
+        f"/api/admin/attributes/{glass['id']}/values",
+        {"canonical": "standard", "in_title": False},
+    )
+    nano = post(
+        client, token, f"/api/admin/attributes/{glass['id']}/values", {"canonical": "nano-texture"}
+    )
+    assert (standard["in_title"], nano["in_title"]) == (False, True)
+    post(
+        client,
+        token,
+        f"/api/admin/categories/{category['id']}/attributes",
+        {"attribute_id": glass["id"], "identity_bearing": True, "position": 3},
+    )
+
+    def entry(value):
+        variant = post(
+            client,
+            token,
+            "/api/admin/variants",
+            {"brand_id": brand["id"], "category_id": category["id"], "model": "iPad Pro M5"},
+        )
+        for body in (
+            {"attribute_id": capacity["id"], "value_num": "256"},
+            {"attribute_id": color["id"], "value_id": black["id"]},
+            {"attribute_id": glass["id"], "value_id": value["id"]},
+        ):
+            client.put(
+                f"/api/admin/variants/{variant['id']}/attributes", headers=auth(token), json=body
+            )
+        return client.get(f"/api/admin/variants/{variant['id']}", headers=auth(token)).json()
+
+    plain, other = entry(standard), entry(nano)
+    assert plain["title"] == "Apple iPad Pro M5 256 bytes black"
+    assert other["title"] == "Apple iPad Pro M5 256 bytes black nano-texture"
+    assert None not in (plain["identity_key"], other["identity_key"])
+    assert plain["identity_key"] != other["identity_key"]
+
+
 def test_clearing_an_axis_takes_the_key_away(client):
     token = admin_token(client)
     brand, category, capacity, color, black = phones_setup(client, token)

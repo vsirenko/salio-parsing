@@ -308,7 +308,8 @@ def test_a_brand_is_scoped_to_a_category():
     """`phones/apple` and `laptops/apple` are different rulesets. Nothing is registered for
     laptops, so the same offer read as one gets no brand rules at all."""
     payload = {"name": "x", "brand": "Apple", "mpn": "MG014HX/A"}
-    assert read(payload, category="laptops")["identity"] == {}
+    # No Apple part number read into it: only the glass, which every laptop has.
+    assert read(payload, category="laptops")["identity"] == {"glass": "standard"}
     assert read(payload, category=PHONES)["identity"]["apple_config"] == "MG014"
 
 
@@ -504,36 +505,36 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-laptops-11": "31b3cd81cbeb",
+    "apple-laptops-12": "09b7069f996d",
     "apple-phones-2": "f940eea49212",
     "apple-tablets-3": "c1d38b617cc6",
     "bigbox-10": "4497939fdfce",
-    "bigbox-laptops-8": "3db9c521762f",
+    "bigbox-laptops-9": "34f770f74e55",
     "bigbox-shop-1": "a1194a23b2e7",
     "bigbox-tablets-4": "2cf6e57ea6f2",
     "bm-4": "6117d7e812a9",
-    "bm-laptops-5": "a04a55de49cf",
+    "bm-laptops-6": "f5357c33a2da",
     "bm-shop-1": "3d09a6688700",
     "bm-tablets-1": "24d34a1063df",
     "cec-3": "958bc58c1fb0",
-    "cec-laptops-1": "80913aebe3a0",
+    "cec-laptops-2": "cadc337590fb",
     "cec-tablets-2": "336ec202acc2",
     "dateks-5": "0acd87a6666d",
-    "dateks-laptops-5": "8425fb691f0b",
+    "dateks-laptops-6": "701c469305e2",
     "dateks-shop-1": "76bf8766fb11",
     "dateks-tablets-1": "abe9d2e77bfe",
     "discover-6": "f6aa33b230a2",
-    "discover-laptops-1": "aab9f365db98",
+    "discover-laptops-2": "699e29ced3cd",
     "discover-shop-1": "6065096d8d22",
     "discover-tablets-3": "f8cf45775b77",
-    "euronics-laptops-5": "9e7e2954b665",
+    "euronics-laptops-6": "fee6496da02f",
     "euronics-shop-1": "07e9d1415e04",
     "euronics-tablets-1": "0deff7ac20bc",
     "google-phones-3": "b13ca41b33fa",
     "ksenukai-7": "c39ae807fae8",
     "ksenukai-shop-1": "b5a073020a15",
     "ksenukai-tablets-2": "343e6a39fd31",
-    "laptops-8": "c352dd2360c4",
+    "laptops-9": "8311715f8cad",
     "m79-8": "43b109729576",
     "m79-shop-1": "ad962ef2618c",
     "m79-tablets-1": "ca0ff57d51a2",
@@ -546,12 +547,12 @@ FINGERPRINTS = {
     "oneplus-phones-1": "29eaabd5e1ad",
     "phones-13": "8a8607df0554",
     "rdveikals-6": "01226413c43a",
-    "rdveikals-laptops-7": "c09f8a7a3de8",
+    "rdveikals-laptops-8": "c83095eb9706",
     "rdveikals-shop-1": "e0b3a42600f7",
     "rdveikals-tablets-1": "1ae570d9626a",
     "samsung-phones-2": "9653d4e6a46a",
     "samsung-tablets-1": "dd93c1347519",
-    "tablets-8": "a1eba4f43bfa",
+    "tablets-9": "1c5cd621f873",
     "tet-4": "751b4c587085",
     "tet-shop-1": "3129e8453377",
     "tet-tablets-1": "7aabd390e9ed",
@@ -667,9 +668,9 @@ def test_a_ruleset_is_hashed_over_every_module_its_rules_come_from(monkeypatch):
     """`laptops` opens with a rule from `devices`; its own module has to count as well."""
     from app.features.offers.normalization.categories import laptops
 
-    before = _fingerprints()["laptops-8"]
+    before = _fingerprints()["laptops-9"]
     monkeypatch.setattr(laptops, "_QUOTES", laptops._QUOTES + "\u2033")
-    assert _fingerprints()["laptops-8"] != before
+    assert _fingerprints()["laptops-9"] != before
 
 
 def test_every_ruleset_is_fingerprinted():

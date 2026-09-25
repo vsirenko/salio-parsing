@@ -9240,6 +9240,11 @@
             "title": "Canonical",
             "type": "string"
           },
+          "in_title": {
+            "default": true,
+            "title": "In Title",
+            "type": "boolean"
+          },
           "labels": {
             "additionalProperties": {
               "type": "string"
@@ -9291,6 +9296,12 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "in_title": {
+            "default": true,
+            "description": "Whether an entry's title names it",
+            "title": "In Title",
+            "type": "boolean"
           },
           "labels": {
             "additionalProperties": {
@@ -9384,6 +9395,17 @@
         "additionalProperties": false,
         "description": "The order and the labels. The canonical string is what the readings produce and the\nmatcher looks up — `wifi`, `Intel Core Ultra 5 226V` — so it is never renamed here; a\nvalue that reads badly gets a label.",
         "properties": {
+          "in_title": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Title"
+          },
           "labels": {
             "anyOf": [
               {

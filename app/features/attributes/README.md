@@ -96,6 +96,10 @@ mapping work at all.
 - Defining attributes inside each category was the alternative and is worse: every alias and
   every value would be repeated per category, a cross-category facet would be impossible, and
   the mapping queue would never drain.
+- **A value can be kept out of titles and still be in keys.** `in_title = false` is for a
+  value nearly every entry carries: the glass is `standard` on every tablet and laptop but
+  Apple's nano-texture ones, and a title would only repeat it. Titles written before a
+  change keep what they said until their entries are next regenerated.
 - **Turning `identity_bearing` on or off invalidates every identity key in that category** and
   requires re-matching it. That is an operation the size of a migration, not a checkbox.
 - The candidate queues that turn an unknown string into a mapping are not built: they are

@@ -401,6 +401,11 @@ class AttributeValue(Base):
     labels: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     # Display order, because S / M / L / XL is not alphabetical.
     position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Whether an entry's title names it. A value every entry but a few carries says nothing
+    # in a name: the glass is `standard` on every tablet and laptop that is not Apple's
+    # nano-texture one, and `… 11" standard` on all of them would be noise. It still tells
+    # the entries apart in their keys; only the title leaves it out.
+    in_title: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     __table_args__ = (UniqueConstraint("attribute_id", "canonical", name="uq_value_per_attribute"),)
 

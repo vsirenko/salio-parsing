@@ -20,7 +20,7 @@ varies.
 import re
 from typing import Any
 
-from app.features.offers.normalization import devices
+from app.features.offers.normalization import devices, glass
 from app.features.offers.normalization.rules import (
     CATEGORY,
     FINISH,
@@ -31,7 +31,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "laptops"
-VERSION = "laptops-8"
+VERSION = "laptops-9"
 
 CPU_KEY = "cpu"
 RAM_KEY = "ram_mb"
@@ -843,6 +843,17 @@ RULESET = register(
                     " page of laptop names is left as its shop read it."
                 ),
                 body=devices.from_the_registry,
+            ),
+            Rule(
+                id="laptops-glass",
+                layer=FINISH,
+                why=(
+                    "A MacBook Pro comes with standard glass or nano-texture glass, at two"
+                    " prices; it was on the model, `MacBook Pro Nano-texture`, a family of"
+                    " its own with 95 listings on 25.09.2026. It is an axis, as for a"
+                    " tablet: nano-texture where the title says so, standard everywhere else."
+                ),
+                body=glass.the_glass,
             ),
         ),
     ),

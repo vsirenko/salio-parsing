@@ -255,6 +255,10 @@ class AttributeService:
             value.position = payload.position
         if payload.labels is not None:
             value.labels = payload.labels
+        if payload.in_title is not None:
+            # The titles already written keep what they said until their entries are next
+            # regenerated; a value's place in names is decided when it is made.
+            value.in_title = payload.in_title
         await self.session.flush()
         audit.record_changes(value=value.canonical, **sent)
         return (await self._values(value.attribute_id, [value.id]))[0]
@@ -520,6 +524,7 @@ class AttributeService:
                 canonical=value.canonical,
                 position=value.position,
                 labels=value.labels or {},
+                in_title=value.in_title,
                 aliases=aliases.get(value.id, []),
                 variants_count=count,
             )

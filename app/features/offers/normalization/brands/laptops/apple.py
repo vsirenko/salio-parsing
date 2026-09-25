@@ -15,7 +15,7 @@ from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabu
 
 CATEGORY = "laptops"
 BRAND_KEY = "apple"
-VERSION = "apple-laptops-11"
+VERSION = "apple-laptops-12"
 
 _PART_NUMBER = re.compile(r"\b[A-Z0-9]{5}([A-Z]{2})/A\b")
 # The code, to the layout the listings beside it named.
@@ -41,12 +41,11 @@ def _keyboard_from_the_part_number(
     return {"identity": identity}
 
 
-# A MacBook's name is its family and the glass: `MacBook Air`, `MacBook Pro`, `MacBook Neo`,
-# `MacBook Pro Nano-texture`. The screen is an axis of its own; bm writes it into the name
+# A MacBook's name is its family: `MacBook Air`, `MacBook Pro`, `MacBook Neo`. The glass and
+# the screen are axes of their own; bm writes it into the name
 # without an inch mark — `MacBook Pro 16 Apple M4 Max …`, `MacBook Pro 14 M5 10 CPU` — and
 # its MacBooks read as `MacBook Pro 16` where every other shop's read `MacBook Pro`.
 _FAMILY = re.compile(r"^(MacBook\s+(?:Air|Pro|Neo))\b", re.IGNORECASE)
-_NANO = re.compile(r"\bNano[-\s]?texture\b", re.IGNORECASE)
 
 
 def _a_macbook_is_its_family(
@@ -59,8 +58,6 @@ def _a_macbook_is_its_family(
     family = " ".join(
         w.capitalize() if w.lower() != "macbook" else "MacBook" for w in found.group(1).split()
     )
-    if _NANO.search(str(fields.get("title") or "")):
-        family += " Nano-texture"
     return {"model": family} if family != model else {}
 
 
@@ -124,11 +121,10 @@ RULESET = register(
                 id="apple-laptops-a-macbook-is-its-family",
                 layer=BRAND,
                 why=(
-                    "The name is the family and the glass; the size is the screen axis. bm"
+                    "The name is the family; the glass and the size are axes. bm"
                     " writes the size into the name without an inch mark — `MacBook Pro 16"
                     " Apple M4 Max …`, `MacBook Pro 14 M5 10 CPU 10 GPU` — and 24.09.2026's"
-                    " reading filed those as models no other shop's MacBook had. Nano-texture"
-                    " glass is a MacBook of its own at another price, and stays in the name."
+                    " reading filed those as models no other shop's MacBook had."
                 ),
                 body=_a_macbook_is_its_family,
             ),

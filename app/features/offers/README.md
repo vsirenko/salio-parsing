@@ -233,7 +233,16 @@ M2 and an M4 of one capacity and colour would be one product. Older iPads arrive
 generation or a year (`iPad 10th Gen`, `iPad Pro (2022)`), and Apple's rule turns either
 into the chip it carried, which is fixed history and so code, not vocabulary: on
 25.09.2026 that was eleven families of the twenty. A generation written in a shop's
-language (`7. paaudzes`) is a word and is not read.
+language (`7. paaudzes`) is a word and is not read — it is a row in the model registry.
+
+**The glass is an axis, not a name.** Apple sells an iPad Pro and a MacBook Pro with standard
+or nano-texture glass, two products at two prices. On the model it made `iPad Pro M5
+Nano-texture` and `MacBook Pro Nano-texture` families of their own; as `glass` on the identity
+it is one family with the two as entries, the way two colours are. `normalization/glass.py`
+reads it for tablets and laptops alike: nano-texture where the title says so, standard
+everywhere else, because every device has a glass and only Apple sells the other one. The
+value `standard` is kept out of titles (`attribute_values.in_title`), or every tablet and
+laptop would end in it.
 
 **A rule may be declared and not written.** `Rule.pending` is a gap that is visible, and the
 first one is real: colour splits a phone into variants, and across 520 collected products the

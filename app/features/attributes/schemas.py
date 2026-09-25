@@ -192,6 +192,8 @@ class ValueCreate(BaseModel):
     canonical: str = Field(min_length=1, max_length=200)
     position: int = Field(default=0, ge=0)
     labels: Labels = {}
+    # False for a value nearly every entry carries, which a title would only repeat.
+    in_title: bool = True
 
     @field_validator("labels")
     @classmethod
@@ -220,6 +222,7 @@ class ValueRead(BaseModel):
     labels: Labels = Field(
         description="What a person reads, by language; falls back to `canonical`"
     )
+    in_title: bool = Field(True, description="Whether an entry's title names it")
     aliases: list[ValueAliasRead] = []
     variants_count: int = 0
 
@@ -233,6 +236,7 @@ class ValueUpdate(BaseModel):
 
     position: int | None = Field(default=None, ge=0)
     labels: Labels | None = None
+    in_title: bool | None = None
 
     @field_validator("labels")
     @classmethod

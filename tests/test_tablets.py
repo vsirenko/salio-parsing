@@ -68,7 +68,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-8"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-9"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
@@ -220,7 +220,7 @@ def test_an_ipad_s_model_names_its_generation():
         (
             "Apple iPad Pro 11 (2025) Nano-texture Glass, Wi-Fi + Cellular, 1TB",
             "iPad Pro M5 Nano-texture",
-            "iPad Pro M5 Nano-texture",
+            "iPad Pro M5",
         ),
         # A year Apple made no mini in names no chip: left as the shop read it.
         ("Apple iPad mini (2022), Wi-Fi, 128GB, Blue", "iPad mini (2022)", "iPad mini (2022)"),
@@ -244,16 +244,26 @@ def test_a_chip_the_title_leaves_out_comes_from_a_field_that_is_only_the_chip():
     assert fields["model"] == "iPad mini A17 Pro"
 
 
-def test_the_glass_is_part_of_an_ipad_pro_s_model():
-    """Standard and nano-texture glass are two tablets; the catalogue held the standard one
-    under two names and filed rdveikals' nano one, glass written after the capacity, under
-    the standard."""
-    assert ipad(
+def test_the_glass_is_an_axis_and_not_part_of_the_model():
+    """Standard and nano-texture glass are two tablets of one family: the model is the
+    family's, the glass sits on the identity beside the colour."""
+
+    def glass(title: str, model: str) -> tuple[str, str]:
+        fields = read(
+            {"name": title, "brand": "Apple", "model": model}, category=TABLETS, vocabulary=WORDS
+        )
+        return fields["model"], fields["identity"]["glass"]
+
+    assert glass(
         'Apple iPad Pro 13" M5 256GB WiFi w/Standard Glass', "iPad Pro M5 With Standard Glass"
-    ) == ("iPad Pro M5")
-    assert ipad('Apple iPad Pro 11" M5 WiFi+Cell 2TB Nano-texture glass Silver', "iPad Pro M5") == (
-        "iPad Pro M5 Nano-texture"
-    )
+    ) == ("iPad Pro M5", "standard")
+    # rdveikals writes the glass after the capacity.
+    assert glass(
+        'Apple iPad Pro 11" M5 WiFi+Cell 2TB Nano-texture glass Silver', "iPad Pro M5"
+    ) == ("iPad Pro M5", "nano-texture")
+    # Every tablet has a glass, and one that says nothing about it has the standard one.
+    samsung = read({"name": "Samsung Galaxy Tab S10 128GB"}, category=TABLETS)
+    assert samsung["identity"]["glass"] == "standard"
     # `standard` alone is not about the glass.
     assert (
         read(
