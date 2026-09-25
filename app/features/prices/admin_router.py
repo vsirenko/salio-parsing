@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import PriceServiceDep
 from app.api.pagination import cursor_pagination_params
-from app.features.prices.schemas import AvailabilityEventRead, PriceEventRead
+from app.features.prices.schemas import AvailabilityEventRead, PriceEventRead, PriceSeries
+from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
 
 router = APIRouter(prefix="/price-history", tags=["admin: prices"])
@@ -47,6 +48,43 @@ async def history(
         until=until,
     )
     return Page[PriceEventRead].of(items, total, pagination)
+
+
+@router.get(
+    "/series",
+    response_model=PriceSeries,
+    summary="A price chart's data for one entry or one family",
+    responses={
+        404: {"model": ErrorResponse, "description": "Variant or product not found"},
+        422: {
+            "model": ErrorResponse,
+            "description": "Neither or both of variant_id and product_id",
+        },
+    },
+)
+async def series(
+    service: PriceServiceDep,
+    variant_id: Annotated[int | None, Query(description="One catalogue entry")] = None,
+    product_id: Annotated[int | None, Query(description="A family: every entry in it")] = None,
+    market_code: Annotated[str, Query(min_length=2, max_length=2)] = "LV",
+    condition: Annotated[str, Query(description="new, refurbished or used")] = "new",
+    days: Annotated[int, Query(ge=1, le=365, description="Up to and including today")] = 90,
+    with_out_of_stock: Annotated[
+        bool, Query(description="Count listings the shop says it has none of")
+    ] = False,
+) -> PriceSeries:
+    """By day: the lowest, median and highest price across the listings on sale, and each
+    shop's lowest as a line of its own. A listing's price is its last change before the day
+    ended, and it counts only between its first and last sighting. The listings are the ones
+    matched to the scope now, so correcting a match moves that listing's history too."""
+    return await service.series(
+        variant_id=variant_id,
+        product_id=product_id,
+        market_code=market_code,
+        condition=condition,
+        days=days,
+        with_out_of_stock=with_out_of_stock,
+    )
 
 
 @availability_router.get(

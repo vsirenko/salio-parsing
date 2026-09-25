@@ -8,6 +8,7 @@ tables in the system that are pure record.
 | | |
 |---|---|
 | `GET /api/admin/price-history` | newest first, by cursor — `offer_id`, `variant_id`, `condition`, `since`, `until` |
+| `GET /api/admin/price-history/series` | a price chart's data for a `variant_id` or a `product_id`: by day the lowest, median and highest price, and a line per shop |
 | `GET /api/admin/availability-history` | the same filters, its own series |
 
 Read-only. Rows are written by ingestion; nothing edits or deletes one. A price that was
@@ -61,6 +62,17 @@ nobody can explain.
 **Partitioned by month from the first migration**, with a default partition so an insert
 never fails for a range nobody created. Retrofitting partitioning onto a table this size is
 its own project, which is why it is not left for later.
+
+**A chart is computed from the changes, not stored.** `series` crosses every listing now
+matched into the entry or the family with each day of the window and takes, for each, its
+last price change before the day ended — the price held until it moved — and its last stock
+state. A listing counts only between its first and last sighting, so a card the shop took
+down stops pulling the band the day after it was last seen, and by default a listing the
+shop says it has none of is left out (`with_out_of_stock` counts it). Which listings is the
+catalogue's answer now: a match corrected today moves that listing's whole history onto the
+right chart, which is what keying the rows by the listing was for. A day with no listing on
+sale is left out, and a chart draws a gap there. Days are UTC. Measured on 25.09.2026: 115 ms
+for a family of 467 listings over 30 days, 13 ms for one entry.
 
 ## Decisions worth knowing before changing it
 

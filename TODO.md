@@ -967,6 +967,9 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **Workers still run only where the scheduler is.** They reach the service over HTTP
       now, so moving them onto another machine needs a claim endpoint — the scheduler
       currently spawns subprocesses rather than handing work out.
+- [x] A price chart's data: `GET /api/admin/price-history/series` for an entry or a family,
+      by day the band across the listings on sale and a line per shop, computed from the
+      changes. The storefront has no API yet; it will read the same service.
 - [x] Price history and availability history, two series keyed by the listing rather
       than the variant, both partitioned by month
 - [ ] **Availability has only one way in.** It is read out of whatever the main source
