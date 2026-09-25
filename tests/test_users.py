@@ -183,3 +183,76 @@ def test_a_refused_edit_still_names_its_target(client):
     assert refused["target_id"] == str(me["id"])
     # Nothing was applied, so nothing is recorded as changed.
     assert refused["changes"] is None
+
+
+# --- an administrator setting someone else's password ---
+
+
+def test_an_admin_sets_a_colleague_s_password_and_ends_their_sessions(client):
+    token = admin_token(client)
+    user = create(client, token)
+    old = {"email": NEW_USER["email"], "password": NEW_USER["password"]}
+    theirs = tokens(client, old)
+
+    reset = client.post(
+        f"/api/admin/users/{user['id']}/password",
+        headers=auth(token),
+        json={"new_password": "brand-new-secret"},
+    )
+    assert reset.status_code == 200, reset.text
+    assert "password" not in reset.text
+    # Every session the account had is over, refresh tokens included.
+    assert client.get("/api/auth/me", headers=auth(theirs["access_token"])).status_code == 401
+    stale = client.post("/api/auth/refresh", json={"refresh_token": theirs["refresh_token"]})
+    assert stale.status_code == 401
+    assert client.post("/api/auth/login", json=old).status_code == 401
+    assert (
+        client.post("/api/auth/login", json={**old, "password": "brand-new-secret"}).status_code
+        == 200
+    )
+
+    [entry] = client.get(
+        "/api/admin/audit",
+        headers=auth(token),
+        params={"target_type": "user", "target_id": str(user["id"]), "path": "/password"},
+    ).json()["items"]
+    assert entry["changes"] == {"password_reset": True}
+
+
+def test_your_own_password_is_changed_with_the_current_one(client):
+    token = admin_token(client)
+    me = client.get("/api/admin/auth/me", headers=auth(token)).json()
+    refused = client.post(
+        f"/api/admin/users/{me['id']}/password",
+        headers=auth(token),
+        json={"new_password": "brand-new-secret"},
+    )
+    assert (refused.status_code, refused.json()["error"]["code"]) == (409, "own_password")
+    assert client.get("/api/admin/auth/me", headers=auth(token)).status_code == 200
+
+
+def test_a_reset_password_has_the_same_rules_as_any_other(client):
+    token = admin_token(client)
+    user = create(client, token)
+    url = f"/api/admin/users/{user['id']}/password"
+    assert client.post(url, headers=auth(token), json={"new_password": "short"}).status_code == 422
+    missing = client.post(
+        "/api/admin/users/999999/password", headers=auth(token), json={"new_password": "x" * 9}
+    )
+    assert missing.status_code == 404
+
+
+def test_users_are_found_by_email_or_name_and_by_whether_they_may_sign_in(client):
+    token = admin_token(client)
+    user = create(client, token)
+    client.patch(f"/api/admin/users/{user['id']}", headers=auth(token), json={"is_active": False})
+
+    def ids(**params):
+        response = client.get("/api/admin/users", headers=auth(token), params=params)
+        assert response.status_code == 200, response.text
+        return [row["id"] for row in response.json()["items"]]
+
+    assert ids(search="NEW@example") == [user["id"]]
+    assert ids(search="new person") == [user["id"]]
+    assert user["id"] in ids(is_active=False)
+    assert user["id"] not in ids(is_active=True)

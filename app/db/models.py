@@ -74,7 +74,9 @@ class AuditEntry(Base):
     status_code: Mapped[int] = mapped_column(Integer)
     target_type: Mapped[str | None] = mapped_column(String(50))
     target_id: Mapped[str | None] = mapped_column(String(64))
-    changes: Mapped[dict | None] = mapped_column(JSONB)
+    # SQL NULL for "nothing was recorded", not a JSON `null`: 26815 of the first 80453
+    # entries held the JSON value, one more thing a reader had to know to filter on.
+    changes: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
     ip: Mapped[str | None] = mapped_column(String(45))
     user_agent: Mapped[str | None] = mapped_column(String(512))
     duration_ms: Mapped[int] = mapped_column(Integer)
@@ -85,6 +87,8 @@ class AuditEntry(Base):
         Index("ix_audit_entries_id_desc", id.desc()),
         Index("ix_audit_entries_created_at", created_at.desc()),
         Index("ix_audit_entries_actor_id", actor_id),
+        # A card's history: everything done to one shop, one user, one brand.
+        Index("ix_audit_entries_target", target_type, target_id, id.desc()),
     )
 
 

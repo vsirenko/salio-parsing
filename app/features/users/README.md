@@ -15,8 +15,9 @@ panel they may sign in to.
 | `POST /api/admin/auth/refresh` | refresh the admin session |
 | `POST /api/admin/auth/password` | change your own password, returns a fresh pair |
 | `GET /api/admin/auth/me` | current admin |
-| `GET · POST /api/admin/users` | list and create accounts |
+| `GET · POST /api/admin/users` | list and create accounts — filter by `role`, `is_active`, `search` (email or name) |
 | `GET · PATCH /api/admin/users/{user_id}` | read or edit one |
+| `POST /api/admin/users/{user_id}/password` | set someone else's password, ending their sessions |
 
 `router.py` is the customer side. `admin_router.py` holds three routers: `auth_public_router`
 for the two routes that mint a token without one, `auth_router` and `users_router` for
@@ -52,6 +53,11 @@ from a bare user id would be dead on arrival.
 - A user edit refuses to remove the caller's own admin access. That one guard is what keeps
   the panel reachable — the caller is by definition an active admin, so whoever else they
   demote, one is left standing. Do not add a "last active admin" count; it can never fire.
+- An administrator may set another account's password — a colleague who lost theirs, a
+  collector's machine account — with no current password, and the epoch moves with it. Never
+  the caller's own (409 `own_password`): that one has to be proved, or a stolen admin token
+  could lock its owner out. It checks no password, so it is not a sign-in and takes no
+  rate limiter; the audit entry says `password_reset`, never the value.
 - Accounts are retired with `is_active = false`, never deleted. The audit trail points at
   the user row.
 - Sign-in goes through the [rate_limit](../rate_limit/README.md) feature.

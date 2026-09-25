@@ -97,6 +97,16 @@ class PasswordChange(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class PasswordReset(BaseModel):
+    """An administrator setting another account's password: a colleague who lost theirs, or a
+    collector's machine account. No current password — the caller is not the owner, and the
+    admin token is what authorises it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str

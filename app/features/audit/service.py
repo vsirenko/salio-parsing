@@ -17,6 +17,8 @@ from app.schemas.pagination import Pagination
 
 # status >= 400 is a failure; expressed here so the filter can run in SQL.
 FAILURE_FROM = 400
+# The methods that only read. Everything else is an attempt to change something.
+READS = ("GET", "HEAD", "OPTIONS")
 
 
 async def record_entry(payload: AuditEntryCreate) -> None:
@@ -41,7 +43,10 @@ class AuditService:
         pagination: Pagination,
         *,
         actor_id: int | None = None,
-        method: str | None = None,
+        methods: list[str] | None = None,
+        writes: bool | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
         path: str | None = None,
         outcome: Outcome | None = None,
         since: datetime | None = None,
@@ -55,8 +60,16 @@ class AuditService:
             stmt = stmt.where(AuditEntryRow.id < pagination.before_id)
         if actor_id is not None:
             stmt = stmt.where(AuditEntryRow.actor_id == actor_id)
-        if method:
-            stmt = stmt.where(AuditEntryRow.method == method.upper())
+        if methods:
+            stmt = stmt.where(AuditEntryRow.method.in_([m.upper() for m in methods]))
+        if writes is True:
+            stmt = stmt.where(AuditEntryRow.method.not_in(READS))
+        elif writes is False:
+            stmt = stmt.where(AuditEntryRow.method.in_(READS))
+        if target_type:
+            stmt = stmt.where(AuditEntryRow.target_type == target_type)
+        if target_id:
+            stmt = stmt.where(AuditEntryRow.target_id == target_id)
         if path:
             stmt = stmt.where(AuditEntryRow.path.contains(path))
         if outcome is Outcome.SUCCESS:

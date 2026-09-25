@@ -27,6 +27,7 @@ from app.core.security import (
 from app.features.users.schemas import (
     LoginRequest,
     PasswordChange,
+    PasswordReset,
     RefreshRequest,
     Role,
     TokenPair,
@@ -124,8 +125,12 @@ async def list_users(
     users: UserServiceDep,
     pagination: PageParams,
     role: Annotated[Role | None, Query(description="Filter by role")] = None,
+    is_active: Annotated[bool | None, Query(description="Filter by whether it may sign in")] = None,
+    search: Annotated[
+        str | None, Query(max_length=200, description="Part of the email or the name")
+    ] = None,
 ) -> Page[UserRead]:
-    items, total = await users.list_users(pagination, role=role)
+    items, total = await users.list_users(pagination, role=role, is_active=is_active, search=search)
     return Page[UserRead].of([UserRead.model_validate(u) for u in items], total, pagination)
 
 
@@ -173,4 +178,25 @@ async def update_user(
     so there is no delete here and deliberately no service method behind one.
     """
     user = await users.update_user(user_id, payload, actor_id=current_admin.id)
+    return UserRead.model_validate(user)
+
+
+@users_router.post(
+    "/{user_id}/password",
+    response_model=UserRead,
+    summary="Set another user's password",
+    responses={
+        404: {"model": ErrorResponse, "description": "User not found"},
+        409: {"model": ErrorResponse, "description": "Your own: use /auth/password"},
+    },
+)
+async def reset_password(
+    user_id: int,
+    payload: PasswordReset,
+    users: UserServiceDep,
+    current_admin: CurrentAdmin,
+) -> UserRead:
+    """Every session the account has ends with it, refresh tokens included. The caller's own
+    password is refused here (409 `own_password`): that one needs the current password."""
+    user = await users.reset_password(user_id, payload.new_password, actor_id=current_admin.id)
     return UserRead.model_validate(user)

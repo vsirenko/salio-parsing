@@ -5414,6 +5414,23 @@
         "title": "PasswordChange",
         "type": "object"
       },
+      "PasswordReset": {
+        "additionalProperties": false,
+        "description": "An administrator setting another account's password: a colleague who lost theirs, or a\ncollector's machine account. No current password — the caller is not the owner, and the\nadmin token is what authorises it.",
+        "properties": {
+          "new_password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_password"
+        ],
+        "title": "PasswordReset",
+        "type": "object"
+      },
       "PendingKind": {
         "description": "What a pass of one kind would pay for if started now.\n\n`eligible` is every listing it would consider with no limit; `to_ask` the distinct\nquestions among them the store has no answer for — two shops writing one title are one\nquestion. The tokens are that times this kind's average so far, null before any answer\nof the kind was bought.",
         "properties": {
@@ -11574,21 +11591,80 @@
             }
           },
           {
-            "description": "HTTP method, e.g. POST",
+            "description": "HTTP methods, repeatable: ?method=PATCH&method=PUT",
             "in": "query",
             "name": "method",
             "required": false,
             "schema": {
               "anyOf": [
                 {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "HTTP methods, repeatable: ?method=PATCH&method=PUT",
+              "title": "Method"
+            }
+          },
+          {
+            "description": "true: only attempts to change something; false: only reads",
+            "in": "query",
+            "name": "writes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "true: only attempts to change something; false: only reads",
+              "title": "Writes"
+            }
+          },
+          {
+            "description": "What was acted on: user, shop, brand…",
+            "in": "query",
+            "name": "target_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 50,
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "HTTP method, e.g. POST",
-              "title": "Method"
+              "description": "What was acted on: user, shop, brand…",
+              "title": "Target Type"
+            }
+          },
+          {
+            "description": "Which one, with target_type",
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Which one, with target_type",
+              "title": "Target Id"
             }
           },
           {
@@ -20095,6 +20171,43 @@
             }
           },
           {
+            "description": "Filter by whether it may sign in",
+            "in": "query",
+            "name": "is_active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by whether it may sign in",
+              "title": "Is Active"
+            }
+          },
+          {
+            "description": "Part of the email or the name",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the email or the name",
+              "title": "Search"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -20333,6 +20446,84 @@
           }
         ],
         "summary": "Update a user",
+        "tags": [
+          "admin: users"
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}/password": {
+      "post": {
+        "description": "Every session the account has ends with it, refresh tokens included. The caller's own\npassword is refused here (409 `own_password`): that one needs the current password.",
+        "operationId": "reset_password_api_admin_users__user_id__password_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordReset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "User not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Your own: use /auth/password"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set another user's password",
         "tags": [
           "admin: users"
         ]

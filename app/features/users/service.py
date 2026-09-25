@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,11 +71,21 @@ class UserService:
         return user
 
     async def list_users(
-        self, pagination: Pagination, *, role: Role | None = None
+        self,
+        pagination: Pagination,
+        *,
+        role: Role | None = None,
+        is_active: bool | None = None,
+        search: str | None = None,
     ) -> tuple[list[UserInDB], int]:
         stmt = select(User)
         if role is not None:
             stmt = stmt.where(User.role == role.value)
+        if is_active is not None:
+            stmt = stmt.where(User.is_active.is_(is_active))
+        if search and search.strip():
+            pattern = f"%{search.strip()}%"
+            stmt = stmt.where(or_(User.email.ilike(pattern), User.full_name.ilike(pattern)))
 
         rows, total = await paginated(self.session, stmt.order_by(User.id), pagination)
         return [UserInDB.model_validate(row) for row in rows], total
@@ -168,6 +178,29 @@ class UserService:
         await self.session.flush()
         await self.session.refresh(user)
         audit.record_changes(password_changed=True)
+        return UserInDB.model_validate(user)
+
+    async def reset_password(self, user_id: int, new_password: str, *, actor_id: int) -> UserInDB:
+        """Set another account's password, ending every session it has.
+
+        Not for the caller's own: changing your own means proving the current one, and an
+        admin token that could skip that would let whoever holds a stolen one lock the owner
+        out. `/auth/password` is that path.
+        """
+        user = await self.session.get(User, user_id)
+        if user is None:
+            raise NotFoundError(f"User {user_id} not found")
+        audit.set_target("user", user.id)
+        if user.id == actor_id:
+            raise ConflictError(
+                "Change your own password with the current one", code="own_password"
+            )
+
+        user.password_hash = hash_password(new_password)
+        user.token_epoch += 1
+        await self.session.flush()
+        await self.session.refresh(user)
+        audit.record_changes(password_reset=True)
         return UserInDB.model_validate(user)
 
     async def authenticate(

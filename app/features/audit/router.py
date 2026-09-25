@@ -28,7 +28,19 @@ async def list_audit_entries(
     audit: AuditServiceDep,
     pagination: PageParams,
     actor_id: Annotated[int | None, Query(description="Filter by the admin who acted")] = None,
-    method: Annotated[str | None, Query(description="HTTP method, e.g. POST")] = None,
+    method: Annotated[
+        list[str] | None, Query(description="HTTP methods, repeatable: ?method=PATCH&method=PUT")
+    ] = None,
+    writes: Annotated[
+        bool | None,
+        Query(description="true: only attempts to change something; false: only reads"),
+    ] = None,
+    target_type: Annotated[
+        str | None, Query(max_length=50, description="What was acted on: user, shop, brand…")
+    ] = None,
+    target_id: Annotated[
+        str | None, Query(max_length=64, description="Which one, with target_type")
+    ] = None,
     path: Annotated[str | None, Query(description="Substring of the request path")] = None,
     outcome: Annotated[Outcome | None, Query(description="success or failure")] = None,
     since: Annotated[datetime | None, Query(description="Entries at or after this time")] = None,
@@ -37,7 +49,10 @@ async def list_audit_entries(
     items, total = await audit.list_entries(
         pagination,
         actor_id=actor_id,
-        method=method,
+        methods=method,
+        writes=writes,
+        target_type=target_type,
+        target_id=target_id,
         path=path,
         outcome=outcome,
         since=since,

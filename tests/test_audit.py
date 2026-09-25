@@ -211,3 +211,54 @@ async def _two_admins_at_once():
         assert entry["actor_id"] in emails, "every action must carry a real actor"
         assert entry["actor_email"] == emails[entry["actor_id"]]
     assert {e["actor_id"] for e in by_user} == {1, second_id}
+
+
+# --- reading it: what was changed, and to what ---
+
+
+def test_the_trail_filters_to_changes_and_to_several_methods(client):
+    token = admin_token(client)
+    client.get("/api/admin/users", headers=auth(token))
+    created = client.post(
+        "/api/admin/users",
+        headers=auth(token),
+        json={"email": "new@example.com", "password": "password123"},
+    ).json()
+    client.patch(f"/api/admin/users/{created['id']}", headers=auth(token), json={"full_name": "A"})
+
+    written = entries(client, token, writes="true")
+    assert written and all(entry["method"] not in ("GET", "HEAD") for entry in written)
+    assert {"GET"} == {entry["method"] for entry in entries(client, token, writes="false")}
+    both = entries(client, token, method=["patch", "POST"], path="/users")
+    assert {entry["method"] for entry in both} == {"PATCH", "POST"}
+
+
+def test_one_record_s_history(client):
+    token = admin_token(client)
+    created = client.post(
+        "/api/admin/users",
+        headers=auth(token),
+        json={"email": "new@example.com", "password": "password123"},
+    ).json()
+    client.patch(f"/api/admin/users/{created['id']}", headers=auth(token), json={"full_name": "A"})
+
+    history = entries(client, token, target_type="user", target_id=str(created["id"]))
+    assert [entry["method"] for entry in history] == ["PATCH", "POST"]
+    assert entries(client, token, target_type="user", target_id="999999") == []
+
+
+def test_nothing_recorded_is_stored_as_no_value(client, event_loop):
+    from sqlalchemy import text
+
+    from app.db.session import session_factory
+
+    token = admin_token(client)
+    client.get("/api/admin/users", headers=auth(token))
+
+    async def json_nulls() -> int:
+        async with session_factory() as session:
+            return await session.scalar(
+                text("select count(*) from audit_entries where changes = 'null'::jsonb")
+            )
+
+    assert event_loop.run_until_complete(json_nulls()) == 0

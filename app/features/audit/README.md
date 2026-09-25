@@ -8,6 +8,10 @@ queryable, and written even when the request it describes failed.
 `GET /api/admin/audit` — read the trail, newest first, by cursor. There is no write, update
 or delete endpoint, and there must never be one.
 
+Filters: `actor_id`, `method` (repeatable), `writes` (`true` — only attempts to change
+something, `false` — only reads), `target_type` with `target_id` (one record's history),
+`path` (a substring), `outcome`, `since`, `until`.
+
 ## How it works
 
 **`middleware.py` writes the envelope** — actor, method, path, status, address, user agent,
@@ -38,6 +42,15 @@ everything down a page, so offset would repeat rows on an append-only feed.
   only symptom is an action that returned 200 and left no record. This has happened once.
 - A failed write is logged and swallowed rather than failing the request. If the trail
   becomes a compliance requirement, invert that here.
+- **Reads are recorded, and `writes=true` is how a person's changes are found among them.**
+  On 25.09.2026 four days held 80453 entries: 25862 reads, 9260 of them the panel's own
+  polling, and 47 edits by a person. Not recording reads was the other way to that, and it
+  would change what the rule promises — every admin request — for a filter's worth of
+  benefit; it stays a decision to take on purpose rather than a side effect.
+- **A record's history is `target_type` + `target_id`**, indexed together with the id so
+  a card's tab reads one index range, newest first.
+- **Nothing recorded is SQL NULL, not JSON `null`.** The first 26815 entries hold the JSON
+  value, and stay as written — the trail is append-only, and the two mean the same.
 - Client traffic is not audited; the middleware is scoped by path prefix in `app/main.py`.
 
 See also `.claude/rules/audit.md`.
