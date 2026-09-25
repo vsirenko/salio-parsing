@@ -1,5 +1,5 @@
 # Every push and pull request is checked; a push to main that passes is deployed.
-# The deploy needs four repository secrets — see deploy/README.md.
+# The deploy reads its secrets from the `production` environment — see deploy/README.md.
 name: ci
 
 on:
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17-alpine
@@ -56,7 +56,7 @@ jobs:
   deploy:
     needs: checks
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # One deploy at a time, and never cancelled halfway: a migration interrupted between
     # its statements is worse than a deploy that waits.
     concurrency:
@@ -73,6 +73,18 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      # The application's settings live in the `PROD_ENV` secret, the whole .env in one: the
+      # server's copy is written from it on every deploy, so a secret changes in one place
+      # and a server rebuilt from nothing needs no file carried to it by hand.
+      - name: the server's settings
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_AT: ${{ secrets.DEPLOY_USER }}
+          PATH_ON_SERVER: ${{ secrets.DEPLOY_PATH }}
+          PROD_ENV: ${{ secrets.PROD_ENV }}
+        run: |
+          printf '%s\n' "$PROD_ENV" | ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes \
+            "$USER_AT@$HOST" "umask 077 && cat > '$PATH_ON_SERVER/.env.next' && mv '$PATH_ON_SERVER/.env.next' '$PATH_ON_SERVER/.env'"
       - name: deploy
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}

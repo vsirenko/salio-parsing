@@ -30,8 +30,11 @@ every shop again.
    git clone https://github.com/vsirenko/salio-parsing.git /srv/salio-parsing
    ```
 
-3. `.env` beside it, from `.env.example`, and only ever on the server. What differs from a
-   laptop's:
+3. The settings: a `.env` made from `.env.example`, stored whole as the `PROD_ENV` secret
+   of the `production` environment on GitHub. Every deploy writes the server's `.env` from
+   it (mode 600), so a secret is changed in one place — GitHub → Settings → Environments →
+   production — and takes effect on the next deploy. Edit the server's copy by hand and
+   the next deploy overwrites it. What differs from a laptop's:
 
    | setting | value |
    |---|---|
@@ -40,7 +43,7 @@ every shop again.
    | `SEED_USERS` | `false` |
    | `POSTGRES_PASSWORD` | a long random one; nothing outside the compose network reaches the database |
    | `WORKER_PASSWORD` | a long random one — `ensure-worker` sets the account to it |
-   | `API_PORT` | the loopback port the reverse proxy forwards to, `8080` by default |
+   | `API_PORT` | the loopback port the reverse proxy forwards to; `8090` on this server, where `8080` is another project's |
    | `API_BASE_URL` | `http://api:8000` (the workers reach the api inside the network) |
    | `DOCS_ENABLED` | `false`, unless the panel's developers want `/docs` there |
    | `CORS_ORIGINS` | the panel's and the storefront's origins, explicitly |
@@ -96,9 +99,9 @@ along too: switch it off in the panel unless scripts will run against the server
 
 ## Deploys after that
 
-A push to `main` runs the checks, and if they pass the `deploy` job connects to the server
-and runs `deploy/deploy.sh <commit>`. The job needs these repository secrets, under an
-environment named `production`:
+A push to `main` runs the checks, and if they pass the `deploy` job connects to the server,
+writes its `.env` from `PROD_ENV` and runs `deploy/deploy.sh <commit>`. Its secrets, all in
+the `production` environment:
 
 | secret | what |
 |---|---|
@@ -107,6 +110,11 @@ environment named `production`:
 | `DEPLOY_PATH` | the checkout, `/srv/salio-parsing` |
 | `DEPLOY_SSH_KEY` | a private key made for this and nothing else; its public half in that user's `~/.ssh/authorized_keys` |
 | `DEPLOY_KNOWN_HOSTS` | `ssh-keyscan <host>` from a machine you trust, so the job refuses a server that is not yours |
+| `PROD_ENV` | the whole `.env`, see "The server, once" |
+
+A secret is best set without its value passing through a terminal's scrollback: piped,
+`ssh <server> 'cat /srv/salio-parsing/.env' | gh secret set PROD_ENV --env production`, and
+likewise for a new key made on the server and removed there once stored.
 
 Until they are set the `deploy` job fails and the checks still run.
 
