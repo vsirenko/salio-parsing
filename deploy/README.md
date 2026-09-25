@@ -46,6 +46,7 @@ every shop again.
    | `WORKER_PASSWORD` | a long random one — `ensure-worker` sets the account to it |
    | `API_PORT` | the loopback port for a look from the server itself; `8090` here, where `8080` is another project's |
    | `API_DOMAIN` | the api's name, `api.salio.lv` |
+   | `ADMIN_DOMAIN` | the admin panel's name, `admin.salio.lv`: Caddy serves the panel's build from `/srv/salio-admin/current` and `/api` on the same origin, so the panel needs no CORS |
    | `API_BASE_URL` | `http://api:8000` (the workers reach the api inside the network) |
    | `DOCS_ENABLED` | `false`, unless the panel's developers want `/docs` there |
    | `CORS_ORIGINS` | the panel's and the storefront's origins, explicitly |

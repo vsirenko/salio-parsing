@@ -24,3 +24,42 @@
 		format console
 	}
 }
+
+# The admin panel: its build, put in /srv/salio-admin by salio-admin's own workflow, and its
+# API on the same origin, so the panel needs no CORS and no URL of the api baked in.
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	handle {
+		root * /srv/admin/current
+		# A route of the panel is not a file: react-router takes it from index.html.
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Vite names every asset by its content, so an asset never changes under its name; the
+	# page that names them must not be kept, or a deploy would not reach a browser.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@page not path /assets/* /api/*
+	header @page Cache-Control "no-cache"
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
