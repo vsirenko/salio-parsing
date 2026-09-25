@@ -297,6 +297,11 @@ def megabytes(text: str) -> int | None:
     barcode reported 128 GB and 4 GB, and a barcode is proof that it is one phone. Fixing
     that produced the second kind, and the same comparison caught it.
     """
+    # A size the title marks as working memory is not the capacity, however alone it is:
+    # m79's `… | Qualcomm | Internal RAM 12 GB | …` names no capacity at all, and read as
+    # one it filed 12 phones on 25.09.2026 as 12 GB of storage. `RAM` is the industry's
+    # word, the same in every language.
+    text = _MARKED_RAM.sub(" ", text)
     sizes = [_size(amount, unit) for amount, unit in _SIZE.findall(text)]
     # A pair sharing one unit contributes both of its halves, not just the spelled one.
     for first, second, unit in _SHARED_UNIT.findall(text):
@@ -304,6 +309,12 @@ def megabytes(text: str) -> int | None:
 
     believable = [size for size in sizes if size <= LARGEST_DEVICE_MB]
     return max(believable) if believable else None
+
+
+_MARKED_RAM = re.compile(
+    r"\bRAM\s*:?\s*\d+(?:[.,]\d+)?\s?GB\b|\b\d+(?:[.,]\d+)?\s?GB\s+(?:of\s+)?RAM\b",
+    re.IGNORECASE,
+)
 
 
 def _size(amount: str, unit: str) -> int:

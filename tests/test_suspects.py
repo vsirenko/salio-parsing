@@ -125,3 +125,66 @@ def test_the_report_changes_nothing_and_filters(client):
     assert suspects(client, token)["by_kind"] == {"word_order": 1}
     assert suspects(client, token, category_id=999999)["total"] == 0
     assert suspects(client, token)["total"] == 1
+
+
+def test_a_size_read_as_a_name_is_a_reading_to_fix_and_not_an_alias(client):
+    token = admin_token(client)
+    category, brand, *_ = setup(client, token)
+    for model in ("15.6", '15.6"'):
+        post(
+            client,
+            token,
+            "/api/admin/products",
+            {"brand_id": brand["id"], "category_id": category["id"], "model": model},
+        )
+    body = suspects(client, token)
+    assert body["by_kind"] == {"not_a_name": 2}
+    item = body["items"][0]
+    assert item["action"] == "reading"
+    # The ids the fix is made with: the registry and a reparse are keyed by them.
+    assert item["brand"] == {"id": brand["id"], "name": "Apple"}
+    assert item["category"]["id"] == category["id"]
+
+
+def test_a_part_number_with_a_space_in_it_is_not_a_code(client):
+    """`Galaxy S25 256-Silverblue` is a piece of a title a shop put in the field."""
+    token = admin_token(client)
+    category, brand, storage, colour, values = setup(client, token)
+    same = [{"attribute_id": storage["id"], "value_num": "12288"}]
+    entry(client, token, category, brand, "Galaxy S25 Ultra", same, "Galaxy S25 256-Silverblue")
+    entry(client, token, category, brand, "Galaxy | S25 Ultra", same, "Galaxy S25 256-Silverblue")
+    assert suspects(client, token, kind="part_number")["items"] == []
+
+
+def test_a_chosen_pair_is_merged_and_one_that_differs_is_refused_unless_said(client):
+    token = admin_token(client)
+    category, brand, storage, colour, values = setup(client, token)
+    black = {"attribute_id": colour["id"], "value_id": values["black"]}
+    blue = {"attribute_id": colour["id"], "value_id": values["blue"]}
+    size = {"attribute_id": storage["id"], "value_num": "262144"}
+    one = entry(client, token, category, brand, "MacBook Air", [size, black])
+    two = entry(client, token, category, brand, "Apple MacBook Air", [size, black])
+    other = entry(client, token, category, brand, "MacBook Air M5", [size, blue])
+
+    def merge(from_id, into_id, **extra):
+        return client.post(
+            "/api/admin/matching/merge/pair",
+            headers=auth(token),
+            json={"from_id": from_id, "into_id": into_id, **extra},
+        )
+
+    done = merge(two, one, reason="one MacBook written twice")
+    assert done.status_code == 200, done.text
+    assert (done.json()["from"]["id"], done.json()["into"]["id"]) == (two, one)
+    assert client.get(f"/api/admin/variants/{two}", headers=auth(token)).status_code == 404
+
+    refused = merge(other, one)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "axes_differ"
+    assert refused.json()["error"]["details"]["axes"][0]["key"] == "color"
+    forced = merge(other, one, despite_axes=True)
+    assert forced.status_code == 200, forced.text
+    kept = client.get(f"/api/admin/variants/{one}", headers=auth(token)).json()
+    assert kept["axes"]["color"] == "black"
+    assert merge(one, one).status_code == 422
+    assert merge(999999, one).status_code == 404

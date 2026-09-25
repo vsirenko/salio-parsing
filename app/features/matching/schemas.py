@@ -361,6 +361,8 @@ class QueueSummary(BaseModel):
 class SuspectKind(StrEnum):
     # One part number on entries of one maker that agree on every axis they share.
     PART_NUMBER = "part_number"
+    # A family whose name has no letter in it — `15.6`, `15.6"`: a size read as the model.
+    NOT_A_NAME = "not_a_name"
     # Two entries of one model that differ in one number, and by under 5%.
     NEAR_VALUE = "near_value"
     # Families of one maker whose names are the same words in another order or case.
@@ -384,16 +386,36 @@ class Suspect(BaseModel):
 
     `action` is a suggestion, not a verdict: `merge` (one product, fold the entries),
     `axis` (a reading gives one number two ways — a rule or a word to fix, then a reparse),
-    `registry` (one name spelled several ways — enter the others as aliases of `evidence`).
+    `registry` (one name spelled several ways — enter the others as aliases of `evidence`),
+    `reading` (what was read as the name is not one — a rule to fix, not a word to enter).
+    `brand` and `category` carry their ids, which the registry and a reparse are keyed by.
     """
 
     kind: SuspectKind
-    action: Literal["merge", "axis", "registry"]
-    brand: str
-    category: str
+    action: Literal["merge", "axis", "registry", "reading"]
+    brand: "SuspectRef"
+    category: "SuspectRef"
     detail: str
     evidence: str = Field(description="The part number, the axis, or the name to keep")
     entries: list[SuspectEntry]
+
+
+class SuspectRef(BaseModel):
+    id: int
+    name: str
+
+
+class PairMerge(BaseModel):
+    """Two entries a person has decided are one product: `from` is folded into `into`."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    from_id: int
+    into_id: int
+    reason: str = Field("merged by hand", max_length=500)
+    # A pair whose entries disagree on an axis is refused unless the person says which of
+    # them is wrong by merging anyway; the survivor's value stands.
+    despite_axes: bool = False
 
 
 class SuspectReport(BaseModel):

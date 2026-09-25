@@ -5407,6 +5407,37 @@
         "title": "Page[VerdictRead]",
         "type": "object"
       },
+      "PairMerge": {
+        "additionalProperties": false,
+        "description": "Two entries a person has decided are one product: `from` is folded into `into`.",
+        "properties": {
+          "despite_axes": {
+            "default": false,
+            "title": "Despite Axes",
+            "type": "boolean"
+          },
+          "from_id": {
+            "title": "From Id",
+            "type": "integer"
+          },
+          "into_id": {
+            "title": "Into Id",
+            "type": "integer"
+          },
+          "reason": {
+            "default": "merged by hand",
+            "maxLength": 500,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_id",
+          "into_id"
+        ],
+        "title": "PairMerge",
+        "type": "object"
+      },
       "PasswordChange": {
         "additionalProperties": false,
         "description": "Changing your own password. Proving the current one is what makes it yours.",
@@ -8484,24 +8515,23 @@
         "type": "string"
       },
       "Suspect": {
-        "description": "One thing that looks filed twice, what gives it away, and what would fix it.\n\n`action` is a suggestion, not a verdict: `merge` (one product, fold the entries),\n`axis` (a reading gives one number two ways — a rule or a word to fix, then a reparse),\n`registry` (one name spelled several ways — enter the others as aliases of `evidence`).",
+        "description": "One thing that looks filed twice, what gives it away, and what would fix it.\n\n`action` is a suggestion, not a verdict: `merge` (one product, fold the entries),\n`axis` (a reading gives one number two ways — a rule or a word to fix, then a reparse),\n`registry` (one name spelled several ways — enter the others as aliases of `evidence`),\n`reading` (what was read as the name is not one — a rule to fix, not a word to enter).\n`brand` and `category` carry their ids, which the registry and a reparse are keyed by.",
         "properties": {
           "action": {
             "enum": [
               "merge",
               "axis",
-              "registry"
+              "registry",
+              "reading"
             ],
             "title": "Action",
             "type": "string"
           },
           "brand": {
-            "title": "Brand",
-            "type": "string"
+            "$ref": "#/components/schemas/SuspectRef"
           },
           "category": {
-            "title": "Category",
-            "type": "string"
+            "$ref": "#/components/schemas/SuspectRef"
           },
           "detail": {
             "title": "Detail",
@@ -8620,11 +8650,30 @@
       "SuspectKind": {
         "enum": [
           "part_number",
+          "not_a_name",
           "near_value",
           "word_order"
         ],
         "title": "SuspectKind",
         "type": "string"
+      },
+      "SuspectRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SuspectRef",
+        "type": "object"
       },
       "SuspectReport": {
         "properties": {
@@ -16254,6 +16303,73 @@
           }
         ],
         "summary": "Fold together the entries a barcode or a part number says are one product",
+        "tags": [
+          "admin: matching"
+        ]
+      }
+    },
+    "/api/admin/matching/merge/pair": {
+      "post": {
+        "description": "What a `merge` suspect, or a person, says is one product. Refused with\n`axes_differ` where the entries disagree on an axis, unless `despite_axes`; the survivor's\nvalues stand. The folded entry's id keeps resolving to the survivor.",
+        "operationId": "merge_pair_api_admin_matching_merge_pair_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairMerge"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergePair"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An entry not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "They differ on an axis, or not one thing"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The same entry twice"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fold one chosen entry into another",
         "tags": [
           "admin: matching"
         ]

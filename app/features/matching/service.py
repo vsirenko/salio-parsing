@@ -84,6 +84,7 @@ from app.features.matching.schemas import (
     NamedRef,
     OfferBrief,
     OfferMatchRead,
+    PairMerge,
     PromotionReport,
     QueueSummary,
     Reason,
@@ -1205,6 +1206,45 @@ class MatchingService:
         """What looks filed twice, with the evidence; see `suspects.py`. Changes nothing."""
         return await find_suspects(
             self.session, category_id=category_id, brand_id=brand_id, kinds=kinds, limit=limit
+        )
+
+    async def merge_pair(self, payload: PairMerge) -> MergePair:
+        """Fold one entry into another because a person says they are one product.
+
+        The same guard as the passes: a pair whose entries disagree on an axis is refused
+        (409 `axes_differ`, naming the axes), because that is usually a listing on the wrong
+        entry rather than one product. `despite_axes` is the person saying they checked; the
+        survivor's values stand.
+        """
+        audit.set_target("variant", payload.into_id)
+        before = await self._snapshots([payload.from_id, payload.into_id])
+        for variant_id in (payload.from_id, payload.into_id):
+            if before[variant_id].title is None and before[variant_id].model is None:
+                raise NotFoundError(f"Variant {variant_id} not found")
+        differ = await self._axes_differ(payload.from_id, payload.into_id)
+        if differ and not payload.despite_axes:
+            raise ConflictError(
+                "They differ in "
+                + ", ".join(f"{key}: {mine} / {theirs}" for key, mine, theirs in differ),
+                code="axes_differ",
+                details={
+                    "axes": [
+                        {"key": key, "from": mine, "into": theirs} for key, mine, theirs in differ
+                    ]
+                },
+            )
+        await CatalogService(self.session).merge_variants(
+            payload.from_id, payload.into_id, reason=payload.reason, decided_by="human"
+        )
+        audit.record_changes(
+            merged=payload.from_id, into=payload.into_id, despite_axes=payload.despite_axes
+        )
+        return MergePair(
+            from_=before[payload.from_id],
+            into=before[payload.into_id],
+            outcome="merged",
+            reason="by hand",
+            detail=payload.reason,
         )
 
     async def merge_duplicates(self, *, limit: int = 100, dry_run: bool = False) -> MergeReport:

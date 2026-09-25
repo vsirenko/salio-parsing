@@ -25,6 +25,7 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `POST /api/admin/matching/promote` | do that for everything identifiable in the queue |
 | `POST /api/admin/matching/merge` | fold together the entries a barcode — or an Apple part number — says are one product |
 | `GET /api/admin/matching/suspects` | what looks filed twice, with the evidence and the fix to make; changes nothing |
+| `POST /api/admin/matching/merge/pair` | fold one chosen entry into another; refused where they differ on an axis unless `despite_axes` |
 | `POST /api/admin/matching/rebuild` | rebuild the entries named after a reading that has since changed, and delete the empty families nothing points at |
 
 ## How it works
@@ -189,8 +190,13 @@ them and says what would fix each: one part number on entries of one maker that 
 every axis they share (`merge`); two entries of one model that differ in one number, by
 under 5% (`axis` — `1000 GB` against `1 TB` is 2.3%, two real capacities are further apart);
 families whose names are the same words in another order or case (`registry`, naming the
-spelling most entries carry). It changes nothing, and the ones holding the most listings
-come first.
+spelling most entries carry); and a family whose name has no letter in it (`reading` —
+`15.6`, `15.6"` are a screen read as the model, which no alias can fix). A part number with a
+space in it is not a code — `Galaxy S25 256-Silverblue` is a piece of a title a shop put in
+the field, 156 of the learned ones — and is not offered for a merge. It changes nothing, the
+ones holding the most listings come first, and each carries its brand's and category's ids,
+which the registry and a reparse are keyed by. A suspect a person agrees with is folded by
+`POST /matching/merge/pair`, under the same axis guard as the passes.
 
 **A part number merges where the maker's names one configuration.** Apple's does —
 `MDH74ZE/A` is one MacBook Air with one keyboard — and 67 of 112 of its MacBook part numbers

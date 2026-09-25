@@ -32,6 +32,7 @@ from app.features.matching.schemas import (
     Suspect,
     SuspectEntry,
     SuspectKind,
+    SuspectRef,
     SuspectReport,
 )
 
@@ -40,6 +41,10 @@ from app.features.matching.schemas import (
 # really different are further apart than this — 256 and 512, 14 and 16.
 NEAR = Decimal("0.05")
 _WORD = re.compile(r"[0-9a-z]+")
+_WHITESPACE = re.compile(r"\s")
+# A name has a letter in it. `15.6`, `15.6"` and `17.3` were families: a screen read as the
+# model, which the registry cannot fix — the reading has to.
+_LETTER = re.compile(r"[^\W\d_]")
 
 
 async def find_suspects(
@@ -57,8 +62,10 @@ async def find_suspects(
         found += await _one_part_number(session, entries)
     if SuspectKind.NEAR_VALUE in wanted:
         found += _near_values(entries)
-    if SuspectKind.WORD_ORDER in wanted:
-        found += await _word_order(session, category_id=category_id, brand_id=brand_id)
+    if wanted & {SuspectKind.WORD_ORDER, SuspectKind.NOT_A_NAME}:
+        found += await _word_order(
+            session, category_id=category_id, brand_id=brand_id, wanted=wanted
+        )
     counts: dict[str, int] = defaultdict(int)
     for suspect in found:
         counts[suspect.kind.value] += 1
@@ -79,7 +86,7 @@ async def _entries(
         .scalar_subquery()
     )
     stmt = (
-        select(Variant, Brand.canonical_name, Category.slug, placed.label("placed"))
+        select(Variant, Brand.canonical_name, Category.name, placed.label("placed"))
         .join(Brand, Brand.id == Variant.brand_id)
         .join(Category, Category.id == Variant.category_id)
         .where(Variant.is_visible.is_(True))
@@ -92,8 +99,8 @@ async def _entries(
     for variant, brand, category, count in (await session.execute(stmt)).all():
         entries[variant.id] = {
             "variant": variant,
-            "brand": brand,
-            "category": category,
+            "brand": SuspectRef(id=variant.brand_id, name=brand),
+            "category": SuspectRef(id=variant.category_id, name=category),
             "offers": count or 0,
             "axes": {},
         }
@@ -163,6 +170,11 @@ async def _one_part_number(
     )
     found: list[Suspect] = []
     for _, mpn, variant_ids in rows.all():
+        # A part number is a code: `Galaxy S25 256-Silverblue` is a piece of a title a shop
+        # put in the field, 156 of the learned ones on 25.09.2026, and two entries sharing it
+        # share a shop's mistake rather than a product.
+        if _WHITESPACE.search(mpn):
+            continue
         held = [entries[v] for v in sorted(set(variant_ids)) if v in entries]
         if len(held) < 2:
             continue
@@ -219,7 +231,11 @@ def _near_values(entries: dict[int, dict[str, Any]]) -> list[Suspect]:
 
 
 async def _word_order(
-    session: AsyncSession, *, category_id: int | None, brand_id: int | None
+    session: AsyncSession,
+    *,
+    category_id: int | None,
+    brand_id: int | None,
+    wanted: set[SuspectKind],
 ) -> list[Suspect]:
     """Families of one maker whose names are the same words in another order or case."""
     held = (
@@ -248,7 +264,25 @@ async def _word_order(
     if brand_id is not None:
         stmt = stmt.where(Product.brand_id == brand_id)
     groups: dict[tuple[int, int, str], list[tuple[Any, ...]]] = defaultdict(list)
+    found: list[Suspect] = []
     for product, brand, category, count, offers in (await session.execute(stmt)).all():
+        brand_ref = SuspectRef(id=product.brand_id, name=brand)
+        category_ref = SuspectRef(id=product.category_id, name=category)
+        if not _LETTER.search(product.model):
+            if SuspectKind.NOT_A_NAME in wanted:
+                found.append(
+                    Suspect(
+                        kind=SuspectKind.NOT_A_NAME,
+                        action="reading",
+                        brand=brand_ref,
+                        category=category_ref,
+                        detail=f"`{product.model}` is not a name: a reading took it for one",
+                        evidence=product.model,
+                        entries=[_family(product, count or 0, offers or 0)],
+                    )
+                )
+            continue
+        brand, category = brand_ref, category_ref
         # `+` is a word, as in `normalize_model`: `Galaxy S25+` is not `Galaxy S25`, and is
         # `Galaxy S25 Plus`. Dropped, the first 80 suspects began with those two phones.
         spelled = product.model.casefold().replace("+", " plus ")
@@ -256,7 +290,8 @@ async def _word_order(
         groups[(product.brand_id, product.category_id, words)].append(
             (product, brand, category, count or 0, offers or 0)
         )
-    found: list[Suspect] = []
+    if SuspectKind.WORD_ORDER not in wanted:
+        return found
     for group in groups.values():
         if len(group) < 2:
             continue
@@ -275,17 +310,18 @@ async def _word_order(
                     + f"; enter the others as aliases of `{keep.model}`"
                 ),
                 evidence=keep.model,
-                entries=[
-                    SuspectEntry(
-                        id=None,
-                        product_id=row[0].id,
-                        title=row[0].title_override or row[0].title,
-                        model=row[0].model,
-                        offers_count=row[4],
-                        entries_count=row[3],
-                    )
-                    for row in group
-                ],
+                entries=[_family(row[0], row[3], row[4]) for row in group],
             )
         )
     return found
+
+
+def _family(product: Product, entries: int, offers: int) -> SuspectEntry:
+    return SuspectEntry(
+        id=None,
+        product_id=product.id,
+        title=product.title_override or product.title,
+        model=product.model,
+        offers_count=offers,
+        entries_count=entries,
+    )

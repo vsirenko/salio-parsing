@@ -17,7 +17,7 @@ from app.features.offers.normalization.categories import laptops
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 LAPTOPS_SLUG = "dateks-laptops"
-LAPTOPS_VERSION = "dateks-laptops-7"
+LAPTOPS_VERSION = "dateks-laptops-8"
 DRIVE_FIELDS = ("SSD", "HDD")
 _SIZE = re.compile(r"(\d{1,4}(?:[.,]\d)?)\s?(TB|GB)\b", re.IGNORECASE)
 

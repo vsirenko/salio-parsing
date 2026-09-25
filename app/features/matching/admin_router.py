@@ -34,9 +34,11 @@ from app.features.matching.schemas import (
     MatchDoubtRead,
     MatchOutcome,
     MatchQueueRead,
+    MergePair,
     MergeReport,
     Method,
     OfferMatchRead,
+    PairMerge,
     PromotionReport,
     QueueSummary,
     Reason,
@@ -192,6 +194,23 @@ async def list_suspects(
     return await service.suspects(
         category_id=category_id, brand_id=brand_id, kinds=kind, limit=limit
     )
+
+
+@router.post(
+    "/merge/pair",
+    response_model=MergePair,
+    summary="Fold one chosen entry into another",
+    responses={
+        404: {"model": ErrorResponse, "description": "An entry not found"},
+        409: {"model": ErrorResponse, "description": "They differ on an axis, or not one thing"},
+        422: {"model": ErrorResponse, "description": "The same entry twice"},
+    },
+)
+async def merge_pair(payload: PairMerge, service: MatchingServiceDep) -> MergePair:
+    """What a `merge` suspect, or a person, says is one product. Refused with
+    `axes_differ` where the entries disagree on an axis, unless `despite_axes`; the survivor's
+    values stand. The folded entry's id keeps resolving to the survivor."""
+    return await service.merge_pair(payload)
 
 
 @router.post(

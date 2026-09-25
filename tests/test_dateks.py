@@ -318,7 +318,7 @@ def test_without_the_registry_the_gap_stays_visible():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-3+phones-13+dateks-shop-1+dateks-5"
+    assert reading()["ruleset_version"] == "generic-3+phones-14+dateks-shop-1+dateks-5"
 
 
 # --- tablets: the same pages under the shop's word for them ---

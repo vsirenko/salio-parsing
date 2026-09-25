@@ -13,7 +13,7 @@ from app.features.offers.normalization.categories import laptops
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 LAPTOPS_SLUG = "cec-laptops"
-LAPTOPS_VERSION = "cec-laptops-3"
+LAPTOPS_VERSION = "cec-laptops-4"
 BRAND = "Apple"
 
 
