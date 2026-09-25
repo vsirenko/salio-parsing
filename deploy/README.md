@@ -55,7 +55,7 @@ every shop again.
 
    ```
    api.example.com {
-       reverse_proxy 127.0.0.1:8080
+       reverse_proxy 127.0.0.1:8090
    }
    ```
 
