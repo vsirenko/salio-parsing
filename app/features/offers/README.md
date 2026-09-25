@@ -226,6 +226,15 @@ Samsung's looks the same and behaves nothing like it: its trailing letters carry
 which tells two phones apart, so cutting them the way Apple's allow would merge phones that
 really are different.
 
+**An iPad is named by its chip, a MacBook by its family.** The difference is the axes: a
+laptop has a processor axis, so `MacBook Air` is one family and the M5 is an axis of it; a
+tablet has none, so the chip stays in the name — `iPad Air M4`, `iPad mini A17 Pro` — or an
+M2 and an M4 of one capacity and colour would be one product. Older iPads arrive under a
+generation or a year (`iPad 10th Gen`, `iPad Pro (2022)`), and Apple's rule turns either
+into the chip it carried, which is fixed history and so code, not vocabulary: on
+25.09.2026 that was eleven families of the twenty. A generation written in a shop's
+language (`7. paaudzes`) is a word and is not read.
+
 **A rule may be declared and not written.** `Rule.pending` is a gap that is visible, and the
 first one is real: colour splits a phone into variants, and across 520 collected products the
 word before `krās` takes 61 distinct forms — Latvian declension (`melns`, `melna`), plain

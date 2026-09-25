@@ -3,6 +3,8 @@ its screen size."""
 
 from types import MappingProxyType
 
+import pytest
+
 from app.features.offers.normalization import read
 from app.features.offers.normalization.rules import Vocabulary
 
@@ -58,7 +60,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
             'Apple iPad mini (A17 Pro) 8.3" Wi-Fi + Cellular 128GB',
             "iPad mini (A17 Pro) Wi-Fi + Cellular",
         )["model"]
-        == "iPad mini (A17 Pro)"
+        == "iPad mini A17 Pro"
     )
     assert reading("Samsung Galaxy Tab S10 FE 5G 128GB", "Galaxy Tab S10 FE 5G")["model"] == (
         "Galaxy Tab S10 FE"
@@ -187,13 +189,45 @@ def test_an_ipad_s_model_names_its_generation():
     """`iPad Pro` is five machines: 60 entries were made from models naming the line only."""
     # bm writes the year after the capacity, where the cut took it off.
     assert ipad("Apple iPad Pro 12.9 Wi-Fi 2TB Silver (2022) MP273HC/A", "iPad Pro") == (
-        "iPad Pro (2022)"
+        "iPad Pro M2"
     )
-    assert ipad("Apple iPad 10.9 Wi-Fi 64GB 10th Gen Silver (2022)", "iPad") == "iPad 10th Gen"
+    assert ipad("Apple iPad 10.9 Wi-Fi 64GB 10th Gen Silver (2022)", "iPad") == "iPad A14"
     # A model that already names it is left alone.
     assert ipad("Apple iPad Air 11 M3 128GB Blue", "iPad Air M3") == "iPad Air M3"
     # A title naming none: no model, rather than one that is five machines.
     assert not ipad("Apple iPad Pro 9.7 32GB Gold", "iPad Pro")
+
+
+@pytest.mark.parametrize(
+    ("title", "model", "named"),
+    [
+        ("Apple iPad 10.2 Wi-Fi 9th Gen 64GB Silver MK2L3", "iPad 10.2 9th Gen", "iPad A13"),
+        ("Apple iPad Air (2022) Wi-Fi 64GB Blue", "iPad Air (2022)", "iPad Air M1"),
+        (
+            "Apple iPad Air 5th Gen 10.9 256GB Wi-Fi Purple MME63HC/ A",
+            "iPad Air 5th Gen",
+            "iPad Air M1",
+        ),
+        ('iPad Air 4 10.9" 256GB (2020) WiFi Blue', "iPad Air 4 (2020)", "iPad Air A14"),
+        (
+            "Apple 12.9-inch iPad Pro Wi-Fi - 6th generation - tablet - 128 GB",
+            "iPad Pro - 6th generation - tablet",
+            "iPad Pro M2",
+        ),
+        ('iPad Mini 8.3" 6th Gen (2021) 64GB Purple', "iPad Mini 6th Gen (2021)", "iPad mini A15"),
+        ("Apple iPad Mini (A17 Pro) 128GB Wi-Fi Blue", "iPad mini (A17 Pro)", "iPad mini A17 Pro"),
+        ("Apple iPad Air 11 (2026) Wi-Fi + Cellular, 128GB, Blue", "iPad Air M4", "iPad Air M4"),
+        (
+            "Apple iPad Pro 11 (2025) Nano-texture Glass, Wi-Fi + Cellular, 1TB",
+            "iPad Pro M5 Nano-texture",
+            "iPad Pro M5 Nano-texture",
+        ),
+        # A year Apple made no mini in names no chip: left as the shop read it.
+        ("Apple iPad mini (2022), Wi-Fi, 128GB, Blue", "iPad mini (2022)", "iPad mini (2022)"),
+    ],
+)
+def test_an_ipad_is_named_by_its_chip(title, model, named):
+    assert ipad(title, model) == named
 
 
 def test_the_glass_is_part_of_an_ipad_pro_s_model():

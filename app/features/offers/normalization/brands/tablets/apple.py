@@ -15,7 +15,7 @@ from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabu
 
 CATEGORY = "tablets"
 BRAND_KEY = "apple"
-VERSION = "apple-tablets-1"
+VERSION = "apple-tablets-2"
 
 # What tells one iPad from the one before it, in the ways the shops write it, best first:
 # the chip (`M4`, `A16`, `A17 Pro`), the generation (`10th Gen`, `7.Gen.`), the year Apple
@@ -47,6 +47,83 @@ def _names_its_generation(
     return {"model": f"{model} {stated}" if stated else ""}
 
 
+# An iPad is named by its line and its chip, the way Apple names the ones it sells now —
+# `iPad Air (M3)`, `iPad (A16)`, `iPad mini (A17 Pro)` — without the brackets, as the
+# catalogue already wrote the lines that held 1400 of 1560 listings on 25.09.2026. The
+# older generations arrived under their generation or their year instead, `iPad 10th Gen`,
+# `iPad Air (2022)`, `iPad Pro (2022)`, and each spelling was a family of its own. These are
+# Apple's, fixed history: which chip each generation and each year carried.
+_LINE = re.compile(r"^\s*iPad(?:\s+(Air|Pro|mini))?\b", re.IGNORECASE)
+_BY_GENERATION = {
+    ("iPad", 9): "A13",
+    ("iPad", 10): "A14",
+    ("iPad", 11): "A16",
+    ("iPad Air", 4): "A14",
+    ("iPad Air", 5): "M1",
+    ("iPad Air", 6): "M2",
+    ("iPad Air", 7): "M3",
+    ("iPad Air", 8): "M4",
+    # The Pro's generations are numbered per size — the 11-inch's 4th and the 12.9-inch's
+    # 4th are different chips — so only the 12.9-inch 6th, which nothing else shares.
+    ("iPad Pro", 6): "M2",
+    ("iPad mini", 6): "A15",
+    ("iPad mini", 7): "A17 Pro",
+}
+_BY_YEAR = {
+    ("iPad", 2021): "A13",
+    ("iPad", 2022): "A14",
+    ("iPad", 2025): "A16",
+    ("iPad Air", 2020): "A14",
+    ("iPad Air", 2022): "M1",
+    ("iPad Air", 2024): "M2",
+    ("iPad Air", 2025): "M3",
+    ("iPad Air", 2026): "M4",
+    ("iPad Pro", 2021): "M1",
+    ("iPad Pro", 2022): "M2",
+    ("iPad Pro", 2024): "M4",
+    ("iPad Pro", 2025): "M5",
+    ("iPad mini", 2021): "A15",
+    ("iPad mini", 2024): "A17 Pro",
+}
+_NUMBER = re.compile(r"\d{1,2}")
+
+
+def _chip_of(line: str, text: str) -> str | None:
+    found = _CHIP.search(text)
+    if found:
+        chip = " ".join(found.group().split())
+        return chip[0].upper() + chip[1:]
+    nth = _NTH.search(text)
+    if nth and (chip := _BY_GENERATION.get((line, int(_NUMBER.search(nth.group()).group())))):
+        return chip
+    year = _YEAR.search(text)
+    if year:
+        return _BY_YEAR.get((line, int(year.group().strip("()"))))
+    return None
+
+
+def _named_by_its_chip(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """`iPad 10th Gen` -> `iPad A14`, `Ipad Mini (A17 Pro)` -> `iPad mini A17 Pro`.
+
+    The chip the model names, else the one its generation or its year carried; a model that
+    gives neither is left as it is. The glass is not this rule's: the category puts
+    `Nano-texture` back on after it, from the title."""
+    model = str(fields.get("model") or "").strip()
+    found = _LINE.match(model)
+    if found is None:
+        return {}
+    line = "iPad" + (f" {found.group(1).capitalize()}" if found.group(1) else "")
+    line = line.replace("Mini", "mini")
+    rest = model[found.end() :]
+    chip = _chip_of(line, rest) or _chip_of(line, str(fields.get("title") or ""))
+    if chip is None:
+        return {}
+    named = f"{line} {chip}"
+    return {"model": named} if named != model else {}
+
+
 RULESET = register(
     BRAND,
     (CATEGORY, BRAND_KEY),
@@ -67,6 +144,20 @@ RULESET = register(
                     " listing still matches by barcode or part number."
                 ),
                 body=_names_its_generation,
+            ),
+            Rule(
+                id="apple-tablets-an-ipad-is-named-by-its-chip",
+                layer=BRAND,
+                why=(
+                    "Twenty iPad families on 25.09.2026, nine of them holding 1400 of the"
+                    " 1560 listings under the line and the chip — `iPad Air M4`, `iPad Pro"
+                    " M5` — and eleven holding the rest under a generation or a year:"
+                    " `iPad 10th Gen` (17), `iPad Pro (2022)` (37), `iPad Air (2022)` and"
+                    " `iPad Air 5th Gen`, one M1 twice. Apple's own names are the chip, and"
+                    " which chip each generation and year carried is fixed history, so both"
+                    " become the chip. `iPad mini (A17 Pro)` loses its brackets to match."
+                ),
+                body=_named_by_its_chip,
             ),
         ),
     ),

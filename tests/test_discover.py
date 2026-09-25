@@ -247,7 +247,7 @@ def test_a_tablet_s_maker_screen_and_model_come_out_of_its_name():
     assert (pad["model"], pad["identity"]["screen_inch"]) == ("Pad 8 Pro", 11)
     # The screen inside the name, and the word for the category before the maker.
     air = tablet("Planšetdators Apple iPad Air 13 M3 (2025) 128GB Space Gray", brand="Apple")
-    assert air["model"] == "iPad Air M3 (2025)"
+    assert air["model"] == "iPad Air M3"
     assert air["identity"]["screen_inch"] == 13
 
 

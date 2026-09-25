@@ -326,4 +326,5 @@ def test_a_spec_sheet_for_a_title_gives_its_first_cell():
 
 
 def test_a_name_s_own_brackets_stay():
-    assert sheet("Apple iPad (A16) | Wi-Fi | 128 GB | Silver", "Apple") == "iPad (A16)"
+    # Kept through the cut, so Apple's rule finds the chip inside them and names it by it.
+    assert sheet("Apple iPad (A16) | Wi-Fi | 128 GB | Silver", "Apple") == "iPad A16"
