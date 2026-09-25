@@ -1,0 +1,26 @@
+# The one thing facing the internet: TLS for the api's name, and the api behind it on the
+# compose network. Caddy takes the certificate from Let's Encrypt itself and renews it; it
+# needs the name in DNS pointing here and ports 80 and 443 open. No account email: Caddy
+# renews on its own, and an empty `email` directive would stop it parsing the file.
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy api:8000 {
+		# The address the api records sign-ins and audit entries against. The api trusts
+		# it because TRUST_PROXY_HEADERS is true, which is right only behind this.
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

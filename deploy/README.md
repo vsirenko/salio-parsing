@@ -5,7 +5,8 @@ One server, the four services of `docker-compose.prod.yml` — `db`, `migrate`, 
 
 | file | what it is |
 |---|---|
-| `docker-compose.prod.yml` | the server's stack: the database's password from `.env`, no database port on the host, the api on the loopback for a reverse proxy, rotating logs |
+| `docker-compose.prod.yml` | the server's stack: the database's password from `.env`, no database port on the host, Caddy with TLS in front of the api, rotating logs |
+| `deploy/Caddyfile` | the api's name, its certificate and the headers facing the internet |
 | `deploy/deploy.sh` | one deploy, run on the server: fetch the commit, build, migrate, start, wait for `/health/ready` |
 | `deploy/dump-local.sh` | the laptop's database and snapshots, packed for the server |
 | `deploy/restore.sh` | on the server, once: that pack restored in place of what is there |
@@ -43,7 +44,8 @@ every shop again.
    | `SEED_USERS` | `false` |
    | `POSTGRES_PASSWORD` | a long random one; nothing outside the compose network reaches the database |
    | `WORKER_PASSWORD` | a long random one — `ensure-worker` sets the account to it |
-   | `API_PORT` | the loopback port the reverse proxy forwards to; `8090` on this server, where `8080` is another project's |
+   | `API_PORT` | the loopback port for a look from the server itself; `8090` here, where `8080` is another project's |
+   | `API_DOMAIN` | the api's name, `api.salio.lv` |
    | `API_BASE_URL` | `http://api:8000` (the workers reach the api inside the network) |
    | `DOCS_ENABLED` | `false`, unless the panel's developers want `/docs` there |
    | `CORS_ORIGINS` | the panel's and the storefront's origins, explicitly |
@@ -51,13 +53,11 @@ every shop again.
    | `DEBUG` | `false` |
    | `TYPESAFE_API_KEY` | the judge's key, or empty to leave judging off |
 
-4. A reverse proxy in front of `127.0.0.1:${API_PORT}` with TLS. With Caddy, the whole of it:
-
-   ```
-   api.example.com {
-       reverse_proxy 127.0.0.1:8090
-   }
-   ```
+4. The name: an A record for `API_DOMAIN` pointing at the server, and `API_DOMAIN` in
+   `PROD_ENV`. The stack's own Caddy (`deploy/Caddyfile`) takes ports 80
+   and 443, gets the certificate from Let's Encrypt and renews it; nothing else on the
+   server may hold those ports. Push once the name resolves — a Caddy asking for a
+   certificate for a name that does not resolve yet fails and runs into the rate limits.
 
 ## The first deploy: the laptop's data
 

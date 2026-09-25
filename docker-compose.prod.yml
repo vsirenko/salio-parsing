@@ -1,7 +1,8 @@
-# The server's stack. The same four services as docker-compose.yml, with what a server needs
-# and a laptop does not: the database's password from `.env` instead of `app`, no database
-# port on the host, the api bound to the loopback for a reverse proxy in front of it, and
-# logs that rotate. See deploy/README.md.
+# The server's stack. The four services of docker-compose.yml and Caddy in front, with what a
+# server needs and a laptop does not: the database's password from `.env` instead of `app`,
+# no database port on the host, the api reached from outside only through Caddy's TLS (and
+# on the loopback for a look from the server itself), and logs that rotate.
+# See deploy/README.md.
 #
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 
@@ -91,6 +92,32 @@ services:
       api:
         condition: service_started
 
+  # TLS for the api's name. The only service with ports on the host's public side; the
+  # certificate and its state live on a volume so a restart does not ask Let's Encrypt again.
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
 volumes:
   pgdata:
   snapshots:
+  caddy-data:
+  caddy-config:
