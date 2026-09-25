@@ -2337,6 +2337,45 @@
         "title": "CurrencyRead",
         "type": "object"
       },
+      "DayPrice": {
+        "description": "One day of a variant's or a family's price across the listings on sale that day.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "listings": {
+            "description": "Listings with a price that day",
+            "title": "Listings",
+            "type": "integer"
+          },
+          "max": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max",
+            "type": "string"
+          },
+          "median": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Median",
+            "type": "string"
+          },
+          "min": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Min",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "min",
+          "median",
+          "max",
+          "listings"
+        ],
+        "title": "DayPrice",
+        "type": "object"
+      },
       "DecidedBy": {
         "enum": [
           "rule",
@@ -5865,6 +5904,87 @@
         "title": "PriceEventRead",
         "type": "object"
       },
+      "PriceSeries": {
+        "description": "What a price chart draws: a band across the market and a line per shop, by day.\n\nDays are UTC. A day with no listing on sale is left out, so a chart draws a gap there\nrather than a zero.",
+        "properties": {
+          "condition": {
+            "title": "Condition",
+            "type": "string"
+          },
+          "currency_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Code"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DayPrice"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "market_code": {
+            "title": "Market Code",
+            "type": "string"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "shops": {
+            "items": {
+              "$ref": "#/components/schemas/ShopSeries"
+            },
+            "title": "Shops",
+            "type": "array"
+          },
+          "since": {
+            "format": "date",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date",
+            "title": "Until",
+            "type": "string"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
+          }
+        },
+        "required": [
+          "market_code",
+          "condition",
+          "currency_code",
+          "since",
+          "until",
+          "days",
+          "shops"
+        ],
+        "title": "PriceSeries",
+        "type": "object"
+      },
       "ProductCreate": {
         "additionalProperties": false,
         "properties": {
@@ -7834,6 +7954,27 @@
         "title": "ShopMarketSet",
         "type": "object"
       },
+      "ShopPoint": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "price": {
+            "description": "The shop's lowest price that day",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "price"
+        ],
+        "title": "ShopPoint",
+        "type": "object"
+      },
       "ShopRead": {
         "description": "A shop, with where it is shown, what it holds and whether its collection works.",
         "properties": {
@@ -7981,6 +8122,32 @@
           "name"
         ],
         "title": "ShopRef",
+        "type": "object"
+      },
+      "ShopSeries": {
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ShopPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "shop_id": {
+            "title": "Shop Id",
+            "type": "integer"
+          },
+          "shop_name": {
+            "title": "Shop Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shop_id",
+          "shop_name",
+          "points"
+        ],
+        "title": "ShopSeries",
         "type": "object"
       },
       "ShopUpdate": {
@@ -18452,6 +18619,141 @@
           }
         ],
         "summary": "Read the price history",
+        "tags": [
+          "admin: prices"
+        ]
+      }
+    },
+    "/api/admin/price-history/series": {
+      "get": {
+        "description": "By day: the lowest, median and highest price across the listings on sale, and each\nshop's lowest as a line of its own. A listing's price is its last change before the day\nended, and it counts only between its first and last sighting. The listings are the ones\nmatched to the scope now, so correcting a match moves that listing's history too.",
+        "operationId": "series_api_admin_price_history_series_get",
+        "parameters": [
+          {
+            "description": "One catalogue entry",
+            "in": "query",
+            "name": "variant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One catalogue entry",
+              "title": "Variant Id"
+            }
+          },
+          {
+            "description": "A family: every entry in it",
+            "in": "query",
+            "name": "product_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A family: every entry in it",
+              "title": "Product Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "market_code",
+            "required": false,
+            "schema": {
+              "default": "LV",
+              "maxLength": 2,
+              "minLength": 2,
+              "title": "Market Code",
+              "type": "string"
+            }
+          },
+          {
+            "description": "new, refurbished or used",
+            "in": "query",
+            "name": "condition",
+            "required": false,
+            "schema": {
+              "default": "new",
+              "description": "new, refurbished or used",
+              "title": "Condition",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Up to and including today",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "description": "Up to and including today",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Count listings the shop says it has none of",
+            "in": "query",
+            "name": "with_out_of_stock",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Count listings the shop says it has none of",
+              "title": "With Out Of Stock",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceSeries"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Variant or product not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Neither or both of variant_id and product_id"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A price chart's data for one entry or one family",
         "tags": [
           "admin: prices"
         ]
