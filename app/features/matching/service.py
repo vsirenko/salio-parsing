@@ -154,6 +154,10 @@ class IdentityCheck(NamedTuple):
     complete: frozenset[int] = frozenset()
 
 
+# The rebuild endpoint's path, as the audit trail records it.
+REBUILD_PATH = "/api/admin/matching/rebuild"
+
+
 class MatchingService:
     def __init__(self, session: AsyncSession, judge: JudgeService) -> None:
         self.session = session
@@ -1405,6 +1409,9 @@ class MatchingService:
             hidden += 1
 
         deleted = await self._delete_empty_hidden_families(limit=limit)
+        # Every record this pass touched named itself the target on the way; the pass acted
+        # on no one of them.
+        audit.clear_target()
 
         audit.record_changes(
             found=len(stale),
@@ -1437,9 +1444,13 @@ class MatchingService:
         merge folded, stays hidden — deleting it would leave that record pointing at no row.
         An entry that comes to need the name later makes a new family, as it would anyway.
         """
+        # Not this pass's own entries: until it cleared its target, each one named the last
+        # family it happened to touch — 13 of the 15 that named a family on 25.09.2026 —
+        # and that is not somebody having acted on it.
         named = select(AuditEntry.id).where(
             AuditEntry.target_type == "product",
             AuditEntry.target_id == cast(Product.id, String),
+            AuditEntry.path != REBUILD_PATH,
         )
         merged = select(ProductMerge.from_id).where(
             or_(ProductMerge.from_id == Product.id, ProductMerge.into_id == Product.id)

@@ -95,6 +95,16 @@ def set_target(target_type: str, target_id: object) -> None:
     context.target_id = str(target_id)
 
 
+def clear_target() -> None:
+    """For a pass over many records: each one it touched named itself the target, and the
+    last of them is not what the request acted on."""
+    context = current_context()
+    if context is None:
+        return
+    context.target_type = None
+    context.target_id = None
+
+
 def record_changes(**changes: Any) -> None:
     context = current_context()
     if context is None:

@@ -2157,6 +2157,14 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     gone = client.get(f"/api/admin/products/{old_family}", headers=auth(token))
     assert gone.status_code == 404
 
+    # The pass acted on no one family, so its entry names none.
+    [entry] = client.get(
+        "/api/admin/audit",
+        headers=auth(token),
+        params={"path": "/matching/rebuild", "limit": 1},
+    ).json()["items"]
+    assert (entry["target_type"], entry["target_id"]) == (None, None)
+
     # Nothing left to do: the second pass finds the name right and the family right.
     again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
     assert (again["found"], again["rehomed"], again["hidden"], again["deleted"]) == (0, 0, 0, 0)

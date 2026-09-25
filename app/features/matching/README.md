@@ -173,7 +173,10 @@ something points at it.** It used to be hidden and kept, for the trail's sake, a
 family at all: the list of families was mostly names of nothing. So a rebuild deletes a
 hidden family with no entry in it, and keeps it hidden only where an audit entry names it
 or a merge folded it — deleting that one would leave a record pointing at no row. A name
-that is needed again makes a new family. **An entry filed into a hidden family shows it
+that is needed again makes a new family. The rebuild's own entries do not count: each
+record it touched named itself the target on the way, so until it cleared that, its entry
+named whichever family it touched last — 13 of the 15 entries naming a family on
+25.09.2026, and none of them somebody acting on one. **An entry filed into a hidden family shows it
 again**: nothing else hides a family, so a hidden one with an entry in it is only this
 pass's leftover — on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the
 storefront that way, their names emptied by one reading and filled again by the next.

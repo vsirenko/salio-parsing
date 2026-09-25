@@ -15,7 +15,7 @@ from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabu
 
 CATEGORY = "tablets"
 BRAND_KEY = "apple"
-VERSION = "apple-tablets-2"
+VERSION = "apple-tablets-3"
 
 # What tells one iPad from the one before it, in the ways the shops write it, best first:
 # the chip (`M4`, `A16`, `A17 Pro`), the generation (`10th Gen`, `7.Gen.`), the year Apple
@@ -35,15 +35,29 @@ def _generation(text: str) -> str | None:
     return None
 
 
+# A shop's processor field, when it names Apple's chip and nothing else: `Apple A17 Pro`.
+_CHIP_FIELD = re.compile(r"^\s*Apple\s+([MA]\d{1,2}(?:\s+Pro)?)\s*$", re.IGNORECASE)
+
+
+def _chip_in_the_fields(fields: dict[str, Any]) -> str | None:
+    found = {
+        match.group(1)
+        for value in (fields.get("attributes") or {}).values()
+        if (match := _CHIP_FIELD.match(str(value)))
+    }
+    return found.pop() if len(found) == 1 else None
+
+
 def _names_its_generation(
     payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
 ) -> dict[str, Any]:
-    """The model with the generation the title states, or no model when it states none."""
+    """The model with the generation the title states — else the chip a field names — or no
+    model when neither does."""
     title = str(fields.get("title") or "")
     model = str(fields.get("model") or "").strip()
     if not model or not _IPAD.search(model) or _generation(model):
         return {}
-    stated = _generation(title)
+    stated = _generation(title) or _chip_in_the_fields(fields)
     return {"model": f"{model} {stated}" if stated else ""}
 
 
@@ -117,7 +131,11 @@ def _named_by_its_chip(
     line = "iPad" + (f" {found.group(1).capitalize()}" if found.group(1) else "")
     line = line.replace("Mini", "mini")
     rest = model[found.end() :]
-    chip = _chip_of(line, rest) or _chip_of(line, str(fields.get("title") or ""))
+    chip = (
+        _chip_of(line, rest)
+        or _chip_of(line, str(fields.get("title") or ""))
+        or _chip_in_the_fields(fields)
+    )
     if chip is None:
         return {}
     named = f"{line} {chip}"
@@ -140,8 +158,10 @@ RULESET = register(
                     " colour as one product. bm writes the generation after the capacity,"
                     " `… 2TB Silver (2022) MP273HC/A`, and the cut there took it off; where"
                     " the title states one it goes back on the model — the chip, else the"
-                    " `10th Gen`, else the year. Where it states none there is no model: the"
-                    " listing still matches by barcode or part number."
+                    " `10th Gen`, else the year. bigbox's `iPad mini 5G TD-LTE un FDD-LTE"
+                    " 256 GB` names none, and its `Procesors` field says `Apple A17 Pro`: a"
+                    " field that is only Apple's chip gives it. Where nothing states one there"
+                    " is no model: the listing still matches by barcode or part number."
                 ),
                 body=_names_its_generation,
             ),

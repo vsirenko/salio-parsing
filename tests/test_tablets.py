@@ -230,6 +230,20 @@ def test_an_ipad_is_named_by_its_chip(title, model, named):
     assert ipad(title, model) == named
 
 
+def test_a_chip_the_title_leaves_out_comes_from_a_field_that_is_only_the_chip():
+    fields = read(
+        {
+            "name": 'Apple iPad mini 5G TD-LTE un FDD-LTE 256 GB 21,1 cm (8,3") Wi-Fi 6E',
+            "brand": "Apple",
+            "model": "iPad mini TD- un FDD",
+            "attributes": {"Procesors": "Apple A17 Pro", "Ekrāna veids": "LCD/LED"},
+        },
+        category=TABLETS,
+        vocabulary=WORDS,
+    )
+    assert fields["model"] == "iPad mini A17 Pro"
+
+
 def test_the_glass_is_part_of_an_ipad_pro_s_model():
     """Standard and nano-texture glass are two tablets; the catalogue held the standard one
     under two names and filed rdveikals' nano one, glass written after the capacity, under

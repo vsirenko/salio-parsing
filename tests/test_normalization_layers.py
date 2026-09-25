@@ -506,7 +506,7 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 FINGERPRINTS = {
     "apple-laptops-11": "31b3cd81cbeb",
     "apple-phones-2": "f940eea49212",
-    "apple-tablets-2": "d03c112de27f",
+    "apple-tablets-3": "c1d38b617cc6",
     "bigbox-10": "4497939fdfce",
     "bigbox-laptops-8": "3db9c521762f",
     "bigbox-shop-1": "a1194a23b2e7",
