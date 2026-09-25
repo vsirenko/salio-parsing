@@ -2152,17 +2152,17 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     assert after["product"]["id"] != old_family
     family = client.get(f"/api/admin/products/{after['product']['id']}", headers=auth(token)).json()
     assert family["model"] == "iPhone 15"
-    # The family the old name made is empty now, and hidden rather than deleted.
-    left = client.get(f"/api/admin/products/{old_family}", headers=auth(token)).json()
-    assert left["is_visible"] is False
+    # The family the old name made is empty now, and nothing points at it: deleted.
+    assert report["deleted"] == 1
+    gone = client.get(f"/api/admin/products/{old_family}", headers=auth(token))
+    assert gone.status_code == 404
 
     # Nothing left to do: the second pass finds the name right and the family right.
     again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
-    assert (again["found"], again["rehomed"], again["hidden"]) == (0, 0, 0)
+    assert (again["found"], again["rehomed"], again["hidden"], again["deleted"]) == (0, 0, 0, 0)
 
-    # And the way back: the reading returns to the old name, the entry to the old family,
-    # and the family is on the storefront again. It stayed hidden with its entry inside it
-    # once — `Apple iPhone 16 Pro` and 60 tablet families on 23.09.2026.
+    # And the way back: the reading returns to the old name, and the name makes a family
+    # again, on the storefront.
     ingest(
         client,
         token,
@@ -2181,6 +2181,57 @@ def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     )
     back = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
     assert back["rehomed"] == 1, back
+    home = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    shown = client.get(f"/api/admin/products/{home['product']['id']}", headers=auth(token)).json()
+    assert (shown["model"], shown["is_visible"]) == ("iPhone 15 12", True)
+
+
+def test_an_emptied_family_the_trail_names_is_hidden_and_shown_again(client):
+    """A family somebody acted on is in the trail, and the trail must not point at no row.
+    It stays hidden — and an entry filed back into it shows it again, as `Apple iPhone 16
+    Pro` and 60 tablet families needed on 23.09.2026."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+    payload = {
+        "name": "Apple iPhone 15 256 GB black",
+        "brand": "Apple",
+        "attributes": {"storage": "256 GB", "color": "black"},
+    }
+    offer = offer_from(
+        client, token, source["id"], {**payload, "model": "iPhone 15 12"}, external_id="T-1"
+    )
+    variant_id = promote(client, token, offer)["variant_id"]
+    old_family = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()[
+        "product"
+    ]["id"]
+    # A person corrects the family's title: the trail now names it.
+    client.patch(
+        f"/api/admin/products/{old_family}",
+        headers=auth(token),
+        json={"title_override": "Apple iPhone 15"},
+    )
+
+    def read_as(model, price):
+        ingest(
+            client,
+            token,
+            source["id"],
+            {
+                "external_id": "T-1",
+                "market_code": "LV",
+                "payload": {**payload, "model": model, "price": price},
+            },
+        )
+        return client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+
+    away = read_as("iPhone 15", "799.00")
+    assert away["deleted"] == 0
+    left = client.get(f"/api/admin/products/{old_family}", headers=auth(token)).json()
+    assert left["is_visible"] is False
+
+    read_as("iPhone 15 12", "789.00")
     home = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
     assert home["product"]["id"] == old_family
     shown = client.get(f"/api/admin/products/{old_family}", headers=auth(token)).json()

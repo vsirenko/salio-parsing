@@ -6338,6 +6338,11 @@
       "RenameReport": {
         "description": "What a pass of rebuilds did.\n\nA catalogue entry made from one listing is named after that listing's reading. When the\nreading improves — a rule fixed, a word entered in the registry — the entry keeps the\nold name and nothing goes back for it. `merged` is the good outcome: renamed, the entry\nturned out to be one that already existed.",
         "properties": {
+          "deleted": {
+            "default": 0,
+            "title": "Deleted",
+            "type": "integer"
+          },
           "found": {
             "title": "Found",
             "type": "integer"

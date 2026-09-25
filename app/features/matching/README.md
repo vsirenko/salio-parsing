@@ -24,7 +24,7 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `POST /api/admin/offers/{offer_id}/promote` | make the variant this listing was looking for |
 | `POST /api/admin/matching/promote` | do that for everything identifiable in the queue |
 | `POST /api/admin/matching/merge` | fold together the entries a barcode says are one product |
-| `POST /api/admin/matching/rebuild` | rebuild the entries named after a reading that has since changed |
+| `POST /api/admin/matching/rebuild` | rebuild the entries named after a reading that has since changed, and delete the empty families nothing points at |
 
 ## How it works
 
@@ -167,11 +167,16 @@ renames it where no listing on it reads the name it has — two shops disagreein
 `5G` suffix keep the name they share, but a name neither of them reads is not shared, and
 any reading beats a spec sheet — and then files it under the product the new name makes,
 because the family is exactly what the model string says: that is the rule that made it. A rename used to stop at the entry, and 366 entries sat named `Galaxy S26` under a
-family still headed `Galaxy S26 S942 5G Dual Sim`. A family left empty is hidden, never
-deleted — the trail points at it — and **an entry filed into a hidden family shows it again**.
-Nothing else hides a family, so a hidden one with an entry in it is only this pass's leftover:
-on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the storefront that way,
-their names emptied by one reading and filled again by the next.
+family still headed `Galaxy S26 S942 5G Dual Sim`. **A family left empty is deleted, unless
+something points at it.** It used to be hidden and kept, for the trail's sake, and on
+25.09.2026 1506 of the 1508 hidden families held nothing while 15 audit entries named a
+family at all: the list of families was mostly names of nothing. So a rebuild deletes a
+hidden family with no entry in it, and keeps it hidden only where an audit entry names it
+or a merge folded it — deleting that one would leave a record pointing at no row. A name
+that is needed again makes a new family. **An entry filed into a hidden family shows it
+again**: nothing else hides a family, so a hidden one with an entry in it is only this
+pass's leftover — on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the
+storefront that way, their names emptied by one reading and filled again by the next.
 
 **A family takes the case its entries write.** The lookup that files an entry under a family
 ignores case, so the spelling that made a family heads it for good: dateks's `PRO MAX 16

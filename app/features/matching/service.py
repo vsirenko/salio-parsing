@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, NamedTuple
 
-from sqlalchemy import String, case, cast, func, or_, select, text, update
+from sqlalchemy import String, case, cast, delete, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -17,6 +17,7 @@ from app.core.exceptions import AppError, ConflictError, NotFoundError, Validati
 from app.db.models import (
     Attribute,
     AttributeValue,
+    AuditEntry,
     AvailabilityEvent,
     Brand,
     BrandAlias,
@@ -29,6 +30,7 @@ from app.db.models import (
     OfferMatch,
     PriceEvent,
     Product,
+    ProductMerge,
     RawOffer,
     Run,
     Seller,
@@ -1402,6 +1404,8 @@ class MatchingService:
             await catalog.update_product(product_id, ProductUpdate(is_visible=False))
             hidden += 1
 
+        deleted = await self._delete_empty_hidden_families(limit=limit)
+
         audit.record_changes(
             found=len(stale),
             renamed=renamed,
@@ -1409,6 +1413,7 @@ class MatchingService:
             rehomed=rehomed,
             recased=recased,
             hidden=hidden,
+            deleted=deleted,
             **dict(reasons),
         )
         return RenameReport(
@@ -1418,9 +1423,45 @@ class MatchingService:
             rehomed=rehomed,
             recased=recased,
             hidden=hidden,
+            deleted=deleted,
             refused=sum(reasons.values()),
             reasons=dict(reasons),
         )
+
+    async def _delete_empty_hidden_families(self, *, limit: int) -> int:
+        """Delete the hidden families that hold nothing and that nothing points at.
+
+        Hiding was the whole answer while the trail might name a family; on 25.09.2026 1506 of
+        the 1508 hidden families held no entry and 15 audit entries named a family at all, so
+        the list of families was mostly names of nothing. A family the trail names, or a
+        merge folded, stays hidden — deleting it would leave that record pointing at no row.
+        An entry that comes to need the name later makes a new family, as it would anyway.
+        """
+        named = select(AuditEntry.id).where(
+            AuditEntry.target_type == "product",
+            AuditEntry.target_id == cast(Product.id, String),
+        )
+        merged = select(ProductMerge.from_id).where(
+            or_(ProductMerge.from_id == Product.id, ProductMerge.into_id == Product.id)
+        )
+        ids = list(
+            (
+                await self.session.scalars(
+                    select(Product.id)
+                    .where(
+                        Product.is_visible.is_(False),
+                        ~select(Variant.id).where(Variant.product_id == Product.id).exists(),
+                        ~named.exists(),
+                        ~merged.exists(),
+                    )
+                    .order_by(Product.id)
+                    .limit(limit)
+                )
+            ).all()
+        )
+        if ids:
+            await self.session.execute(delete(Product).where(Product.id.in_(ids)))
+        return len(ids)
 
     async def _miscased_families(self, *, limit: int) -> list[tuple[int, str]]:
         """Visible families whose entries all spell the family's name in another case."""

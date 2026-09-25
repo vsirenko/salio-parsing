@@ -302,8 +302,10 @@ class RenameReport(BaseModel):
     rehomed: int = 0
     # Families renamed to the case every entry in them writes their name in.
     recased: int = 0
-    # Families left with nothing in them, hidden rather than deleted.
+    # Families left with nothing in them, hidden.
     hidden: int = 0
+    # Hidden families with nothing in them and nothing pointing at them, deleted.
+    deleted: int = 0
     refused: int
     reasons: dict[str, int] = Field(default_factory=dict)
 
