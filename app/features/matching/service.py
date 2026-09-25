@@ -90,7 +90,10 @@ from app.features.matching.schemas import (
     RenameReport,
     RunReport,
     Snooze,
+    SuspectKind,
+    SuspectReport,
 )
+from app.features.matching.suspects import find_suspects
 from app.features.offers.normalization import barcodes, naming
 from app.features.runs.schemas import Kind
 from app.schemas.pagination import Pagination
@@ -152,6 +155,17 @@ class IdentityCheck(NamedTuple):
     # land on a blue one's entry: they agreed on capacity, and the entry had no colour to
     # disagree with yet.
     complete: frozenset[int] = frozenset()
+
+
+# The makers whose part number names one configuration and not a family, so that two
+# entries holding listings of one part number are one product written twice. Apple's does:
+# `MDH74ZE/A` is one MacBook Air with one keyboard, and on 25.09.2026 67 of 112 of its
+# MacBook part numbers sat on more than one entry. Samsung's `SM-S948B` does not — it covers
+# every colour and capacity — and a maker is added here on a measurement, not by default.
+ONE_PRODUCT_PART_NUMBERS = frozenset({"apple"})
+# Apple's whole part number, region included: `MDH74ZE/A`, `MG014HX/A`. The region letters
+# carry the keyboard on a Mac, so the five-character stem alone does not name one product.
+APPLE_PART_NUMBER = r"^[A-Z0-9]{4,5}[A-Z]{2}/A$"
 
 
 # The rebuild endpoint's path, as the audit trail records it.
@@ -1180,8 +1194,22 @@ class MatchingService:
             dry_run=dry_run,
         )
 
+    async def suspects(
+        self,
+        *,
+        category_id: int | None = None,
+        brand_id: int | None = None,
+        kinds: list[SuspectKind] | None = None,
+        limit: int = 100,
+    ) -> SuspectReport:
+        """What looks filed twice, with the evidence; see `suspects.py`. Changes nothing."""
+        return await find_suspects(
+            self.session, category_id=category_id, brand_id=brand_id, kinds=kinds, limit=limit
+        )
+
     async def merge_duplicates(self, *, limit: int = 100, dry_run: bool = False) -> MergeReport:
-        """Fold together the catalogue entries a barcode says are one product.
+        """Fold together the catalogue entries a barcode, or a configuration's part number,
+        says are one product.
 
         The catalogue splits a phone in two whenever two shops write its model differently
         and neither listing had a barcode to say otherwise at the time: `PHONE WAVE 7C` and
@@ -1189,9 +1217,11 @@ class MatchingService:
         `Moto G37 5G`. Afterwards a listing on each side carries the same barcode, and that
         is not an opinion — it is the strongest signal this system has, contradicting itself.
 
-        Only a barcode. A part number is not enough and never will be: `SM-S948B` covers
-        every colour and capacity of one phone, so two entries sharing one are usually two
-        real configurations rather than one written twice.
+        A part number only where the maker's names one configuration —
+        `ONE_PRODUCT_PART_NUMBERS`, Apple so far. Elsewhere it is not enough: `SM-S948B`
+        covers every colour and capacity of one phone, so two entries sharing one are usually
+        two real configurations rather than one written twice. Either way a pair whose
+        entries disagree on an axis is refused, not folded.
 
         The entry that already holds the barcode survives, because it is the one the first
         rung will keep finding; failing that the one carrying more listings, which loses
@@ -1205,16 +1235,25 @@ class MatchingService:
         return report
 
     async def _merge_pairs(self, *, limit: int, dry_run: bool) -> MergeReport:
-        pairs = await self._barcode_duplicates(limit=limit)
+        pairs: list[tuple[str, str, int, int]] = [
+            ("gtin", gtin, first, second)
+            for gtin, first, second in await self._barcode_duplicates(limit=limit)
+        ]
+        pairs += [
+            ("mpn", mpn, first, second)
+            for mpn, first, second in await self._part_number_duplicates(
+                limit=max(0, limit - len(pairs))
+            )
+        ]
         merged, reasons, tried = 0, Counter(), []
         catalog = CatalogService(self.session)
-        for gtin, first, second in pairs:
-            survivor, loser = await self._which_survives(gtin, first, second)
+        for signal, value, first, second in pairs:
+            survivor, loser = await self._which_survives(signal, value, first, second)
             # Taken before the merge, which empties one side: what a person checks is what
             # was about to be folded, not what is left.
             before = await self._snapshots([loser, survivor])
             outcome = MergePair(
-                gtin=gtin, from_=before[loser], into=before[survivor], outcome="merged"
+                **{signal: value}, from_=before[loser], into=before[survivor], outcome="merged"
             )
             differ = await self._axes_differ(loser, survivor)
             if differ:
@@ -1230,7 +1269,7 @@ class MatchingService:
                     await catalog.merge_variants(
                         loser,
                         survivor,
-                        reason=f"both held a listing carrying {gtin}",
+                        reason=f"both held a listing carrying {value}",
                         decided_by="rule",
                     )
             except AppError as error:
@@ -1632,13 +1671,59 @@ class MatchingService:
         )
         return [(gtin, variants[0], variants[1]) for gtin, variants in rows.all()]
 
-    async def _which_survives(self, gtin: str, first: int, second: int) -> tuple[int, int]:
-        """The entry that keeps its id, and the one folded into it."""
-        holding = await self.session.scalar(
-            select(VariantGtin.variant_id).where(
-                VariantGtin.gtin == gtin, VariantGtin.variant_id.in_((first, second))
+    async def _part_number_duplicates(self, *, limit: int) -> list[tuple[str, int, int]]:
+        """Part numbers whose listings sit on two catalogue entries of one maker, for the
+        makers whose part numbers name one configuration, as (part number, one, other)."""
+        if limit <= 0:
+            return []
+        newest = (
+            select(
+                func.upper(NormalizedOffer.mpn).label("mpn"),
+                OfferMatch.variant_id.label("variant_id"),
+                Variant.brand_id.label("brand_id"),
+                func.row_number()
+                .over(
+                    partition_by=RawOffer.offer_id,
+                    order_by=(RawOffer.fetched_at.desc(), NormalizedOffer.id.desc()),
+                )
+                .label("rank"),
             )
+            .join(RawOffer, RawOffer.id == NormalizedOffer.raw_offer_id)
+            .join(
+                OfferMatch,
+                (OfferMatch.offer_id == RawOffer.offer_id) & (OfferMatch.superseded_at.is_(None)),
+            )
+            .join(Variant, Variant.id == OfferMatch.variant_id)
+            .join(Brand, Brand.id == Variant.brand_id)
+            .where(
+                NormalizedOffer.mpn.is_not(None),
+                func.lower(Brand.canonical_name).in_(ONE_PRODUCT_PART_NUMBERS),
+                NormalizedOffer.mpn.op("~")(APPLE_PART_NUMBER),
+            )
+            .subquery()
         )
+        rows = await self.session.execute(
+            select(newest.c.mpn, func.array_agg(func.distinct(newest.c.variant_id)))
+            .where(newest.c.rank == 1)
+            .group_by(newest.c.brand_id, newest.c.mpn)
+            .having(func.count(func.distinct(newest.c.variant_id)) == 2)
+            .limit(limit)
+        )
+        return [(mpn, variants[0], variants[1]) for mpn, variants in rows.all()]
+
+    async def _which_survives(
+        self, signal: str, value: str, first: int, second: int
+    ) -> tuple[int, int]:
+        """The entry that keeps its id, and the one folded into it."""
+        if signal == "gtin":
+            held = select(VariantGtin.variant_id).where(
+                VariantGtin.gtin == value, VariantGtin.variant_id.in_((first, second))
+            )
+        else:
+            held = select(VariantMpn.variant_id).where(
+                func.upper(VariantMpn.mpn_raw) == value, VariantMpn.variant_id.in_((first, second))
+            )
+        holding = await self.session.scalar(held.limit(1))
         if holding is not None:
             return (holding, second if holding == first else first)
 

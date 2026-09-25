@@ -241,9 +241,12 @@ class OfferService:
             # always recomputes, and the version check is left to ordinary ingestion, where
             # unchanged bytes genuinely should not cost work.
             reading = await self._current_reading(existing.id)
+            reparse = await self._is_reparse(run_id)
+            if reparse:
+                await self._reread_the_newest(offer, besides=existing, source=source)
             if (
                 reading is None
-                or await self._is_reparse(run_id)
+                or reparse
                 or reading.ruleset_version
                 != version_for(
                     source.slug,
@@ -791,6 +794,27 @@ class OfferService:
             .limit(1)
         )
         return newer is None
+
+    async def _reread_the_newest(self, offer: Offer, *, besides: RawOffer, source: Source) -> None:
+        """The listing's newest observation, read again from its stored payload.
+
+        A reparse re-reads snapshots, and the observation a listing shows is its newest,
+        which need not have one: a quick pass, a card read off a listing page. On 25.09.2026
+        three onea iPads kept `iPad mini (A17 Pro)` through a full reparse that moved every
+        other listing to `iPad mini A17 Pro`, because the snapshot re-read an older
+        observation and the newer one was never touched — and the entry's family could not
+        be renamed while they read the old name.
+        """
+        newest = await self.session.scalar(
+            select(RawOffer)
+            .where(RawOffer.offer_id == offer.id)
+            .order_by(RawOffer.fetched_at.desc(), RawOffer.id.desc())
+            .limit(1)
+        )
+        if newest is None or newest.id == besides.id:
+            return
+        reading = await self._store_reading(newest, source=source)
+        await self._apply_reading_to_offer(offer, reading, raw=newest)
 
     async def _is_reparse(self, run_id: int | None) -> bool:
         """Whether this batch is a re-reading of what is already stored.

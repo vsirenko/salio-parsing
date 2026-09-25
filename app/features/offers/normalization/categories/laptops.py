@@ -31,7 +31,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "laptops"
-VERSION = "laptops-9"
+VERSION = "laptops-10"
 
 CPU_KEY = "cpu"
 RAM_KEY = "ram_mb"
@@ -333,7 +333,17 @@ _PAIR = re.compile(
 
 
 def megabytes(amount: str, unit: str) -> int:
-    return int(float(amount.replace(",", ".")) * _SCALE[unit.upper()])
+    """A size in megabytes, the binary way: `512GB` is 524288.
+
+    A whole number of thousands of gigabytes is that many terabytes. Drives are sold in
+    decimal terabytes and a shop that writes `1000 GB` means the same drive as one writing
+    `1 TB`; read literally the two were 1024000 and 1048576 MB — one MacBook as two entries,
+    on 58 of euronics' listings and 3 of bm's on 25.09.2026.
+    """
+    value = float(amount.replace(",", "."))
+    if unit.upper() == "GB" and value >= 1000 and value % 1000 == 0:
+        value, unit = value / 1000, "TB"
+    return int(value * _SCALE[unit.upper()])
 
 
 def _stated(fields: dict[str, Any], vocabulary: Vocabulary, key: str) -> set[int]:

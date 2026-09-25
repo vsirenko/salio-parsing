@@ -268,8 +268,10 @@ class Scheduler:
         """
         try:
             async with session_factory() as session:
-                await RunService(session).record_settled(run_id, None)
+                runs = RunService(session)
+                await runs.record_settled(run_id, None)
                 await session.commit()
+                families_before = await runs.families_of(run_id)
                 matching = MatchingService(session, judge=JudgeService(session))
                 renamed = 0
                 for _ in range(SETTLE_ROUNDS):
@@ -280,13 +282,26 @@ class Scheduler:
                 first = await matching.run(limit=SETTLE_LIMIT)
                 promoted = await matching.promote_queue(limit=SETTLE_LIMIT)
                 again = await matching.run(limit=SETTLE_LIMIT)
-                await RunService(session).record_settled(
+                families_after = await runs.families_of(run_id)
+                if families_after > families_before:
+                    # A pass over readings already placed should fold families, not make
+                    # them: more after a reparse is a rule or a registry change that split
+                    # what was one, and it shows here rather than as a slow drift.
+                    log.warning(
+                        "run %d: its category went from %d families to %d",
+                        run_id,
+                        families_before,
+                        families_after,
+                    )
+                await runs.record_settled(
                     run_id,
                     {
                         "renamed": renamed,
                         "matched": first.matched,
                         "promoted": promoted.promoted,
                         "matched_after": again.matched,
+                        "families_before": families_before,
+                        "families_after": families_after,
                     },
                 )
                 await session.commit()

@@ -265,6 +265,10 @@ class SettledCounts(BaseModel):
     matched: int = 0
     promoted: int = 0
     matched_after: int = 0
+    # The visible families of the channel's category before settling and after. More after
+    # a reparse is the alarm: rereading what was placed should fold families, not split them.
+    families_before: int | None = None
+    families_after: int | None = None
 
 
 class RunProgressRead(BaseModel):

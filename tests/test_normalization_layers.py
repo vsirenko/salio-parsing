@@ -505,36 +505,36 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-laptops-12": "09b7069f996d",
+    "apple-laptops-13": "af70bc5fbe13",
     "apple-phones-2": "f940eea49212",
     "apple-tablets-3": "c1d38b617cc6",
     "bigbox-10": "4497939fdfce",
-    "bigbox-laptops-9": "34f770f74e55",
+    "bigbox-laptops-10": "de74d8361f0f",
     "bigbox-shop-1": "a1194a23b2e7",
     "bigbox-tablets-4": "2cf6e57ea6f2",
     "bm-4": "6117d7e812a9",
-    "bm-laptops-6": "f5357c33a2da",
+    "bm-laptops-7": "a2d2b58abddc",
     "bm-shop-1": "3d09a6688700",
     "bm-tablets-1": "24d34a1063df",
     "cec-3": "958bc58c1fb0",
-    "cec-laptops-2": "cadc337590fb",
+    "cec-laptops-3": "2ab2a42bf51b",
     "cec-tablets-2": "336ec202acc2",
     "dateks-5": "0acd87a6666d",
-    "dateks-laptops-6": "701c469305e2",
+    "dateks-laptops-7": "6cdfe2511b48",
     "dateks-shop-1": "76bf8766fb11",
     "dateks-tablets-1": "abe9d2e77bfe",
     "discover-6": "f6aa33b230a2",
-    "discover-laptops-2": "699e29ced3cd",
+    "discover-laptops-3": "9134c99d5bff",
     "discover-shop-1": "6065096d8d22",
     "discover-tablets-3": "f8cf45775b77",
-    "euronics-laptops-6": "fee6496da02f",
+    "euronics-laptops-7": "96f72e682cd7",
     "euronics-shop-1": "07e9d1415e04",
     "euronics-tablets-1": "0deff7ac20bc",
     "google-phones-3": "b13ca41b33fa",
     "ksenukai-7": "c39ae807fae8",
     "ksenukai-shop-1": "b5a073020a15",
     "ksenukai-tablets-2": "343e6a39fd31",
-    "laptops-9": "8311715f8cad",
+    "laptops-10": "5065e305860c",
     "m79-8": "43b109729576",
     "m79-shop-1": "ad962ef2618c",
     "m79-tablets-1": "ca0ff57d51a2",
@@ -547,7 +547,7 @@ FINGERPRINTS = {
     "oneplus-phones-1": "29eaabd5e1ad",
     "phones-13": "8a8607df0554",
     "rdveikals-6": "01226413c43a",
-    "rdveikals-laptops-8": "c83095eb9706",
+    "rdveikals-laptops-9": "2d7251556889",
     "rdveikals-shop-1": "e0b3a42600f7",
     "rdveikals-tablets-1": "1ae570d9626a",
     "samsung-phones-2": "9653d4e6a46a",
@@ -668,9 +668,9 @@ def test_a_ruleset_is_hashed_over_every_module_its_rules_come_from(monkeypatch):
     """`laptops` opens with a rule from `devices`; its own module has to count as well."""
     from app.features.offers.normalization.categories import laptops
 
-    before = _fingerprints()["laptops-9"]
+    before = _fingerprints()["laptops-10"]
     monkeypatch.setattr(laptops, "_QUOTES", laptops._QUOTES + "\u2033")
-    assert _fingerprints()["laptops-9"] != before
+    assert _fingerprints()["laptops-10"] != before
 
 
 def test_every_ruleset_is_fingerprinted():

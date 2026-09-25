@@ -22,6 +22,7 @@ from app.db.models import (
     MatchQueue,
     Offer,
     OfferMatch,
+    Product,
     RawOffer,
     Run,
     SchedulerHeartbeat,
@@ -321,6 +322,22 @@ class RunService:
             raise ConflictError(f"Run {run_id} is {run.status}, not running")
         run.progress = {**(run.progress or {}), **progress.model_dump(exclude_none=True)}
         await self.session.flush()
+
+    async def families_of(self, run_id: int) -> int:
+        """The visible families of the category the run's channel collects; 0 for a run or a
+        channel that says no category."""
+        run = await self.session.get(Run, run_id)
+        source = None if run is None else await self.session.get(Source, run.source_id)
+        if source is None or source.category_id is None:
+            return 0
+        return (
+            await self.session.scalar(
+                select(func.count())
+                .select_from(Product)
+                .where(Product.category_id == source.category_id, Product.is_visible.is_(True))
+            )
+            or 0
+        )
 
     async def record_settled(self, run_id: int, settled: dict[str, int] | None) -> None:
         """What settling a finished run placed, from the scheduler; `None` as it begins."""

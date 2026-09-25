@@ -110,12 +110,25 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **dateks's `14 Essential PV14250` is not read through the registry.** The code is
       entered as `Pro 14 Essential`, but the title carries on `| Pro Platinum Silver`, and
       `pro` after a name makes it another model to the lookup. One listing.
-- [ ] **67 of 112 MacBook part numbers sit on more than one entry.** Seen on 25.09.2026:
+- [x] **67 of 112 MacBook part numbers sit on more than one entry.** Seen on 25.09.2026:
       euronics writes `key arrangement: NORDIC` on the MacBooks whose part number ends `KS/A`,
       which Apple's rule reads as swedish, so the two disagree and the keyboard is left out;
       and it states `1000 GB` where the others say `1 TB` (1024000 against 1048576 MB). Each
       difference files the listing under an entry of its own. Whether `KS` is nordic or
-      swedish is a decision about the vocabulary, not a rule to guess.
+      swedish is a decision about the vocabulary, not a rule to guess. Merged by Apple's part
+      number now, `1000 GB` reads as 1 TB, and `GET /matching/suspects` lists what is left;
+      the `KS` / `NORDIC` question is still open.
+- [x] **A reparse re-reads snapshots, and an observation with none keeps its old reading.**
+      On 25.09.2026 three onea iPads read `iPad mini (A17 Pro)` after a full reparse had
+      moved every other listing to `iPad mini A17 Pro`: their newest observation, the one
+      the listing shows, had no snapshot, only an older one did. The family could not be
+      renamed while they read the old name. Renormalizing the raw offer by id fixes one;
+      the reparse run should fall back to the stored payload for these. It does now: the
+      listing's newest observation is reread from its payload during a reparse.
+- [ ] **Judge drafts for the registry.** A `word_order` suspect, or a cluster of spellings, handed
+      to the judge for a canonical name and aliases, entered only when a person confirms.
+- [ ] **A suspect for a one-listing family beside a large one with a close name** — the fourth
+      shape, left out of `suspects` for now because "close" wants measuring first.
 - [ ] **Three shops sell laptops and have no laptop channel yet**: mdata (`Portatīvie datori`,
       34 listing pages on 25.09.2026), m79 (`portativiedatori/portativie-datori-veikala`) and
       tet (`datortehnika/portativie-datori-un-piederumi/portativie-datori`). Each is a

@@ -43,6 +43,8 @@ from app.features.matching.schemas import (
     RenameReport,
     RunReport,
     Snooze,
+    SuspectKind,
+    SuspectReport,
 )
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
@@ -171,10 +173,31 @@ async def promote_queue(
     return await service.promote_queue(limit=limit, dry_run=dry_run)
 
 
+@router.get(
+    "/suspects",
+    response_model=SuspectReport,
+    summary="Entries and families that look filed twice",
+)
+async def list_suspects(
+    service: MatchingServiceDep,
+    category_id: Annotated[int | None, Query()] = None,
+    brand_id: Annotated[int | None, Query()] = None,
+    kind: Annotated[list[SuspectKind] | None, Query(description="Repeatable")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> SuspectReport:
+    """A queue to read, not a pass that acts: one part number on entries that agree on every
+    axis (`merge`), one model at two nearly equal numbers (`axis` — a reading to fix), one
+    name in several word orders or cases (`registry` — aliases to enter). The ones holding
+    the most listings first."""
+    return await service.suspects(
+        category_id=category_id, brand_id=brand_id, kinds=kind, limit=limit
+    )
+
+
 @router.post(
     "/merge",
     response_model=MergeReport,
-    summary="Fold together the entries a barcode says are one product",
+    summary="Fold together the entries a barcode or a part number says are one product",
 )
 async def merge_duplicates(
     service: MatchingServiceDep,
@@ -183,8 +206,10 @@ async def merge_duplicates(
     ] = 100,
     dry_run: DryRun = False,
 ) -> MergeReport:
-    """Only a barcode decides. A part number names a family as often as a product, so two
-    entries sharing one are usually two real configurations rather than one written twice."""
+    """A barcode decides, and so does a part number of a maker whose part numbers name one
+    configuration (Apple). Elsewhere a part number names a family as often as a product, so
+    two entries sharing one are usually two real configurations. A pair whose entries
+    disagree on an axis is refused either way."""
     return await service.merge_duplicates(limit=limit, dry_run=dry_run)
 
 

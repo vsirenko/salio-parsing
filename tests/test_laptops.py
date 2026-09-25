@@ -624,3 +624,13 @@ def test_a_discover_macbook_carries_its_part_number_and_its_keyboard_twice():
 )
 def test_a_macbook_s_screen_is_the_one_apple_built(title, screen):
     assert axis(title, "screen_inch", brand="Apple") == screen
+
+
+def test_a_thousand_gigabytes_is_a_terabyte():
+    """Drives are sold in decimal terabytes; `1000 GB` and `1 TB` are one drive."""
+    from app.features.offers.normalization.categories.laptops import megabytes
+
+    assert megabytes("1000", "GB") == megabytes("1", "TB") == 1048576
+    assert megabytes("2000", "GB") == megabytes("2", "TB")
+    assert megabytes("512", "GB") == 524288
+    assert megabytes("1500", "GB") == 1536000

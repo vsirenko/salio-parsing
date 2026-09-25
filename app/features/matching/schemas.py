@@ -268,7 +268,7 @@ class EntrySnapshot(BaseModel):
 
 
 class MergePair(BaseModel):
-    """Two entries one barcode named, and what became of them.
+    """Two entries one barcode or one part number named, and what became of them.
 
     `from` is folded in and disappears, `into` survives. A refused pair is the one worth
     reading: one barcode on two brands or two categories is more often an error in a shop's
@@ -277,7 +277,10 @@ class MergePair(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    gtin: str
+    # What named the pair: a barcode, or a part number of a maker whose part numbers name one
+    # configuration. Exactly one of the two.
+    gtin: str | None = None
+    mpn: str | None = None
     from_: EntrySnapshot = Field(alias="from")
     into: EntrySnapshot
     outcome: Literal["merged", "refused"]
@@ -351,3 +354,47 @@ class QueueSummary(BaseModel):
     matched_offers: int
     offers: int
     matched_share: float
+
+
+class SuspectKind(StrEnum):
+    # One part number on entries of one maker that agree on every axis they share.
+    PART_NUMBER = "part_number"
+    # Two entries of one model that differ in one number, and by under 5%.
+    NEAR_VALUE = "near_value"
+    # Families of one maker whose names are the same words in another order or case.
+    WORD_ORDER = "word_order"
+
+
+class SuspectEntry(BaseModel):
+    """An entry — or, for `word_order`, a family, with `id` null — a suspect names."""
+
+    id: int | None = Field(description="The entry; null where the suspect is about families")
+    product_id: int | None
+    title: str | None
+    model: str | None
+    offers_count: int
+    entries_count: int | None = Field(None, description="For a family: the entries in it")
+    axes: dict[str, str] = Field(default_factory=dict)
+
+
+class Suspect(BaseModel):
+    """One thing that looks filed twice, what gives it away, and what would fix it.
+
+    `action` is a suggestion, not a verdict: `merge` (one product, fold the entries),
+    `axis` (a reading gives one number two ways — a rule or a word to fix, then a reparse),
+    `registry` (one name spelled several ways — enter the others as aliases of `evidence`).
+    """
+
+    kind: SuspectKind
+    action: Literal["merge", "axis", "registry"]
+    brand: str
+    category: str
+    detail: str
+    evidence: str = Field(description="The part number, the axis, or the name to keep")
+    entries: list[SuspectEntry]
+
+
+class SuspectReport(BaseModel):
+    total: int
+    by_kind: dict[str, int] = Field(default_factory=dict)
+    items: list[Suspect]

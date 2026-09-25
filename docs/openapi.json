@@ -3492,7 +3492,7 @@
         "type": "string"
       },
       "MergePair": {
-        "description": "Two entries one barcode named, and what became of them.\n\n`from` is folded in and disappears, `into` survives. A refused pair is the one worth\nreading: one barcode on two brands or two categories is more often an error in a shop's\ndata than two products.",
+        "description": "Two entries one barcode or one part number named, and what became of them.\n\n`from` is folded in and disappears, `into` survives. A refused pair is the one worth\nreading: one barcode on two brands or two categories is more often an error in a shop's\ndata than two products.",
         "properties": {
           "detail": {
             "anyOf": [
@@ -3510,11 +3510,29 @@
             "$ref": "#/components/schemas/EntrySnapshot"
           },
           "gtin": {
-            "title": "Gtin",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gtin"
           },
           "into": {
             "$ref": "#/components/schemas/EntrySnapshot"
+          },
+          "mpn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mpn"
           },
           "outcome": {
             "enum": [
@@ -3537,7 +3555,6 @@
           }
         },
         "required": [
-          "gtin",
           "from",
           "into",
           "outcome"
@@ -7233,6 +7250,28 @@
       },
       "SettledCounts": {
         "properties": {
+          "families_after": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Families After"
+          },
+          "families_before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Families Before"
+          },
           "matched": {
             "default": 0,
             "title": "Matched",
@@ -8438,6 +8477,177 @@
         ],
         "title": "Status",
         "type": "string"
+      },
+      "Suspect": {
+        "description": "One thing that looks filed twice, what gives it away, and what would fix it.\n\n`action` is a suggestion, not a verdict: `merge` (one product, fold the entries),\n`axis` (a reading gives one number two ways — a rule or a word to fix, then a reparse),\n`registry` (one name spelled several ways — enter the others as aliases of `evidence`).",
+        "properties": {
+          "action": {
+            "enum": [
+              "merge",
+              "axis",
+              "registry"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/SuspectEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "evidence": {
+            "description": "The part number, the axis, or the name to keep",
+            "title": "Evidence",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SuspectKind"
+          }
+        },
+        "required": [
+          "kind",
+          "action",
+          "brand",
+          "category",
+          "detail",
+          "evidence",
+          "entries"
+        ],
+        "title": "Suspect",
+        "type": "object"
+      },
+      "SuspectEntry": {
+        "description": "An entry — or, for `word_order`, a family, with `id` null — a suspect names.",
+        "properties": {
+          "axes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Axes",
+            "type": "object"
+          },
+          "entries_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a family: the entries in it",
+            "title": "Entries Count"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The entry; null where the suspect is about families",
+            "title": "Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "offers_count": {
+            "title": "Offers Count",
+            "type": "integer"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "title",
+          "model",
+          "offers_count"
+        ],
+        "title": "SuspectEntry",
+        "type": "object"
+      },
+      "SuspectKind": {
+        "enum": [
+          "part_number",
+          "near_value",
+          "word_order"
+        ],
+        "title": "SuspectKind",
+        "type": "string"
+      },
+      "SuspectReport": {
+        "properties": {
+          "by_kind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Kind",
+            "type": "object"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Suspect"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "SuspectReport",
+        "type": "object"
       },
       "TokenPair": {
         "properties": {
@@ -15981,7 +16191,7 @@
     },
     "/api/admin/matching/merge": {
       "post": {
-        "description": "Only a barcode decides. A part number names a family as often as a product, so two\nentries sharing one are usually two real configurations rather than one written twice.",
+        "description": "A barcode decides, and so does a part number of a maker whose part numbers name one\nconfiguration (Apple). Elsewhere a part number names a family as often as a product, so\ntwo entries sharing one are usually two real configurations. A pair whose entries\ndisagree on an axis is refused either way.",
         "operationId": "merge_duplicates_api_admin_matching_merge_post",
         "parameters": [
           {
@@ -16038,7 +16248,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Fold together the entries a barcode says are one product",
+        "summary": "Fold together the entries a barcode or a part number says are one product",
         "tags": [
           "admin: matching"
         ]
@@ -16210,6 +16420,110 @@
           }
         ],
         "summary": "Work through what is unplaced",
+        "tags": [
+          "admin: matching"
+        ]
+      }
+    },
+    "/api/admin/matching/suspects": {
+      "get": {
+        "description": "A queue to read, not a pass that acts: one part number on entries that agree on every\naxis (`merge`), one model at two nearly equal numbers (`axis` — a reading to fix), one\nname in several word orders or cases (`registry` — aliases to enter). The ones holding\nthe most listings first.",
+        "operationId": "list_suspects_api_admin_matching_suspects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "brand_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Brand Id"
+            }
+          },
+          {
+            "description": "Repeatable",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/SuspectKind"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeatable",
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuspectReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Entries and families that look filed twice",
         "tags": [
           "admin: matching"
         ]

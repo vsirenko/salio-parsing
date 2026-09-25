@@ -227,6 +227,17 @@ listing belonged to — facts the crawl had and the page does not state. Without
 reparse of a marketplace channel would fail on every item for want of something it already
 knew. The worker fills them from the listing, so a channel does not have to remember to.
 
+**A settled run says how many families its category had before and after**
+(`settled.families_before`, `families_after`), and the scheduler logs a warning when there
+are more after. Rereading what is already placed should fold families, not make them, so
+growth there is a rule or a registry change that split what was one — and it shows on the
+run that did it rather than as a slow drift in the catalogue.
+
+**A reparse also rereads the listing's newest observation from its stored payload**, where
+that is not the one the snapshot belongs to: a quick pass or a card read off a listing page
+leaves an observation with no snapshot, the listing shows it, and three onea iPads kept an
+old model through a full reparse that way on 25.09.2026.
+
 **Registry work is followed by `POST /runs/reparse`.** A word entered moves no ruleset
 version, so no stored reading changes until the snapshots are read again — and doing that a
 channel at a time, or a listing at a time from a script, is how 54000 renormalize calls

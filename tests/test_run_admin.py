@@ -239,3 +239,64 @@ def test_a_channel_off_the_schedule_is_read_again_and_one_that_collected_nothing
     assert source["is_enabled"] is False
     [queued] = reparse(client, token, category_id=category["id"])["queued"]
     assert queued["source"]["id"] == source["id"]
+
+
+def test_a_reparse_rereads_the_newest_observation_too(client, event_loop):
+    """The snapshot a reparse re-reads may be an older observation than the one the listing
+    shows; three onea iPads kept an old model through a full reparse that way."""
+    from sqlalchemy import func, select
+
+    from app.db.models import NormalizedOffer
+    from app.db.session import session_factory
+
+    token = admin_token(client)
+    source = channel(client, token, cron_full=None, cron_quick=None)
+
+    def ingest(payload):
+        response = client.post(
+            f"/api/admin/sources/{source['id']}/offers",
+            headers=auth(token),
+            json={"external_id": "N-1", "market_code": "LV", "payload": payload},
+        )
+        assert response.status_code == 202, response.text
+        return response.json()
+
+    older = {"name": "Apple iPad mini (A17 Pro) 128GB", "price": "599"}
+    ingest(older)
+    newest = ingest({"name": "Apple iPad mini (A17 Pro) 128GB", "price": "579"})
+
+    async def readings(raw_id) -> int:
+        async with session_factory() as session:
+            return await session.scalar(
+                select(func.count())
+                .select_from(NormalizedOffer)
+                .where(NormalizedOffer.raw_offer_id == raw_id)
+            )
+
+    async def age(raw_id) -> None:
+        """What a reading made before a rule moved looks like: another version."""
+        from sqlalchemy import update
+
+        async with session_factory() as session:
+            await session.execute(
+                update(NormalizedOffer)
+                .where(NormalizedOffer.raw_offer_id == raw_id)
+                .values(ruleset_version="an-older-ruleset")
+            )
+            await session.commit()
+
+    event_loop.run_until_complete(age(newest["raw_offer_id"]))
+    before = event_loop.run_until_complete(readings(newest["raw_offer_id"]))
+    run = start(client, token, source["id"], kind="reparse")
+    taken(event_loop, run["id"])
+    handed = client.post(
+        f"/api/worker/sources/{source['id']}/offers/batch",
+        headers=auth(worker_token(client)),
+        json={
+            "market_code": "LV",
+            "run_id": run["id"],
+            "offers": [{"external_id": "N-1", "payload": older}],
+        },
+    )
+    assert handed.status_code == 202, handed.text
+    assert event_loop.run_until_complete(readings(newest["raw_offer_id"])) == before + 1

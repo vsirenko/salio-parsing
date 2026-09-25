@@ -2015,6 +2015,71 @@ def test_a_part_number_on_two_entries_is_left_alone(client):
     assert report["found"] == 0, "a part number does not decide this"
 
 
+def test_an_apple_part_number_on_two_entries_folds_them_into_one(client):
+    """Apple's part number names one configuration: `MDH74ZE/A` on two entries is one product
+    written twice — 67 of 112 of its MacBook part numbers were, on 25.09.2026. Where the two
+    entries disagree on an axis the pair is refused, as for a barcode."""
+    token = admin_token(client)
+    _, source, category, brand = a_shop_we_can_build_from(client, token)
+    storage = a_storage_axis(client, token, category["id"])
+    colour_axis = a_colour_axis(client, token, category["id"])
+    colours = {
+        value["canonical"]: value["id"]
+        for value in client.get(
+            f"/api/admin/attributes/{colour_axis['id']}/values", headers=auth(token)
+        ).json()
+    }
+
+    def entry(external_id, model, colour, mpn):
+        offer = offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Apple {model} 256 GB {colour}",
+                "brand": "Apple",
+                "model": model,
+                "mpn": mpn,
+                "attributes": {"storage": "256 GB", "color": colour},
+            },
+            external_id=external_id,
+        )
+        variant = post(
+            client,
+            token,
+            "/api/admin/variants",
+            {"brand_id": brand["id"], "category_id": category["id"], "model": model},
+        )
+        for body in (
+            {"attribute_id": storage["id"], "value_num": "262144"},
+            {"attribute_id": colour_axis["id"], "value_id": colours[colour]},
+        ):
+            client.put(
+                f"/api/admin/variants/{variant['id']}/attributes", headers=auth(token), json=body
+            )
+        placed = client.put(
+            f"/api/admin/offers/{offer}/match",
+            headers=auth(token),
+            json={"variant_id": variant["id"]},
+        )
+        assert placed.status_code == 200, placed.text
+        return variant["id"]
+
+    one = entry("A-1", "iPhone 17", "black", "MG014HX/A")
+    two = entry("A-2", "Apple iPhone 17", "black", "MG014HX/A")
+    # One part number on a black entry and a blue one: a listing is misplaced, not one product.
+    entry("B-1", "iPhone 17 Pro", "black", "MG124HX/A")
+    entry("B-2", "Apple iPhone 17 Pro", "blue", "MG124HX/A")
+
+    report = client.post("/api/admin/matching/merge", headers=auth(token)).json()
+    assert (report["found"], report["merged"], report["reasons"]) == (2, 1, {"axes_differ": 1})
+    by_mpn = {pair["mpn"]: pair for pair in report["pairs"]}
+    assert by_mpn["MG014HX/A"]["outcome"] == "merged"
+    assert by_mpn["MG124HX/A"]["outcome"] == "refused"
+    assert by_mpn["MG014HX/A"]["gtin"] is None
+    assert {one, two} - {by_mpn["MG014HX/A"]["into"]["id"]}
+
+
 def test_an_entry_named_after_a_reading_that_changed_is_rebuilt(client):
     """A catalogue entry built from one listing takes its model from that listing's reading,
     and does not follow when the reading improves.

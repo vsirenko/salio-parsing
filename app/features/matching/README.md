@@ -23,7 +23,8 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `POST /api/admin/matching/doubts/{offer_id}/keep` | a person looked and left the match where it is |
 | `POST /api/admin/offers/{offer_id}/promote` | make the variant this listing was looking for |
 | `POST /api/admin/matching/promote` | do that for everything identifiable in the queue |
-| `POST /api/admin/matching/merge` | fold together the entries a barcode says are one product |
+| `POST /api/admin/matching/merge` | fold together the entries a barcode — or an Apple part number — says are one product |
+| `GET /api/admin/matching/suspects` | what looks filed twice, with the evidence and the fix to make; changes nothing |
 | `POST /api/admin/matching/rebuild` | rebuild the entries named after a reading that has since changed, and delete the empty families nothing points at |
 
 ## How it works
@@ -180,6 +181,23 @@ named whichever family it touched last — 13 of the 15 entries naming a family 
 again**: nothing else hides a family, so a hidden one with an entry in it is only this
 pass's leftover — on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the
 storefront that way, their names emptied by one reading and filled again by the next.
+
+**What looks filed twice is a queue, not a hunt.** On 25.09.2026 every split was found by eye
+— `Plus 16` beside `16 Plus`, a MacBook Air at 13.0 and 13.6, one part number on three
+entries — and each was one of three shapes. `GET /matching/suspects` (`suspects.py`) finds
+them and says what would fix each: one part number on entries of one maker that agree on
+every axis they share (`merge`); two entries of one model that differ in one number, by
+under 5% (`axis` — `1000 GB` against `1 TB` is 2.3%, two real capacities are further apart);
+families whose names are the same words in another order or case (`registry`, naming the
+spelling most entries carry). It changes nothing, and the ones holding the most listings
+come first.
+
+**A part number merges where the maker's names one configuration.** Apple's does —
+`MDH74ZE/A` is one MacBook Air with one keyboard — and 67 of 112 of its MacBook part numbers
+sat on more than one entry. `ONE_PRODUCT_PART_NUMBERS` holds the makers measured to be like
+that, Apple alone for now, and only the whole number with its region counts: on a Mac the
+region letters are the keyboard. Samsung's `SM-S948B` covers a family, so elsewhere a part
+number decides nothing, and either way a pair whose entries disagree on an axis is refused.
 
 **A family takes the case its entries write.** The lookup that files an entry under a family
 ignores case, so the spelling that made a family heads it for good: dateks's `PRO MAX 16

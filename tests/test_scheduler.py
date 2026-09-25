@@ -302,7 +302,14 @@ def test_settling_writes_what_it_placed_onto_the_run(client, event_loop):
 
     progress = client.get(f"/api/admin/runs/{run['id']}", headers=auth(token)).json()["progress"]
     assert progress["phase"] == "settled"
-    assert set(progress["settled"]) == {"renamed", "matched", "promoted", "matched_after"}
+    assert set(progress["settled"]) == {
+        "renamed",
+        "matched",
+        "promoted",
+        "matched_after",
+        "families_before",
+        "families_after",
+    }
 
 
 def test_a_settling_that_fails_says_so_on_the_run(client, event_loop, monkeypatch):

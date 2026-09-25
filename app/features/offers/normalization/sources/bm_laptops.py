@@ -11,7 +11,7 @@ from app.features.offers.normalization.categories import laptops
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 LAPTOPS_SLUG = "bm-laptops"
-LAPTOPS_VERSION = "bm-laptops-6"
+LAPTOPS_VERSION = "bm-laptops-7"
 CPU_FIELDS = (
     "bm_procesora_razotajs_213",
     "bm_procesora_serija_165",
