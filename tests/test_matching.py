@@ -2080,6 +2080,38 @@ def test_an_apple_part_number_on_two_entries_folds_them_into_one(client):
     assert {one, two} - {by_mpn["MG014HX/A"]["into"]["id"]}
 
 
+def test_an_entry_s_axis_follows_what_every_listing_on_it_now_reads(client):
+    """A MacBook Air read 13.6" and 1 TB on every listing sat on an entry holding 13" and
+    1000 GB: axes were filled in, never overwritten, and a reading that improved left them."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+
+    def read_as(capacity):
+        return offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Apple iPhone 15 {capacity}",
+                "brand": "Apple",
+                "model": "iPhone 15",
+                "attributes": {"storage": capacity},
+            },
+            external_id="X-1",
+        )
+
+    variant_id = promote(client, token, read_as("256 GB"))["variant_id"]
+    # The same listing, read again with a rule that now gets it right.
+    read_as("512 GB")
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert report["realigned"] == 1, report
+    entry = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    assert "512 GB" in entry["title"]
+    again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert again["realigned"] == 0
+
+
 def test_an_entry_named_after_a_reading_that_changed_is_rebuilt(client):
     """A catalogue entry built from one listing takes its model from that listing's reading,
     and does not follow when the reading improves.

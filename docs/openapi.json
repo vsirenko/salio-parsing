@@ -6373,6 +6373,11 @@
             "title": "Merged",
             "type": "integer"
           },
+          "realigned": {
+            "default": 0,
+            "title": "Realigned",
+            "type": "integer"
+          },
           "reasons": {
             "additionalProperties": {
               "type": "integer"

@@ -1430,6 +1430,39 @@ class MatchingService:
             except IntegrityError:
                 reasons["conflict"] += 1
 
+        # An entry's axes were set from the listing that made it and are filled in, never
+        # overwritten, by the ones that join it — so a reading that improves leaves them
+        # behind, as it left the names. On 25.09.2026 MacBook Airs read 13.6" and 1 TB on
+        # every listing sat on entries holding 13" and 1000 GB, and 101 pairs of entries one
+        # Apple part number named could not be merged for it.
+        realigned = 0
+        for variant_id, attribute_id, value in await self._stale_axes(limit=limit):
+            try:
+                async with self.session.begin_nested():
+                    await catalog.set_variant_attribute(
+                        variant_id,
+                        VariantAttributeSet(attribute_id=attribute_id, **value, origin="consensus"),
+                    )
+                realigned += 1
+            except ConflictError as error:
+                twin = (error.details or {}).get("variant_id")
+                if twin is None:
+                    reasons[error.code] += 1
+                    continue
+                try:
+                    async with self.session.begin_nested():
+                        await catalog.merge_variants(
+                            variant_id,
+                            twin,
+                            reason="its axes followed its listings into an entry that existed",
+                            decided_by="rule",
+                        )
+                    merged += 1
+                except AppError as failure:
+                    reasons[failure.code] += 1
+            except AppError as error:
+                reasons[error.code] += 1
+
         # A family is named by whichever spelling made it, and the lookup that files an entry
         # under it ignores case — so dateks's `PRO MAX 16 PLUS` headed a family whose 13
         # entries all read `Pro Max 16 Plus` once the registry spelled the name. Only a
@@ -1458,6 +1491,7 @@ class MatchingService:
             merged=merged,
             rehomed=rehomed,
             recased=recased,
+            realigned=realigned,
             hidden=hidden,
             deleted=deleted,
             **dict(reasons),
@@ -1468,11 +1502,83 @@ class MatchingService:
             merged=merged,
             rehomed=rehomed,
             recased=recased,
+            realigned=realigned,
             hidden=hidden,
             deleted=deleted,
             refused=sum(reasons.values()),
             reasons=dict(reasons),
         )
+
+    async def _stale_axes(self, *, limit: int) -> list[tuple[int, int, dict[str, Any]]]:
+        """Axes an entry holds that every listing on it now reads another way.
+
+        Unanimity, as for a name: one shop disagreeing is a question for a person, every
+        listing agreeing is the reading having moved. Only an identity-bearing axis, and only
+        a value the registry knows — an enum answer with no row is left alone.
+        """
+        rows = await self.session.execute(
+            select(OfferMatch.variant_id, Offer.identity)
+            .join(Offer, Offer.id == OfferMatch.offer_id)
+            .join(Variant, Variant.id == OfferMatch.variant_id)
+            .where(OfferMatch.superseded_at.is_(None), Variant.is_visible.is_(True))
+        )
+        read: dict[int, list[dict[str, Any]]] = {}
+        for variant_id, identity in rows.all():
+            read.setdefault(variant_id, []).append(identity or {})
+        if not read:
+            return []
+        held = await self.session.execute(
+            select(
+                VariantAttribute.variant_id,
+                Attribute.id,
+                Attribute.key,
+                Attribute.value_type,
+                VariantAttribute.value_num,
+                AttributeValue.canonical,
+            )
+            .join(Attribute, Attribute.id == VariantAttribute.attribute_id)
+            .join(Variant, Variant.id == VariantAttribute.variant_id)
+            .join(
+                CategoryAttribute,
+                (CategoryAttribute.category_id == Variant.category_id)
+                & (CategoryAttribute.attribute_id == Attribute.id)
+                & CategoryAttribute.identity_bearing.is_(True),
+            )
+            .outerjoin(AttributeValue, AttributeValue.id == VariantAttribute.value_id)
+            .where(VariantAttribute.variant_id.in_(list(read)))
+        )
+        values = {
+            (attribute_id, canonical): value_id
+            for attribute_id, canonical, value_id in (
+                await self.session.execute(
+                    select(AttributeValue.attribute_id, AttributeValue.canonical, AttributeValue.id)
+                )
+            ).all()
+        }
+        stale: list[tuple[int, int, dict[str, Any]]] = []
+        for variant_id, attribute_id, key, kind, number, canonical in held.all():
+            said = {
+                str(identity[key]) for identity in read[variant_id] if identity.get(key) is not None
+            }
+            if len(said) != 1:
+                continue
+            new = said.pop()
+            if kind == "number":
+                try:
+                    wanted = Decimal(new)
+                except ArithmeticError:
+                    continue
+                if number is None or wanted == number:
+                    continue
+                stale.append((variant_id, attribute_id, {"value_num": wanted}))
+            elif kind == "enum":
+                value_id = values.get((attribute_id, new))
+                if canonical is None or new == canonical or value_id is None:
+                    continue
+                stale.append((variant_id, attribute_id, {"value_id": value_id}))
+            if len(stale) >= limit:
+                break
+        return stale
 
     async def _delete_empty_hidden_families(self, *, limit: int) -> int:
         """Delete the hidden families that hold nothing and that nothing points at.

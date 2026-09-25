@@ -199,6 +199,14 @@ that, Apple alone for now, and only the whole number with its region counts: on 
 region letters are the keyboard. Samsung's `SM-S948B` covers a family, so elsewhere a part
 number decides nothing, and either way a pair whose entries disagree on an axis is refused.
 
+**An entry's axes follow its listings, as its name does.** Axes are set from the listing
+that made an entry and only filled in by the ones that join it, so a reading that improves
+leaves them behind: on 25.09.2026 MacBook Airs read 13.6" and 1 TB on every listing sat on
+entries holding 13" and 1000 GB, and 101 pairs of entries one Apple part number named could
+not be merged for it. A rebuild sets an identity axis to the value every listing on the
+entry now reads (`realigned`), only when they all agree and only to a value the registry
+knows; an entry that becomes one that exists is merged into it.
+
 **A family takes the case its entries write.** The lookup that files an entry under a family
 ignores case, so the spelling that made a family heads it for good: dateks's `PRO MAX 16
 PLUS` stayed the storefront heading over 13 entries that all read `Pro Max 16 Plus` once the
