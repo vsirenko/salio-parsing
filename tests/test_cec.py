@@ -215,3 +215,25 @@ def test_an_ipad_is_apple_s():
         category="tablets",
     )
     assert fields["brand_raw"] == "Apple"
+
+
+# --- laptops: one route per MacBook family ---
+
+
+def test_the_laptops_are_read_family_by_family(event_loop):
+    """`mac` holds the iMacs and the Mac minis as well; each MacBook family has its own."""
+    from app.features.runs.channels.cec import LAPTOPS_CHANNEL
+
+    asked: list[dict] = []
+    listings = event_loop.run_until_complete(LAPTOPS_CHANNEL.discover(shop(asked=asked), job()))
+    routes = [body["variables"]["url"] for body in asked if "route" in body["query"]]
+    assert routes == ["mac/macbook-air", "mac/macbook-pro", "mac/macbook-neo"]
+    assert len(listings) == 3 * len(discover(event_loop))
+
+
+def test_one_family_s_route_emptied_fails_the_pass(event_loop):
+    from app.features.runs.channels.cec import LAPTOPS_CHANNEL
+
+    empty = json.dumps({"data": {"products": {"total_count": 0, "items": []}}})
+    with pytest.raises(ValueError, match="mac/macbook-air holds nothing"):
+        event_loop.run_until_complete(LAPTOPS_CHANNEL.discover(shop(products=empty), job()))

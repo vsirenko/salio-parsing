@@ -110,6 +110,16 @@ and the questions that have to be answered with real data first, are written dow
 - [ ] **dateks's `14 Essential PV14250` is not read through the registry.** The code is
       entered as `Pro 14 Essential`, but the title carries on `| Pro Platinum Silver`, and
       `pro` after a name makes it another model to the lookup. One listing.
+- [ ] **67 of 112 MacBook part numbers sit on more than one entry.** Seen on 25.09.2026:
+      euronics writes `key arrangement: NORDIC` on the MacBooks whose part number ends `KS/A`,
+      which Apple's rule reads as swedish, so the two disagree and the keyboard is left out;
+      and it states `1000 GB` where the others say `1 TB` (1024000 against 1048576 MB). Each
+      difference files the listing under an entry of its own. Whether `KS` is nordic or
+      swedish is a decision about the vocabulary, not a rule to guess.
+- [ ] **Three shops sell laptops and have no laptop channel yet**: mdata (`Portatīvie datori`,
+      34 listing pages on 25.09.2026), m79 (`portativiedatori/portativie-datori-veikala`) and
+      tet (`datortehnika/portativie-datori-un-piederumi/portativie-datori`). Each is a
+      channel to write; cec and discover, whose channels already existed, are collected.
 - [ ] **A damaged-packaging listing is read as a model called `Prece`.** ksenukai titles
       open `Prece ar bojātu iepakojumu.` — an item with damaged packaging — on some laptops.
       It is a condition, not a name, and the channel keeps it as new.

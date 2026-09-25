@@ -47,6 +47,10 @@ CATEGORY_PATH = "iphone"
 # The iPads, the same configurable products under their own route.
 TABLETS_SLUG = "cec-tablets"
 TABLET_CATEGORY_PATH = "ipad"
+# The MacBooks, one route per family. `mac` itself is not collected: it holds the iMacs, the
+# Mac minis and the Studios too — 31 of its 45 products on 25.09.2026 were not laptops.
+LAPTOPS_SLUG = "cec-laptops"
+LAPTOP_CATEGORY_PATHS = ("mac/macbook-air", "mac/macbook-pro", "mac/macbook-neo")
 # Magento answers up to 100 items per request, and twelve configurables is the whole
 # category.
 PAGE = 100
@@ -97,15 +101,28 @@ query Phones($uid: String!, $page: Int!, $size: Int!) {
 class Cec:
     """One channel: this shop's iPhones, through its GraphQL."""
 
-    def __init__(self, slug: str = SLUG, category_path: str = CATEGORY_PATH) -> None:
+    def __init__(
+        self, slug: str = SLUG, category_paths: tuple[str, ...] = (CATEGORY_PATH,)
+    ) -> None:
         self.slug = slug
-        self.category_path = category_path
+        self.category_paths = category_paths
 
     async def discover(self, fetcher: Fetcher, job: Job) -> list[Listing]:
-        category = await self._category(fetcher)
+        listings: list[Listing] = []
+        for path in self.category_paths:
+            found = await self._listings(fetcher, path)
+            if not found:
+                # One family's route that emptied is a route that moved, not a shop that
+                # sold out of it; carrying on with the others would licence an absence.
+                raise ValueError(f"/{path} holds nothing buyable")
+            listings += found
+        return listings
+
+    async def _listings(self, fetcher: Fetcher, path: str) -> list[Listing]:
+        category = await self._category(fetcher, path)
         uid = category.get("uid")
         if not uid:
-            raise ValueError(f"no category at /{self.category_path}")
+            raise ValueError(f"no category at /{path}")
 
         listings: list[Listing] = []
         for page in range(1, MAX_PAGES + 1):
@@ -117,9 +134,6 @@ class Cec:
                 listings += _offers(item, category=category)
             if len(items) < PAGE:
                 break
-
-        if not listings:
-            raise ValueError(f"/{self.category_path} holds nothing buyable")
         return listings
 
     async def fetch(self, fetcher: Fetcher, listing: Listing) -> Snapshot:
@@ -145,11 +159,11 @@ class Cec:
     def read_listing(self, listing: Listing) -> dict[str, Any]:  # pragma: no cover - no quick pass
         return dict(listing.card)
 
-    async def _category(self, fetcher: Fetcher) -> dict[str, Any]:
+    async def _category(self, fetcher: Fetcher, path: str) -> dict[str, Any]:
         part = await fetcher.post(
             GRAPHQL,
             role="category",
-            json={"query": ROUTE, "variables": {"url": self.category_path}},
+            json={"query": ROUTE, "variables": {"url": path}},
             headers={"content-type": "application/json"},
         )
         return _data(part.body).get("route") or {}
@@ -258,4 +272,5 @@ def _cents(value: Any) -> str:
 
 
 register(Cec())
-TABLETS_CHANNEL = register(Cec(slug=TABLETS_SLUG, category_path=TABLET_CATEGORY_PATH))
+TABLETS_CHANNEL = register(Cec(slug=TABLETS_SLUG, category_paths=(TABLET_CATEGORY_PATH,)))
+LAPTOPS_CHANNEL = register(Cec(slug=LAPTOPS_SLUG, category_paths=LAPTOP_CATEGORY_PATHS))

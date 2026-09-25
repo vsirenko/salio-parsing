@@ -147,6 +147,15 @@ def a_tablet(section: str, name: str) -> bool:
     return section == APPLE_SECTION and bool(_IPAD.search(name))
 
 
+def a_laptop(section: str, name: str) -> bool:
+    """A MacBook in the Apple section, a laptop in the mixed one — 31 on 25.09.2026, 30 of
+    them MacBooks. Named a laptop and stating a capacity, which leaves out the iMacs, the Mac
+    minis and the Pencils beside them."""
+    if section not in (MIXED_SECTION, APPLE_SECTION):
+        return False
+    return bool(_LAPTOP.search(name)) and bool(_CAPACITY.search(name))
+
+
 def tablet_maker(section: str) -> str:
     """`Apple` where the section names it; nothing where the section is a kind of thing,
     and the matcher reads the maker off the name — `Samsung Galaxy Tab S10 FE …`."""
@@ -207,3 +216,5 @@ def _plain(value: str | None) -> str:
 register(Discover())
 TABLETS_SLUG = "discover-tablets"
 TABLETS_CHANNEL = register(Discover(slug=TABLETS_SLUG, selects=a_tablet, maker_of=tablet_maker))
+LAPTOPS_SLUG = "discover-laptops"
+LAPTOPS_CHANNEL = register(Discover(slug=LAPTOPS_SLUG, selects=a_laptop, maker_of=tablet_maker))

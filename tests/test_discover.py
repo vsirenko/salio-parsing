@@ -210,6 +210,16 @@ def test_the_tablets_are_picked_out_of_the_sections_they_share():
     assert not a_tablet("Mobilie telefoni >> Apple", "Apple iPhone 17 256GB Black")
 
 
+def test_the_laptops_are_the_macbooks_and_the_one_laptop_beside_the_tablets():
+    from app.features.runs.channels.discover import APPLE_SECTION, MIXED_SECTION, a_laptop
+
+    assert a_laptop(APPLE_SECTION, "Apple MacBook Air 13 M5 13.6 16GB/1TB 10C EN ENG Midnight")
+    assert a_laptop(MIXED_SECTION, "Microsoft Surface Laptop 13.5 16GB/512GB/Intel i7")
+    assert not a_laptop(MIXED_SECTION, "Samsung Galaxy Tab S10 FE WiFi 10.9 128GB Gray")
+    assert not a_laptop(APPLE_SECTION, "Apple Mac mini (2024) M4 10C 16GB/512GB (MU9E3)")
+    assert not a_laptop("Mobilie telefoni >> Apple", "Apple MacBook Air 13 M5 16GB/512GB")
+
+
 def tablet(name: str, brand: str = "", line: str = "") -> dict:
     from app.features.offers.normalization import read
     from app.features.offers.normalization.rules import Vocabulary

@@ -504,7 +504,7 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-laptops-9": "703fc3f58f5a",
+    "apple-laptops-11": "31b3cd81cbeb",
     "apple-phones-2": "f940eea49212",
     "apple-tablets-1": "af1017e2a9a9",
     "bigbox-10": "4497939fdfce",
@@ -516,12 +516,14 @@ FINGERPRINTS = {
     "bm-shop-1": "3d09a6688700",
     "bm-tablets-1": "24d34a1063df",
     "cec-3": "958bc58c1fb0",
+    "cec-laptops-1": "80913aebe3a0",
     "cec-tablets-2": "336ec202acc2",
     "dateks-5": "0acd87a6666d",
     "dateks-laptops-5": "8425fb691f0b",
     "dateks-shop-1": "76bf8766fb11",
     "dateks-tablets-1": "abe9d2e77bfe",
     "discover-6": "f6aa33b230a2",
+    "discover-laptops-1": "aab9f365db98",
     "discover-shop-1": "6065096d8d22",
     "discover-tablets-3": "f8cf45775b77",
     "euronics-laptops-5": "9e7e2954b665",

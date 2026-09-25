@@ -257,14 +257,22 @@ lifecycle changes.
 | `euronics-tablets` | euronics.lv | retail | json_ld | 122 | 100% placed |
 | `cec-phones` | shop.cec.lv | wholesale | graphql | 92 | not yet run |
 | `cec-tablets` | shop.cec.lv | wholesale | graphql | 160 | not yet run |
+| `cec-laptops` | shop.cec.lv | wholesale | graphql | 87 | 98.9% placed |
 | `discover-phones` | discover.lv | wholesale | xml | 560 | not yet run |
 | `discover-tablets` | discover.lv | wholesale | xml | 222 | not yet run |
+| `discover-laptops` | discover.lv | wholesale | xml | 31 | 80.6% placed |
 | `tet-phones` | tet.lv | retail | markup | 319 | not yet run |
 | `tet-tablets` | tet.lv | retail | markup | 210 | not yet run |
 
 ksenukai and 1a share one lupasearch index; a category is one leaf name in it
 (`Planšetdatori` for tablets), so their tablet channels are the phone class with another
 leaf, not another module.
+
+The MacBooks of cec and discover are the same classes again. cec reads one route per family —
+`mac/macbook-air`, `-pro`, `-neo` — because `mac` holds the iMacs and the Mac minis as well,
+and a family route that comes back empty fails the pass rather than shrinking it. discover's
+laptops share its export's two computer sections with the tablets and are told apart by the
+word — `MacBook`, `Laptop`, `Notebook` — and a stated capacity.
 
 **A tablet filed among a shop's phones is left out at discovery**, through one shared check,
 `channels/tablets.py`: the word in the feed's languages, `Wi-Fi + 4G`, and the makers'

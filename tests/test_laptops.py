@@ -530,3 +530,99 @@ def test_a_macbook_is_named_by_its_family_and_its_glass():
         ),
     ]:
         assert shop_laptop({"name": title, "brand": "Apple"}, "bm-laptops", "bm")["model"] == model
+
+
+# --- cec and discover: the MacBooks of two Apple sellers ---
+
+MAC_WORDS = Vocabulary(
+    category_names=VOCABULARY.category_names,
+    brand_names=VOCABULARY.brand_names,
+    attribute_names={
+        **VOCABULARY.attribute_names,
+        normalize_attribute_name("erply_language"): "keyboard_layout",
+    },
+    values={
+        "keyboard_layout": {
+            **VOCABULARY.values["keyboard_layout"],
+            "int": "english",
+            "usa": "english",
+            "ru": "russian",
+            "rus": "russian",
+        }
+    },
+)
+
+
+def cec_mac(name: str, family: str, category: str = "MacBook Air", **options: str) -> dict:
+    return read(
+        {"id": "Z1", "name": name, "model": family, "category": category, "attributes": options},
+        source_slug="cec-laptops",
+        shop_slug="cec",
+        category="laptops",
+        vocabulary=MAC_WORDS,
+    )
+
+
+def discover_mac(name: str, line: str = "") -> dict:
+    return read(
+        {"id": "1", "name": name, "brand": "Apple", "line": line},
+        source_slug="discover-laptops",
+        shop_slug="discover",
+        category="laptops",
+        vocabulary=MAC_WORDS,
+    )
+
+
+def test_a_cec_macbook_is_apple_s_and_named_by_its_family():
+    fields = cec_mac(
+        'MacBook Pro 14" Apple M5 Pro 15‑core CPU & 16‑core GPU 24GB/1TB Space Black RUS',
+        'MacBook Pro 14" Apple M5 Pro',
+        category="MacBook Pro",
+        erply_language="RUS",
+    )
+    assert (fields["brand_raw"], fields["model"]) == ("Apple", "MacBook Pro")
+    assert fields["identity"]["keyboard_layout"] == "russian"
+    # The whole inch it is named by, read as the diagonal it has.
+    assert fields["identity"]["screen_inch"] == 14.2
+
+
+def test_a_cec_simple_product_names_its_keyboard_last():
+    name = "MacBook Air 13” Apple M5 10C CPU, 8C GPU/16GB/512GB SSD/Silver/USA"
+    fields = cec_mac(name, name)
+    assert fields["model"] == "MacBook Air"
+    assert fields["identity"]["keyboard_layout"] == "english"
+    assert fields["identity"]["screen_inch"] == 13.6
+
+
+def test_a_discover_macbook_carries_its_part_number_and_its_keyboard_twice():
+    fields = discover_mac(
+        "Apple MacBook Air 15 M5 15.3 16GB/1TB 10C EN ENG Sky Blue (MDVT4ZE/A)", "MDVT4ZE/A"
+    )
+    assert fields["mpn"] == "MDVT4ZE/A"
+    assert fields["identity"]["keyboard_layout"] == "english"
+    assert fields["identity"]["screen_inch"] == 15.3
+    russian = discover_mac("Apple MacBook Air 13 M5 13.6 16GB/512GB RU RUS Midnight")
+    assert russian["identity"]["keyboard_layout"] == "russian"
+    assert russian["identity"]["screen_inch"] == 13.6
+    # The stem on an older one names no configuration.
+    old = discover_mac("Apple MacBook Pro (2023) 14.2 M3 8C 8GB/1TB Retina Silver (MR7K3)", "MR7K3")
+    assert old.get("mpn") is None
+    assert old["identity"]["screen_inch"] == 14.2
+
+
+@pytest.mark.parametrize(
+    ("title", "screen"),
+    [
+        ('Apple MacBook Air 13" M1 8GB/256GB Space Gray', 13.3),
+        ('Apple MacBook Air 13" M4 16GB/512GB Sky Blue', 13.6),
+        ('Apple MacBook Pro 16" M4 Pro 24GB/512GB Space Black', 16.2),
+        ('Apple MacBook Neo 13" A18 Pro 8GB/256GB Silver', 13.0),
+        # ksenukai's shape: the part number after the family, the size further on.
+        (
+            'Portatīvais dators Apple MacBook Pro MGE94ZE/A, M5 Max, 48 GB, 2 TB, 16 ", 40-Core',
+            16.2,
+        ),
+    ],
+)
+def test_a_macbook_s_screen_is_the_one_apple_built(title, screen):
+    assert axis(title, "screen_inch", brand="Apple") == screen
