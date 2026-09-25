@@ -130,7 +130,8 @@ def test_the_report_changes_nothing_and_filters(client):
 def test_a_size_read_as_a_name_is_a_reading_to_fix_and_not_an_alias(client):
     token = admin_token(client)
     category, brand, *_ = setup(client, token)
-    for model in ("15.6", '15.6"'):
+    # A whole number is a name — Dell's `16`, Nokia's `3210` — and is not offered.
+    for model in ("15.6", '15.6"', "16", "3210"):
         post(
             client,
             token,

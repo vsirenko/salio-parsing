@@ -190,8 +190,9 @@ them and says what would fix each: one part number on entries of one maker that 
 every axis they share (`merge`); two entries of one model that differ in one number, by
 under 5% (`axis` — `1000 GB` against `1 TB` is 2.3%, two real capacities are further apart);
 families whose names are the same words in another order or case (`registry`, naming the
-spelling most entries carry); and a family whose name has no letter in it (`reading` —
-`15.6`, `15.6"` are a screen read as the model, which no alias can fix). A part number with a
+spelling most entries carry); and a family named by a screen size (`reading` — `15.6`,
+`15.6"` are the screen read as the model, which no alias can fix; a whole number is a name,
+Dell's `16`, Nokia's `3210`). A part number with a
 space in it is not a code — `Galaxy S25 256-Silverblue` is a piece of a title a shop put in
 the field, 156 of the learned ones — and is not offered for a merge. It changes nothing, the
 ones holding the most listings come first, and each carries its brand's and category's ids,

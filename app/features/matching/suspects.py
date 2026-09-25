@@ -42,9 +42,11 @@ from app.features.matching.schemas import (
 NEAR = Decimal("0.05")
 _WORD = re.compile(r"[0-9a-z]+")
 _WHITESPACE = re.compile(r"\s")
-# A name has a letter in it. `15.6`, `15.6"` and `17.3` were families: a screen read as the
-# model, which the registry cannot fix — the reading has to.
-_LETTER = re.compile(r"[^\W\d_]")
+# A screen size is not a name: `15.6`, `15.6"` and `17.3` were families, a screen read as the
+# model, which the registry cannot fix — the reading has to. A whole number is a name: Dell
+# sells a `16`, Xiaomi a `17`, Nokia a `3210`, and the first cut of this, "no letter in it",
+# offered 40 of them as readings to fix.
+_A_SIZE = re.compile(r"^\s*\d{1,2}(?:[.,]\d{1,2}\s*(?:\"|''|”|″)?|\s*(?:\"|''|”|″))\s*$")
 
 
 async def find_suspects(
@@ -268,7 +270,7 @@ async def _word_order(
     for product, brand, category, count, offers in (await session.execute(stmt)).all():
         brand_ref = SuspectRef(id=product.brand_id, name=brand)
         category_ref = SuspectRef(id=product.category_id, name=category)
-        if not _LETTER.search(product.model):
+        if _A_SIZE.match(product.model):
             if SuspectKind.NOT_A_NAME in wanted:
                 found.append(
                     Suspect(
@@ -276,7 +278,7 @@ async def _word_order(
                         action="reading",
                         brand=brand_ref,
                         category=category_ref,
-                        detail=f"`{product.model}` is not a name: a reading took it for one",
+                        detail=f"`{product.model}` is a screen size, read as the name",
                         evidence=product.model,
                         entries=[_family(product, count or 0, offers or 0)],
                     )

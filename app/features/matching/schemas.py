@@ -361,7 +361,7 @@ class QueueSummary(BaseModel):
 class SuspectKind(StrEnum):
     # One part number on entries of one maker that agree on every axis they share.
     PART_NUMBER = "part_number"
-    # A family whose name has no letter in it — `15.6`, `15.6"`: a size read as the model.
+    # A family named by a screen size — `15.6`, `15.6"`: the size read as the model.
     NOT_A_NAME = "not_a_name"
     # Two entries of one model that differ in one number, and by under 5%.
     NEAR_VALUE = "near_value"
