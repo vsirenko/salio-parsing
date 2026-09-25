@@ -179,3 +179,63 @@ def test_the_worker_names_the_products_that_failed(client, event_loop, tmp_path)
     [failure] = failures.items
     assert (failure.stage, failure.external_id) == ("parse", "3")
     assert failure.error == "ValueError: this card is nonsense"
+
+
+# --- reading a category's or a brand's channels again ---
+
+
+def reparse(client, token, expect=202, **body):
+    response = client.post("/api/admin/runs/reparse", headers=auth(token), json=body)
+    assert response.status_code == expect, response.text
+    return response.json()
+
+
+def test_a_category_s_channels_are_read_again_at_once(client):
+    from tests.test_matching import a_shop_we_can_build_from, offer_from
+
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    offer_from(client, token, source["id"], {"name": "Apple iPhone 15", "brand": "Apple"})
+
+    report = reparse(client, token, category_id=category["id"])
+    [queued] = report["queued"]
+    assert queued["source"] == {"id": source["id"], "slug": source["slug"]}
+    run = client.get(f"/api/admin/runs/{queued['run_id']}", headers=auth(token)).json()
+    assert (run["kind"], run["status"]) == ("reparse", "queued")
+
+    # Asked again while that one is still going: nothing new, and it says which.
+    again = reparse(client, token, category_id=category["id"])
+    assert (again["queued"], again["already_going"]) == ([], [queued["source"]])
+
+
+def test_a_brand_narrows_it_to_the_channels_that_have_read_it(client):
+    from tests.test_matching import a_shop_we_can_build_from, offer_from, run_on
+
+    token = admin_token(client)
+    _, source, category, brand = a_shop_we_can_build_from(client, token)
+    assert reparse(client, token, brand_id=brand["id"])["queued"] == []
+
+    offer = offer_from(client, token, source["id"], {"name": "Apple iPhone 15", "brand": "Apple"})
+    # Unplaced, it waits in the queue under the maker the matcher resolved.
+    assert run_on(client, token, offer)["matched"] is False
+    [queued] = reparse(client, token, brand_id=brand["id"], category_id=category["id"])["queued"]
+    assert queued["source"]["id"] == source["id"]
+
+
+def test_a_reparse_names_something_that_exists(client):
+    token = admin_token(client)
+    reparse(client, token, expect=422)
+    assert reparse(client, token, expect=404, category_id=999999)["error"]["code"]
+    reparse(client, token, expect=404, brand_id=999999)
+
+
+def test_a_channel_off_the_schedule_is_read_again_and_one_that_collected_nothing_is_not(client):
+    from tests.test_matching import a_shop_we_can_build_from, offer_from
+
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    assert reparse(client, token, category_id=category["id"])["queued"] == []
+    offer_from(client, token, source["id"], {"name": "Apple iPhone 15", "brand": "Apple"})
+    assert source["is_enabled"] is False
+    [queued] = reparse(client, token, category_id=category["id"])["queued"]
+    assert queued["source"]["id"] == source["id"]

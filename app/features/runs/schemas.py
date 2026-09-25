@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Kind(StrEnum):
@@ -56,6 +56,39 @@ class Named(BaseModel):
 class SourceRef(BaseModel):
     id: int
     slug: str
+
+
+class ReparseRequest(BaseModel):
+    """Which channels to read again: a category's, a brand's, or a brand's in one category.
+
+    At least one of the two. The whole of a channel is read either way — a reparse re-reads
+    snapshots, and a brand is not a thing a snapshot is stored by — so a brand only narrows
+    which channels, to those whose readings have named it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: int | None = None
+    brand_id: int | None = None
+
+    @model_validator(mode="after")
+    def _something(self) -> "ReparseRequest":
+        if self.category_id is None and self.brand_id is None:
+            raise ValueError("name a category_id, a brand_id or both")
+        return self
+
+
+class QueuedReparse(BaseModel):
+    source: SourceRef
+    run_id: int
+
+
+class ReparseReport(BaseModel):
+    """The runs queued, one per channel, and the channels already being read again — a
+    second reparse of those would be refused by the one-live-run rule, and the one that is
+    going already reads what the registry says now."""
+
+    queued: list[QueuedReparse]
+    already_going: list[SourceRef]
 
 
 class RunRead(BaseModel):

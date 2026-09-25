@@ -6107,6 +6107,23 @@
         "title": "QueueSummary",
         "type": "object"
       },
+      "QueuedReparse": {
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceRef"
+          }
+        },
+        "required": [
+          "source",
+          "run_id"
+        ],
+        "title": "QueuedReparse",
+        "type": "object"
+      },
       "RawOfferBatch": {
         "additionalProperties": false,
         "description": "Many observations of one channel, in one request.\n\nOne at a time, a full pass of a nine-hundred-product shop is nine hundred requests,\nnine hundred transactions and nine hundred audit entries — and that last one is the\nreal objection: the trail exists to show what an administrator did, and a crawl would\nbury that under a wall of \"an offer arrived\".\n\nPost it gzipped. Product JSON compresses by roughly an order of magnitude, and the\ndifference is paid on every pass of every channel.",
@@ -6367,6 +6384,61 @@
           "refused"
         ],
         "title": "RenameReport",
+        "type": "object"
+      },
+      "ReparseReport": {
+        "description": "The runs queued, one per channel, and the channels already being read again — a\nsecond reparse of those would be refused by the one-live-run rule, and the one that is\ngoing already reads what the registry says now.",
+        "properties": {
+          "already_going": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "title": "Already Going",
+            "type": "array"
+          },
+          "queued": {
+            "items": {
+              "$ref": "#/components/schemas/QueuedReparse"
+            },
+            "title": "Queued",
+            "type": "array"
+          }
+        },
+        "required": [
+          "queued",
+          "already_going"
+        ],
+        "title": "ReparseReport",
+        "type": "object"
+      },
+      "ReparseRequest": {
+        "additionalProperties": false,
+        "description": "Which channels to read again: a category's, a brand's, or a brand's in one category.\n\nAt least one of the two. The whole of a channel is read either way — a reparse re-reads\nsnapshots, and a brand is not a thing a snapshot is stored by — so a brand only narrows\nwhich channels, to those whose readings have named it.",
+        "properties": {
+          "brand_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Id"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          }
+        },
+        "title": "ReparseRequest",
         "type": "object"
       },
       "ReviewCreate": {
@@ -12880,7 +12952,7 @@
         ]
       },
       "post": {
-        "description": "`alias` is what a shop writes, `model` is what the catalogue calls it. Adding the\ncanonical spelling as an alias of itself is the usual first row. Registry work moves\nno ruleset version, so it has to be followed by a reparse to reach stored readings.",
+        "description": "`alias` is what a shop writes, `model` is what the catalogue calls it. Adding the\ncanonical spelling as an alias of itself is the usual first row. Registry work moves\nno ruleset version, so it has to be followed by a reparse to reach stored readings —\n`POST /api/admin/runs/reparse` with this brand.",
         "operationId": "add_model_api_admin_brands__brand_id__models_post",
         "parameters": [
           {
@@ -18314,6 +18386,63 @@
           }
         ],
         "summary": "What the scheduler would start now",
+        "tags": [
+          "admin: runs"
+        ]
+      }
+    },
+    "/api/admin/runs/reparse": {
+      "post": {
+        "description": "What follows registry work: a word entered reaches no stored reading until the\nsnapshots are read again. One reparse is queued per channel that has collected anything,\non the schedule or off it, and each is settled when it ends — rebuild, match, promote —\nas any reparse is. Follow them through `GET /api/admin/runs/{run_id}`.",
+        "operationId": "queue_reparses_api_admin_runs_reparse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReparseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReparseReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Category or brand not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Neither a category nor a brand"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read a category's or a brand's channels again",
         "tags": [
           "admin: runs"
         ]

@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from croniter import CroniterBadCronError, croniter
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,14 +17,18 @@ from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.schedule import next_slot
 from app.db.models import (
+    Brand,
     Category,
+    MatchQueue,
     Offer,
+    OfferMatch,
     RawOffer,
     Run,
     SchedulerHeartbeat,
     Shop,
     ShopMarket,
     Source,
+    Variant,
 )
 from app.db.query import ordered, paginated
 from app.features.runs.schemas import (
@@ -35,6 +39,9 @@ from app.features.runs.schemas import (
     Job,
     Kind,
     Named,
+    QueuedReparse,
+    ReparseReport,
+    ReparseRequest,
     RunFailures,
     RunProgress,
     RunRead,
@@ -86,6 +93,79 @@ class RunService:
         await self.session.refresh(run)
         audit.record_changes(started_run=run.id, kind=kind.value)
         return await self._one(run)
+
+    async def queue_reparses(self, payload: ReparseRequest) -> ReparseReport:
+        """A reparse on every channel of a category, or of a brand, queued at once.
+
+        What registry work is followed by: a word entered moves no ruleset version, so
+        nothing is recomputed until the stored snapshots are read again. The scheduler gives
+        each run a worker and settles it — rebuild, match, promote — as it does any reparse.
+        """
+        audit.set_target(
+            "category" if payload.category_id is not None else "brand",
+            payload.category_id if payload.category_id is not None else payload.brand_id,
+        )
+        if (
+            payload.category_id is not None
+            and await self.session.get(Category, payload.category_id) is None
+        ):
+            raise NotFoundError(f"Category {payload.category_id} not found")
+        if payload.brand_id is not None and await self.session.get(Brand, payload.brand_id) is None:
+            raise NotFoundError(f"Brand {payload.brand_id} not found")
+
+        # Every channel that has collected something, switched on or not: `is_enabled` is
+        # the schedule, and a channel off the schedule still has its listings on the
+        # storefront — six of the nine laptop channels on 25.09.2026.
+        stmt = select(Source).where(
+            select(RawOffer.id).where(RawOffer.source_id == Source.id).exists()
+        )
+        if payload.category_id is not None:
+            stmt = stmt.where(Source.category_id == payload.category_id)
+        if payload.brand_id is not None:
+            # The readings rarely carry the brand's id — the matcher resolves the maker — so
+            # a channel has read a brand when one of its listings sits on that brand's entry
+            # or waits in the queue under it.
+            listing = select(RawOffer.id).where(RawOffer.source_id == Source.id)
+            placed = (
+                listing.join(
+                    OfferMatch,
+                    (OfferMatch.offer_id == RawOffer.offer_id) & OfferMatch.superseded_at.is_(None),
+                )
+                .join(Variant, Variant.id == OfferMatch.variant_id)
+                .where(Variant.brand_id == payload.brand_id)
+            )
+            waiting = listing.join(MatchQueue, MatchQueue.offer_id == RawOffer.offer_id).where(
+                MatchQueue.brand_id == payload.brand_id
+            )
+            stmt = stmt.where(or_(placed.exists(), waiting.exists()))
+        sources = list((await self.session.scalars(stmt.order_by(Source.id))).all())
+        live = await self._live()
+
+        queued: list[QueuedReparse] = []
+        going: list[SourceRef] = []
+        for source in sources:
+            ref = SourceRef(id=source.id, slug=source.slug)
+            if (source.id, Kind.REPARSE.value) in live:
+                going.append(ref)
+                continue
+            run = Run(source_id=source.id, kind=Kind.REPARSE.value, status=Status.QUEUED.value)
+            try:
+                # One savepoint per channel: a run started between the read above and this
+                # write is refused by the database, and must not take the others with it.
+                async with self.session.begin_nested():
+                    self.session.add(run)
+                    await self.session.flush()
+            except IntegrityError:
+                going.append(ref)
+                continue
+            queued.append(QueuedReparse(source=ref, run_id=run.id))
+
+        audit.record_changes(
+            category_id=payload.category_id,
+            brand_id=payload.brand_id,
+            queued_runs=[item.run_id for item in queued],
+        )
+        return ReparseReport(queued=queued, already_going=going)
 
     async def job(self, run_id: int) -> Job:
         """What a collector is being asked to do.

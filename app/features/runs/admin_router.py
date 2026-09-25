@@ -21,6 +21,8 @@ from app.features.runs.schemas import (
     RUN_SORT,
     Due,
     Kind,
+    ReparseReport,
+    ReparseRequest,
     RunFailures,
     RunRead,
     RunResult,
@@ -93,6 +95,24 @@ async def failures(
     full count. A `parse` failure's bytes are in the snapshot store's `failed/` area. A run
     killed rather than finished, and runs from before the sample was kept, have none."""
     return await service.failures(run_id, limit=limit)
+
+
+@router.post(
+    "/reparse",
+    response_model=ReparseReport,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Read a category's or a brand's channels again",
+    responses={
+        404: {"model": ErrorResponse, "description": "Category or brand not found"},
+        422: {"model": ErrorResponse, "description": "Neither a category nor a brand"},
+    },
+)
+async def queue_reparses(payload: ReparseRequest, service: RunServiceDep) -> ReparseReport:
+    """What follows registry work: a word entered reaches no stored reading until the
+    snapshots are read again. One reparse is queued per channel that has collected anything,
+    on the schedule or off it, and each is settled when it ends — rebuild, match, promote —
+    as any reparse is. Follow them through `GET /api/admin/runs/{run_id}`."""
+    return await service.queue_reparses(payload)
 
 
 @router.post(

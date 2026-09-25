@@ -193,7 +193,8 @@ async def add_model(
 ) -> ModelAliasRead:
     """`alias` is what a shop writes, `model` is what the catalogue calls it. Adding the
     canonical spelling as an alias of itself is the usual first row. Registry work moves
-    no ruleset version, so it has to be followed by a reparse to reach stored readings."""
+    no ruleset version, so it has to be followed by a reparse to reach stored readings —
+    `POST /api/admin/runs/reparse` with this brand."""
     return await service.add_model(brand_id, payload)
 
 

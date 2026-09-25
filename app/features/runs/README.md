@@ -12,6 +12,7 @@ One execution of one channel: starting it, judging it, and deciding what is due.
 | `GET /api/admin/runs/{run_id}/failures` | a sample of the products it could not bring in, and why |
 | `POST /api/admin/runs/{run_id}/cancel` | stop one that is queued or working |
 | `POST /api/admin/sources/{source_id}/runs` | ask for one by hand — `full`, `quick` or `reparse`; queued for the next tick |
+| `POST /api/admin/runs/reparse` | read a category's or a brand's channels again, one reparse each — after registry work |
 | `POST /api/admin/runs/{run_id}/finish` | a worker reporting back |
 | `GET /api/admin/scheduler` | alive or not, what runs, what is due, and every channel's schedule, last run and next slot |
 
@@ -225,6 +226,18 @@ and look at.
 listing belonged to — facts the crawl had and the page does not state. Without them a
 reparse of a marketplace channel would fail on every item for want of something it already
 knew. The worker fills them from the listing, so a channel does not have to remember to.
+
+**Registry work is followed by `POST /runs/reparse`.** A word entered moves no ruleset
+version, so no stored reading changes until the snapshots are read again — and doing that a
+channel at a time, or a listing at a time from a script, is how 54000 renormalize calls
+filled four days of the audit trail. It takes `category_id`, `brand_id` or both and queues
+one reparse per channel that has collected anything, on the schedule or off it — six of the
+nine laptop channels were switched off on 25.09.2026 and their listings still on the
+storefront; a channel already being read again is reported as
+`already_going` and not queued twice. Each is settled like any other reparse. A brand
+narrows the channels, not the work: a reparse reads its whole snapshot store, and a channel
+counts as having read a brand when a listing of it sits on that brand's entry or waits in
+the queue under it — the readings themselves rarely carry the brand's id.
 
 ## Channels
 
