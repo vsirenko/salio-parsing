@@ -99,13 +99,14 @@ def test_one_model_at_two_nearly_equal_numbers_is_a_reading_to_fix(client):
 def test_one_name_in_another_word_order_is_an_alias_to_enter(client):
     token = admin_token(client)
     category, brand, *_ = setup(client, token)
-    for model in ("16 Plus", "Plus 16", "16 PLUS", "Pro 16"):
+    for model in ("16 Plus", "Plus 16", "16 PLUS", "Pro 16", "Galaxy S25", "Galaxy S25+"):
         post(
             client,
             token,
             "/api/admin/products",
             {"brand_id": brand["id"], "category_id": category["id"], "model": model},
         )
+    # A plus is a word: `Galaxy S25+` is another phone, not another spelling.
     [found] = suspects(client, token, kind="word_order")["items"]
     assert found["action"] == "registry"
     assert sorted(e["model"] for e in found["entries"]) == ["16 PLUS", "16 Plus", "Plus 16"]

@@ -249,7 +249,10 @@ async def _word_order(
         stmt = stmt.where(Product.brand_id == brand_id)
     groups: dict[tuple[int, int, str], list[tuple[Any, ...]]] = defaultdict(list)
     for product, brand, category, count, offers in (await session.execute(stmt)).all():
-        words = " ".join(sorted(_WORD.findall(product.model.casefold())))
+        # `+` is a word, as in `normalize_model`: `Galaxy S25+` is not `Galaxy S25`, and is
+        # `Galaxy S25 Plus`. Dropped, the first 80 suspects began with those two phones.
+        spelled = product.model.casefold().replace("+", " plus ")
+        words = " ".join(sorted(_WORD.findall(spelled)))
         groups[(product.brand_id, product.category_id, words)].append(
             (product, brand, category, count or 0, offers or 0)
         )
