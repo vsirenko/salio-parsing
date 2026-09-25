@@ -31,7 +31,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "laptops"
-VERSION = "laptops-4"
+VERSION = "laptops-7"
 
 CPU_KEY = "cpu"
 RAM_KEY = "ram_mb"
@@ -575,6 +575,15 @@ _CONFIGURATION = re.compile(
     r"\s[-–]\s|[,|/(]|\s\d{1,2}(?:[.,]\d{1,2})?\s?(?:\"|''|”|″|-?inch|collu|collas|cm\b)"
     r"|\b\d{1,4}\s?(?:GB|TB)\b|\b(?:FHD|WUXGA|WQXGA|QHD|UHD|OLED|IPS|2\.?[58]K|3K|4K|HD\+?|WXGA)\b"
     r"|\b(?:AG|AR|Touch|Anti-?glare)\b"
+    # A refresh rate, `120hz`, and a diagonal written bare, `15.6`: rdveikals names the screen
+    # with neither a unit nor a separator — `Dell Pro 15 Essential PV15250 15.6 FHD` — and
+    # only the `GB` of the memory used to stop the name, 836 of its 1440 models running on
+    # into `15.6 120hz 7520U`. A whole inch stays: `Pro 14` is a name. With a point only: a
+    # comma is already a separator, and `LOQ 15AHP10 15,6` cut at the comma keeps the `15`
+    # the other shops call it by, where cut at the number it came out `LOQ`.
+    r"|\b\d{2,3}\s?Hz\b|\s\d{2}\.\d\b"
+    # The diagonal run into the panel, `Inspiron 14 Plus 14FHD+`.
+    r"|\b\d{2}(?:FHD|QHD|UHD|WUXGA|WQXGA|OLED)\+?"
     r"|\b(?:W1[01]\w*|Win\s?1[01]\w*|Windows|NoOS|FreeDOS|DOS)\b"
     # A processor. `Ultra` alone is a name — `OmniBook Ultra Flip`, `ZBook Ultra G1a` — and is
     # a processor only with its tier after it.
@@ -589,6 +598,9 @@ _CONFIGURATION = re.compile(
 _CODE = re.compile(r"^(?:(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[\w-]{6,}|\d{6,})$")
 # The quotes a shop puts round a name, `„Dell Pro Max 16 Plus“`; not `"` or `”`, which are inches.
 _QUOTES = "\u201e\u201c\u00ab\u00bb"
+# A straight quote that opens a name (before a letter) or closes one (after a letter); an inch
+# mark follows a digit and is left for the size rule.
+_NAME_QUOTE = re.compile(r'(?:(?<=^)|(?<=\s))"(?=[A-Za-z])|(?<=[A-Za-z])"(?=\s|$)')
 
 
 def _model_from_title(
@@ -600,8 +612,19 @@ def _model_from_title(
     title = str(fields.get("title") or "")
     for quote in _QUOTES:
         title = title.replace(quote, " ")
+    # A straight quote opening or closing a name, `"Dell Pro 14 Essential"` — after a letter or
+    # before one, where an inch mark stands after a digit. bigbox's titles open with one on 64
+    # of 2129, and the name kept it: `"Dell Pro 14` became an entry of its own.
+    title = _NAME_QUOTE.sub(" ", title)
     brand = str(fields.get("brand_raw") or "").strip().casefold()
-    words = title.split()
+    # `___Pro 14 Plus`: underscores a shop left in front of a word, never part of it. And the
+    # closing quote of a quoted name that ends in a code, `"Dell 15 DC15250"`: after a digit it
+    # reads as an inch mark, but a word with letters in it is no size.
+    words = [
+        word.lstrip("_").rstrip('"') if re.search(r"[A-Za-z]", word) else word.lstrip("_")
+        for word in title.split()
+        if word.lstrip("_")
+    ]
     while words and (
         words[0].strip(",.").casefold() in vocabulary.category_names or words[0].casefold() == brand
     ):
@@ -613,11 +636,51 @@ def _model_from_title(
     kept = [w for w in head.split() if not _CODE.match(w)]
     while kept and kept[-1].strip(",.").casefold() in vocabulary.category_names:
         kept = kept[:-1]
-    # `Dell Pro 14 14 FHD+`: the diagonal written again after a name that already ends in it.
-    if len(kept) > 1 and kept[-1] == kept[-2] and kept[-1].isdigit():
+    # The diagonal written again after the name — `Dell Pro 14 14 FHD+`, `Dell 16 Plus 16`,
+    # `TUF Gaming A14 14` — when the name already carries the number, as a word or inside one,
+    # or when it follows a model number, `Latitude 5420 14`. `Pro 14` alone keeps it, because
+    # there it is the name; so does `Pro Precision 5 14`, where the number before it is one
+    # digit. A screen of 15.6 is written `15` as often as not, so the whole inch counts.
+    screen = (fields.get("identity") or {}).get(SCREEN_KEY)
+    if (
+        len(kept) > 1
+        and kept[-1].isdigit()
+        and (screen is None or int(kept[-1]) == int(float(screen)) or kept[-1] == kept[-2])
+        and (
+            any(kept[-1] in word for word in kept[:-1]) or sum(ch.isdigit() for ch in kept[-2]) >= 3
+        )
+    ):
         kept = kept[:-1]
     model = " ".join(kept).strip(" -–,")
     return {"model": model[:200]} if model else {}
+
+
+def _without_a_trailing_colour(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """A colour the registry knows off the end of the model, however the model was found.
+
+    dateks's `Modelis` field carries it — `ThinkPad P16 Gen 3 Black`, `Pro 16 Platinum
+    Silver` — on 52 of its 709 laptops, and the colour is an axis of its own: kept in the
+    name, one model became an entry per colour. A phrase is tried before its last word, so
+    `Ice Blue` goes whole where the registry knows it and is left whole where it does not;
+    never the last word left, which would be a shop's mistake to see.
+    """
+    model = (fields.get("model") or "").strip()
+    if not model or not vocabulary.colours:
+        return {}
+    words = model.split()
+    while len(words) > 1:
+        for length in (3, 2, 1):
+            if len(words) > length and (
+                " ".join(words[-length:]).strip(",.").casefold() in vocabulary.colours
+            ):
+                words = words[:-length]
+                break
+        else:
+            break
+    shorter = " ".join(words)
+    return {"model": shorter} if shorter != model else {}
 
 
 def _axis(fields: dict[str, Any], key: str, value: Any) -> dict[str, Any]:
@@ -749,6 +812,17 @@ RULESET = register(
                 layer=FINISH,
                 why="As for a phone: the title composes brand and model, so a model holds none.",
                 body=devices.without_the_maker,
+            ),
+            Rule(
+                id="laptops-model-without-a-trailing-colour",
+                layer=FINISH,
+                why=(
+                    "A colour is an axis, and a model that ends in one files each colour as a"
+                    " product of its own: dateks's `Modelis` reads `ThinkPad P16 Gen 3 Black`"
+                    " and `Pro 16 Platinum Silver` on 52 of its 709 laptops. Only a colour the"
+                    " registry knows, only off the end, and never the whole model."
+                ),
+                body=_without_a_trailing_colour,
             ),
         ),
     ),

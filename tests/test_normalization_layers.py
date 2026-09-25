@@ -504,52 +504,52 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-laptops-5": "484436fceef4",
+    "apple-laptops-8": "1b6a851d7f7a",
     "apple-phones-2": "f940eea49212",
     "apple-tablets-1": "af1017e2a9a9",
     "bigbox-10": "4497939fdfce",
-    "bigbox-laptops-4": "3b9c1ad42ddf",
+    "bigbox-laptops-7": "399563c1bfc4",
     "bigbox-shop-1": "a1194a23b2e7",
     "bigbox-tablets-4": "2cf6e57ea6f2",
     "bm-4": "6117d7e812a9",
-    "bm-laptops-1": "939edb988074",
+    "bm-laptops-4": "8414794a8eac",
     "bm-shop-1": "3d09a6688700",
     "bm-tablets-1": "24d34a1063df",
     "cec-3": "958bc58c1fb0",
     "cec-tablets-2": "336ec202acc2",
     "dateks-5": "0acd87a6666d",
-    "dateks-laptops-1": "ffdccedf896d",
+    "dateks-laptops-4": "3753e2a1946c",
     "dateks-shop-1": "76bf8766fb11",
     "dateks-tablets-1": "abe9d2e77bfe",
     "discover-6": "f6aa33b230a2",
     "discover-shop-1": "6065096d8d22",
     "discover-tablets-3": "f8cf45775b77",
-    "euronics-laptops-1": "fe7eeb592852",
+    "euronics-laptops-4": "eeba15d53826",
     "euronics-shop-1": "07e9d1415e04",
     "euronics-tablets-1": "0deff7ac20bc",
     "google-phones-3": "b13ca41b33fa",
     "ksenukai-7": "c39ae807fae8",
     "ksenukai-shop-1": "b5a073020a15",
-    "ksenukai-tablets-2": "160bac581cae",
-    "laptops-4": "da3f2fb8515d",
+    "ksenukai-tablets-2": "343e6a39fd31",
+    "laptops-7": "4a1a5844a6df",
     "m79-8": "43b109729576",
     "m79-shop-1": "ad962ef2618c",
     "m79-tablets-1": "ca0ff57d51a2",
     "mdata-4": "20e66ad0a69c",
     "mdata-shop-1": "c0edf1b90896",
     "mdata-tablets-1": "1f92eb67fc2a",
-    "onea-5": "b5c2de2bad0c",
+    "onea-5": "5688cbe0e57d",
     "onea-shop-1": "24e6184df567",
-    "onea-tablets-2": "b700b4c0cd8b",
+    "onea-tablets-2": "9d9c0dc1733a",
     "oneplus-phones-1": "29eaabd5e1ad",
     "phones-13": "8a8607df0554",
     "rdveikals-6": "01226413c43a",
-    "rdveikals-laptops-3": "f68de2f3f610",
+    "rdveikals-laptops-6": "29e715c9a1dc",
     "rdveikals-shop-1": "e0b3a42600f7",
     "rdveikals-tablets-1": "1ae570d9626a",
     "samsung-phones-2": "9653d4e6a46a",
     "samsung-tablets-1": "dd93c1347519",
-    "tablets-8": "c69948baa73c",
+    "tablets-8": "a1eba4f43bfa",
     "tet-4": "751b4c587085",
     "tet-shop-1": "3129e8453377",
     "tet-tablets-1": "7aabd390e9ed",
@@ -622,10 +622,22 @@ def _fingerprints() -> dict[str, str]:
                 seen[ruleset.version] = "pending"
                 continue
 
-            module = inspect.getmodule(bodies[0])
+            # Every module a body comes from, not the first body's alone: `laptops` opens with
+            # a rule from `devices`, and hashing that module only left `laptops.py` itself out
+            # — its regexes and its version could change and its fingerprint stayed put.
+            first = inspect.getmodule(bodies[0])
+            own = [first] + sorted(
+                {inspect.getmodule(body) for body in bodies} - {first}, key=lambda m: m.__name__
+            )
             digest = hashlib.sha256()
-            hash_module(digest, module)
-            for other in shared(module):
+            hash_module(digest, first)
+            for module in own[1:]:
+                digest.update(module.__name__.encode())
+                hash_module(digest, module)
+            for other in sorted(
+                {other for module in own for other in shared(module)} - set(own),
+                key=lambda m: m.__name__,
+            ):
                 digest.update(other.__name__.encode())
                 hash_module(digest, other)
             # The ids say which rules exist; the rest says what they do.
@@ -647,6 +659,15 @@ def test_a_changed_rule_body_carries_a_changed_version():
         " FINGERPRINTS together.\n"
         + "\n".join(f"  {v}: recorded {was}, now {now}" for v, (was, now) in stale.items())
     )
+
+
+def test_a_ruleset_is_hashed_over_every_module_its_rules_come_from(monkeypatch):
+    """`laptops` opens with a rule from `devices`; its own module has to count as well."""
+    from app.features.offers.normalization.categories import laptops
+
+    before = _fingerprints()["laptops-7"]
+    monkeypatch.setattr(laptops, "_QUOTES", laptops._QUOTES + "\u2033")
+    assert _fingerprints()["laptops-7"] != before
 
 
 def test_every_ruleset_is_fingerprinted():

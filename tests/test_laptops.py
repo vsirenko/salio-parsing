@@ -250,10 +250,70 @@ def test_a_macbook_s_part_number_names_its_keyboard():
             "Apple",
             "MacBook Air",
         ),
+        # rdveikals names the screen bare, with no unit and no separator.
+        (
+            "portatīvais dators Dell Pro 15 Essential PV15250 15.6 FHD i7-1355U 16GB 1SSD EN",
+            "Dell",
+            "Pro 15 Essential",
+        ),
+        (
+            "portatīvais dators Dell 16 Plus 16 120hz 256V 16GB 512SSD EN W11Pro Ice Blue",
+            "Dell",
+            "16 Plus",
+        ),
+        (
+            "portatīvais dators Asus TUF Gaming A14 FA401EA-RG005W 14 165hz 392 64GB 1SSD EN",
+            "Asus",
+            "TUF Gaming A14",
+        ),
+        ("portatīvais dators MSI Thin 15 B12UC-2049NL 15.6 144Hz i7-12650H 16GB", "MSI", "Thin 15"),
+        (
+            "portatīvais dators Asus ROG Strix G18 G815LR-U9R321X 300hz U9-290HX 32GB",
+            "Asus",
+            "ROG Strix G18",
+        ),
+        # bigbox opens some names with a straight quote, and leaves underscores in front.
+        ('"Dell Pro 14 - Ultra 5 235U | 14 collu | 16 GB | 512 GB | Win11Pro', "Dell", "Pro 14"),
+        ('"Dell Pro 14 Essential" PV14250 | 14 collu | 16 GB', "Dell", "Pro 14 Essential"),
+        ("___Pro 14 Plus 14 FHD+ 16 GB", "Dell", "Pro 14 Plus"),
+        # A whole inch that is the name stays.
+        ("Dell XPS 16 - Ultra 7 155H | 16 collu | 32 GB", "Dell", "XPS 16"),
+        ("Dell Latitude 5420 14 FHD i5-1145G7 16GB 256GB", "Dell", "Latitude 5420"),
+        ("Dell Pro Precision 5 14 - Ultra 7 265H | 14 collu | 32 GB", "Dell", "Pro Precision 5 14"),
+        ("portatīvais dators Dell Inspiron 14 Plus 14FHD+ 7640 16GB", "Dell", "Inspiron 14 Plus"),
+        ('"Dell 15 DC15250" - Core 3 100U | 15,6 collu | 8 GB', "Dell", "15"),
     ],
 )
 def test_the_name_is_what_stands_in_front_of_the_configuration(title, brand, model):
     assert laptop(title, brand)["model"] == model
+
+
+@pytest.mark.parametrize(
+    ("stated", "model"),
+    [
+        ("ThinkPad P16 Gen 3 Black", "ThinkPad P16 Gen 3"),
+        ("Pro 16 Platinum Silver", "Pro 16"),
+        ("16 Plus Ice Blue", "16 Plus"),
+        ("Pro 16 Magnetite", "Pro 16 Magnetite"),
+        ("Black", "Black"),
+    ],
+)
+def test_a_colour_comes_off_the_end_of_a_model_however_it_was_found(stated, model):
+    """dateks's `Modelis` carries the colour; only what the registry knows comes off."""
+    colours = {"black": "black", "silver": "silver", "platinum": "silver", "ice blue": "blue"}
+    vocabulary = Vocabulary(
+        category_names=VOCABULARY.category_names,
+        brand_names=VOCABULARY.brand_names,
+        colours=colours,
+    )
+    reading = read(
+        {"title": f"Dell {stated}, 16 collu", "brand": "Dell", "model": stated},
+        source_slug="dateks-laptops",
+        shop_slug="dateks",
+        category="laptops",
+        vocabulary=vocabulary,
+    )
+    assert reading["model"] == model
 
 
 # --- the channel ---
