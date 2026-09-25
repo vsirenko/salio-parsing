@@ -218,11 +218,23 @@ class ShopRead(BaseModel):
     rating: Decimal | None
     created_at: datetime
     markets: list[str] = Field(description="The markets it is shown in")
+    hidden_markets: list[str] = Field(
+        default_factory=list, description="The markets it is attached to and not shown in"
+    )
     sources_count: int
     sellers_count: int
     offers_count: int = Field(description="Its listings on sale now, of any condition")
     products_count: int = Field(description="Families it sells new today")
     health: CollectionHealth
+
+
+class MarketState(StrEnum):
+    """Where a shop stands in one market, for `?market_code=`."""
+
+    SHOWN = "shown"
+    HIDDEN = "hidden"
+    # Either of the two: every shop the market card lists, with a switch on each.
+    ATTACHED = "attached"
 
 
 # --- where its offers are shown ---

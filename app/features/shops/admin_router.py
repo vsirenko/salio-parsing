@@ -20,6 +20,7 @@ from app.api.deps import ShopServiceDep
 from app.api.pagination import pagination_params
 from app.features.shops.schemas import (
     SHOP_SORT,
+    MarketState,
     SellerCreate,
     SellerRead,
     SellerUpdate,
@@ -106,6 +107,10 @@ async def list_shops(
     market_code: Annotated[
         str | None, Query(max_length=2, description="Shown in this market")
     ] = None,
+    market_state: Annotated[
+        MarketState,
+        Query(description="With `market_code`: shown there, attached and hidden, or either"),
+    ] = MarketState.SHOWN,
     is_marketplace: Annotated[bool | None, Query()] = None,
     search: Annotated[
         str | None, Query(max_length=200, description="Name, slug or website contains")
@@ -130,6 +135,7 @@ async def list_shops(
         pagination,
         country_code=country_code,
         market_code=market_code,
+        market_state=market_state,
         is_marketplace=is_marketplace,
         search=search,
         ids=ids,

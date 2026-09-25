@@ -8,7 +8,7 @@ Who the buyer deals with, how we read their offers, and who is actually selling.
 |---|---|
 | `GET · POST /api/admin/shop-groups` | one retail brand across countries, optional; rows count their shops |
 | `GET · PATCH /api/admin/shop-groups/{group_id}` | read or rename one |
-| `GET · POST /api/admin/shops` | list with counts and health — filter by `country_code`, `market_code`, `is_marketplace`, `search`, `ids`, `health`; `?sort=` |
+| `GET · POST /api/admin/shops` | list with counts and health — filter by `country_code`, `market_code` (with `market_state`: `shown` by default, `hidden`, `attached`), `is_marketplace`, `search`, `ids`, `health`; `?sort=` |
 | `GET · PATCH /api/admin/shops/{shop_id}` | read or edit one |
 | `GET /api/admin/shops/{shop_id}/markets` | where its offers are shown |
 | `PUT · DELETE /api/admin/shops/{shop_id}/markets/{market_code}` | attach, enable, detach |
@@ -71,7 +71,10 @@ are *shown* is `shop_markets`, which points at `markets`.
 
 **`shop_markets` carries its own flag.** Delivery is the reason a shop could appear in a
 market; whether it does is our decision. A shop can be switched off in Lithuania without
-being touched in Latvia, and it is attached disabled by default.
+being touched in Latvia, and it is attached disabled by default. So `?market_code=` alone
+still means *shown there*, which is what every caller asked it before; the market card,
+which has a switch per shop, asks `market_state=attached`, and a row carries both lists —
+`markets` shown, `hidden_markets` attached and off — so the switch knows its position.
 
 **An ordinary shop gets its seller created with it**, named after the shop. Price history is
 keyed by seller, so an offer cannot attach to anything without one — leaving it to a second
@@ -81,7 +84,7 @@ call means somebody forgets and the first crawl has nowhere to put its prices.
 listings **on sale** — the same test as everywhere (`offer_is_listed`: no ok full pass of the
 listing's channel began after it was last seen); `products_count` is the products its new,
 on-sale, placed listings sit on, which is what a buyer would find it on. `markets` are the
-enabled ones, `group` is `{id, name}` so a table prints it without a second request.
+enabled ones, `hidden_markets` the attached ones switched off, `group` is `{id, name}` so a table prints it without a second request.
 
 **Health is about the catalogue, so only full passes count.** Per enabled channel the
 newest full pass that ended `ok` or broke (`failed`, `rejected`, `interrupted`) decides —

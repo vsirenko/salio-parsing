@@ -2992,6 +2992,24 @@
         "title": "JudgeWindow",
         "type": "object"
       },
+      "LanguageRead": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "LanguageRead",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3113,6 +3131,30 @@
             "title": "Name",
             "type": "string"
           },
+          "offers_count": {
+            "default": 0,
+            "description": "Listings on sale in it now, from the shops shown there",
+            "title": "Offers Count",
+            "type": "integer"
+          },
+          "products_count": {
+            "default": 0,
+            "description": "Visible families with a new listing on sale in it from a shown shop",
+            "title": "Products Count",
+            "type": "integer"
+          },
+          "shops_attached": {
+            "default": 0,
+            "description": "Shops attached to it, shown or not",
+            "title": "Shops Attached",
+            "type": "integer"
+          },
+          "shops_shown": {
+            "default": 0,
+            "description": "Shops shown in it",
+            "title": "Shops Shown",
+            "type": "integer"
+          },
           "slug": {
             "maxLength": 32,
             "minLength": 1,
@@ -3128,6 +3170,16 @@
         ],
         "title": "MarketRead",
         "type": "object"
+      },
+      "MarketState": {
+        "description": "Where a shop stands in one market, for `?market_code=`.",
+        "enum": [
+          "shown",
+          "hidden",
+          "attached"
+        ],
+        "title": "MarketState",
+        "type": "string"
       },
       "MarketUpdate": {
         "additionalProperties": false,
@@ -7341,6 +7393,14 @@
           },
           "health": {
             "$ref": "#/components/schemas/CollectionHealth"
+          },
+          "hidden_markets": {
+            "description": "The markets it is attached to and not shown in",
+            "items": {
+              "type": "string"
+            },
+            "title": "Hidden Markets",
+            "type": "array"
           },
           "id": {
             "title": "Id",
@@ -14737,6 +14797,37 @@
         ]
       }
     },
+    "/api/admin/markets/languages": {
+      "get": {
+        "description": "ISO 639-1, every code with its English name, in code order — what `languages`\naccepts. Declared before `/{code}` so the path is not read as a market.",
+        "operationId": "list_languages_api_admin_markets_languages_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LanguageRead"
+                  },
+                  "title": "Response List Languages Api Admin Markets Languages Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The languages a market may be read in",
+        "tags": [
+          "admin: markets"
+        ]
+      }
+    },
     "/api/admin/markets/{code}": {
       "get": {
         "operationId": "get_market_api_admin_markets__code__get",
@@ -18809,6 +18900,17 @@
               ],
               "description": "Shown in this market",
               "title": "Market Code"
+            }
+          },
+          {
+            "description": "With `market_code`: shown there, attached and hidden, or either",
+            "in": "query",
+            "name": "market_state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MarketState",
+              "default": "shown",
+              "description": "With `market_code`: shown there, attached and hidden, or either"
             }
           },
           {

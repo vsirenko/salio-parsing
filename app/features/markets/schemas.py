@@ -8,8 +8,9 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.languages import LANGUAGES
+
 SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-LANGUAGE = re.compile(r"^[a-z]{2}$")
 
 
 def _validate_slug(value: str) -> str:
@@ -23,11 +24,16 @@ def _validate_languages(value: list[str]) -> list[str]:
     if not lowered:
         raise ValueError("a market needs at least one language")
     for item in lowered:
-        if not LANGUAGE.match(item):
+        if item not in LANGUAGES:
             raise ValueError(f"'{item}' is not an ISO 639-1 code")
     if len(set(lowered)) != len(lowered):
         raise ValueError("languages must be distinct")
     return lowered
+
+
+class LanguageRead(BaseModel):
+    code: str
+    name: str
 
 
 class MarketBase(BaseModel):
@@ -70,6 +76,14 @@ class MarketRead(MarketBase):
     model_config = ConfigDict(from_attributes=True)
 
     code: str
+    shops_shown: int = Field(0, description="Shops shown in it")
+    shops_attached: int = Field(0, description="Shops attached to it, shown or not")
+    offers_count: int = Field(
+        0, description="Listings on sale in it now, from the shops shown there"
+    )
+    products_count: int = Field(
+        0, description="Visible families with a new listing on sale in it from a shown shop"
+    )
 
 
 class MarketUpdate(BaseModel):

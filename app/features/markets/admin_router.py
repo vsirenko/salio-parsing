@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import MarketServiceDep
 from app.api.pagination import pagination_params
-from app.features.markets.schemas import MarketCreate, MarketRead, MarketUpdate
+from app.core.languages import LANGUAGES
+from app.features.markets.schemas import LanguageRead, MarketCreate, MarketRead, MarketUpdate
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
 
@@ -44,6 +45,17 @@ async def create_market(payload: MarketCreate, service: MarketServiceDep) -> Mar
     """The country has to exist first — a market is a country we have decided to sell in,
     and `countries` is where the VAT rate and the currency come from."""
     return await service.create_market(payload)
+
+
+@router.get(
+    "/languages",
+    response_model=list[LanguageRead],
+    summary="The languages a market may be read in",
+)
+async def list_languages() -> list[LanguageRead]:
+    """ISO 639-1, every code with its English name, in code order — what `languages`
+    accepts. Declared before `/{code}` so the path is not read as a market."""
+    return [LanguageRead(code=code, name=name) for code, name in LANGUAGES.items()]
 
 
 @router.get(

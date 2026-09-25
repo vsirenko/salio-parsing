@@ -30,6 +30,7 @@ from app.features.shops.schemas import (
     CollectionHealth,
     Fact,
     GroupRef,
+    MarketState,
     RunBrief,
     SellerCreate,
     SellerRead,
@@ -103,6 +104,7 @@ class ShopService:
         *,
         country_code: str | None = None,
         market_code: str | None = None,
+        market_state: MarketState = MarketState.SHOWN,
         is_marketplace: bool | None = None,
         search: str | None = None,
         ids: list[int] | None = None,
@@ -114,14 +116,14 @@ class ShopService:
         if is_marketplace is not None:
             stmt = stmt.where(Shop.is_marketplace.is_(is_marketplace))
         if market_code is not None:
-            stmt = stmt.where(
-                Shop.id.in_(
-                    select(ShopMarket.shop_id).where(
-                        ShopMarket.market_code == market_code.upper(),
-                        ShopMarket.is_enabled.is_(True),
-                    )
-                )
+            attached = select(ShopMarket.shop_id).where(
+                ShopMarket.market_code == market_code.upper()
             )
+            if market_state is not MarketState.ATTACHED:
+                attached = attached.where(
+                    ShopMarket.is_enabled.is_(market_state is MarketState.SHOWN)
+                )
+            stmt = stmt.where(Shop.id.in_(attached))
         if ids:
             stmt = stmt.where(Shop.id.in_(ids))
         if search and search.strip():
@@ -523,6 +525,11 @@ def _shop_rows() -> Select[Any]:
                 ShopMarket.shop_id == Shop.id, ShopMarket.is_enabled.is_(True)
             )
         ).label("markets"),
+        scalar(
+            select(func.array_agg(ShopMarket.market_code)).where(
+                ShopMarket.shop_id == Shop.id, ShopMarket.is_enabled.is_(False)
+            )
+        ).label("hidden_markets"),
         scalar(select(func.count(Source.id)).where(Source.shop_id == Shop.id)).label(
             "sources_count"
         ),
@@ -579,6 +586,7 @@ def _shop_read(row: Any) -> ShopRead:
         rating=shop.rating,
         created_at=shop.created_at,
         markets=sorted(row.markets or []),
+        hidden_markets=sorted(row.hidden_markets or []),
         sources_count=row.sources_count,
         sellers_count=row.sellers_count,
         offers_count=row.offers_count,
