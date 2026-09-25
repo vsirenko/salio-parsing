@@ -125,6 +125,9 @@ and the questions that have to be answered with real data first, are written dow
       renamed while they read the old name. Renormalizing the raw offer by id fixes one;
       the reparse run should fall back to the stored payload for these. It does now: the
       listing's newest observation is reread from its payload during a reparse.
+- [ ] **Something in the suite fails now and then.** On 25.09.2026 one run had 1 failure and
+      another 7, and the reruns straight after passed; which tests is not known, because only
+      the summary line was kept. Next time: `pytest -rf` and keep the whole output.
 - [ ] **Judge drafts for the registry.** A `word_order` suspect, or a cluster of spellings, handed
       to the judge for a canonical name and aliases, entered only when a person confirms.
 - [ ] **A suspect for a one-listing family beside a large one with a close name** — the fourth
