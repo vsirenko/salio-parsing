@@ -518,3 +518,8 @@ curl "http://localhost:8080/api/admin/audit?limit=50&before_id=120" -H "Authoriz
   feature rather than an empty one.
 - **New error type** — subclass `AppError` in `app/core/exceptions.py`; it is serialized
   automatically, no handler to write.
+
+## Deploying
+
+A push to `main` that passes CI deploys to the server; the stack, the first transfer of the
+laptop's data and the secrets the workflow needs are in [deploy/README.md](deploy/README.md).

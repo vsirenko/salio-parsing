@@ -256,3 +256,46 @@ def test_users_are_found_by_email_or_name_and_by_whether_they_may_sign_in(client
     assert ids(search="new person") == [user["id"]]
     assert user["id"] in ids(is_active=False)
     assert user["id"] not in ids(is_active=True)
+
+
+# --- accounts from the command line ---
+
+
+def test_the_command_line_makes_an_account_once(event_loop):
+    """Production seeds nothing, so a fresh server has no one to sign in as."""
+    from app.features.users.cli import create
+    from app.features.users.schemas import Role
+
+    made = event_loop.run_until_complete(
+        create("ops@example.com", Role.ADMIN, "Ops", "a-long-password")
+    )
+    assert made == "ops@example.com created as admin"
+    again = event_loop.run_until_complete(
+        create("ops@example.com", Role.ADMIN, "Ops", "another-password")
+    )
+    assert again == "ops@example.com exists, left as it is"
+
+
+def test_a_copied_database_gets_the_server_s_worker_and_loses_the_demo_accounts(
+    client, event_loop, monkeypatch
+):
+    """A database copied from a laptop brings the worker at the laptop's password and the
+    demo accounts, whose passwords are in the repository."""
+    from pydantic import SecretStr
+
+    from app.core.config import settings
+    from app.features.users.cli import ensure_worker, retire_demo
+
+    monkeypatch.setattr(settings, "worker_password", SecretStr("the-server-s-own-secret"))
+    assert event_loop.run_until_complete(ensure_worker()).endswith("configured password")
+    signed = client.post(
+        "/api/worker/auth/login",
+        json={"email": settings.worker_email, "password": "the-server-s-own-secret"},
+    )
+    assert signed.status_code == 200, signed.text
+
+    retired = event_loop.run_until_complete(retire_demo())
+    assert "admin@example.com" in retired and settings.worker_email not in retired
+    refused = client.post("/api/admin/auth/login", json=ADMIN)
+    assert refused.status_code == 401
+    assert event_loop.run_until_complete(retire_demo()) == []

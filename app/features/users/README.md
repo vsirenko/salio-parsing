@@ -19,6 +19,12 @@ panel they may sign in to.
 | `GET · PATCH /api/admin/users/{user_id}` | read or edit one |
 | `POST /api/admin/users/{user_id}/password` | set someone else's password, ending their sessions |
 
+Accounts from the command line, inside the image, for a server where nothing is seeded:
+`python -m app.features.users.cli create --email … --role admin` (the password from the
+terminal), `ensure-worker` (the collector account at `WORKER_PASSWORD`, made or reset to
+it) and `retire-demo` (switches off the demo accounts a copied database brings along).
+See `deploy/README.md`.
+
 `router.py` is the customer side. `admin_router.py` holds three routers: `auth_public_router`
 for the two routes that mint a token without one, `auth_router` and `users_router` for
 everything that needs one.

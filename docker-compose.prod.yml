@@ -1,0 +1,96 @@
+# The server's stack. The same four services as docker-compose.yml, with what a server needs
+# and a laptop does not: the database's password from `.env` instead of `app`, no database
+# port on the host, the api bound to the loopback for a reverse proxy in front of it, and
+# logs that rotate. See deploy/README.md.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+
+x-app: &app
+  build: .
+  image: salio-parsing:latest
+  env_file: .env
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    # No host port: only the services on this network reach it. A restore or a psql session
+    # goes through `docker compose exec db`.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # Its own step, as in development: several api replicas cannot race each other applying
+  # one migration, and a migration that fails stops the deploy before the api restarts.
+  migrate:
+    <<: *app
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-app}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-app}
+      PYTHONFAULTHANDLER: "1"
+    # The loopback only: the reverse proxy on the host is what faces the internet.
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-app}
+      API_BASE_URL: http://api:8000
+      SNAPSHOT_DIR: /snapshots
+      PYTHONFAULTHANDLER: "1"
+    # The bytes every shop served. Losing this volume turns every parser fix back into a
+    # crawl, so it is kept across deploys like the database's.
+    volumes:
+      - snapshots:/snapshots
+    command: ["python", "-m", "app.features.runs.scheduler"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.features.runs.scheduler", "--healthy"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+
+volumes:
+  pgdata:
+  snapshots:
