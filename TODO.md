@@ -103,18 +103,19 @@ and the questions that have to be answered with real data first, are written dow
       passes answer inside the request; the matching README has the measured cost per item
       and a safe `limit` for each. A pass the size of the queue wants a background job with
       an id, a status and progress, as the collectors' runs have.
-- [ ] **Laptop models written in another word order are separate families.** After
-      `laptops-7` the reading is clean, and what is left is shops ordering one name
-      differently: `Pro Essential 14` / `Pro 14 Essential`, `Plus 14` / `14 Plus`,
-      `Alienware Aurora 16` / `Alienware 16 Aurora`. That is `model_aliases`, and Dell has no
-      laptop rows at all; the lookup takes the longest name found whole in a title, so a
-      maker's line has to be entered complete — `Plus 14` alone would read `Pro 14 Plus` as
-      `14 Plus`. Followed by a reparse and `matching/rebuild`.
+- [x] **Laptop models written in another word order are separate families.** `laptops-8`
+      reads the model through the registry as phones do, and Dell's line is entered complete
+      (76 rows, the maker's order: `Pro 14 Essential`, `14 Plus`, `Alienware 16 Aurora`).
+      Dell went from 63 visible families to 53. Other makers have no laptop rows yet.
+- [ ] **dateks's `14 Essential PV14250` is not read through the registry.** The code is
+      entered as `Pro 14 Essential`, but the title carries on `| Pro Platinum Silver`, and
+      `pro` after a name makes it another model to the lookup. One listing.
 - [ ] **A damaged-packaging listing is read as a model called `Prece`.** ksenukai titles
       open `Prece ar bojātu iepakojumu.` — an item with damaged packaging — on some laptops.
       It is a condition, not a name, and the channel keeps it as new.
-- [ ] **dateks writes some laptop models in capitals** — `PRO MAX 18 PLUS` — which matches
-      (the model is compared normalized) but is how the family is shown.
+- [x] **dateks writes some laptop models in capitals** — `PRO MAX 18 PLUS`. The registry
+      spells them now, and `matching/rebuild` renames a family to the case every entry in
+      it writes.
 - [ ] **Nothing reads a picture.** No reading has an image field, so neither a listing row
       nor `variant.image_url` (null on all 6193) has one. The shops write it five ways — a
       list under `images` (bigbox, dateks, euronics, rd, tet, ksenukai/1a), relative paths

@@ -316,6 +316,49 @@ def test_a_colour_comes_off_the_end_of_a_model_however_it_was_found(stated, mode
     assert reading["model"] == model
 
 
+DELL = {
+    "dell": {
+        "pro 14 essential": "Pro 14 Essential",
+        "pro essential 14": "Pro 14 Essential",
+        "pro 14": "Pro 14",
+        "pro 14 plus": "Pro 14 Plus",
+        "pro 14 plus 2in1": "Pro 14 Plus 2-in-1",
+        "14 plus": "14 Plus",
+        "plus 14": "14 Plus",
+        "14 plus 2 in 1": "14 Plus 2-in-1",
+        "plus 14 2 in 1": "14 Plus 2-in-1",
+    }
+}
+
+
+@pytest.mark.parametrize(
+    ("title", "model"),
+    [
+        ('"Dell Pro Essential 14 AG FHD+ ar AMD Ryzen 5 220 procesoru', "Pro 14 Essential"),
+        ('"Dell Pro 14 Essential" - Ryzen 7 250 | 14 collu | 16 GB', "Pro 14 Essential"),
+        ("Dell DELL PRO 14 PLUS 2IN1 U5-235U/14FHT+/16GB/512SSD", "Pro 14 Plus 2-in-1"),
+        ('Dell Pro 14 PC14250 Platiunum Silver, 14" WUXGA', "Pro 14"),
+        ('Dell Plus 14 2-in-1 DB04250 | Ice Blue | 14 "', "14 Plus 2-in-1"),
+        ("portatīvais dators Dell Plus 14 FHD+ 340 16GB 1SSD EN W11P", "14 Plus"),
+        # A name the registry does not hold keeps the shop's reading.
+        ("Dell Latitude 5430 14.0-inch FHD i5-1235U 8GB", "Latitude 5430"),
+    ],
+)
+def test_a_laptop_is_named_as_the_registry_spells_it(title, model):
+    reading = read(
+        {"title": title, "brand": "Dell"},
+        source_slug="rdveikals-laptops",
+        shop_slug="rdveikals",
+        category="laptops",
+        vocabulary=Vocabulary(
+            category_names=VOCABULARY.category_names,
+            brand_names=VOCABULARY.brand_names,
+            models=DELL,
+        ),
+    )
+    assert reading["model"] == model
+
+
 # --- the channel ---
 
 

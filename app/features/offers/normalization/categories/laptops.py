@@ -31,7 +31,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "laptops"
-VERSION = "laptops-7"
+VERSION = "laptops-8"
 
 CPU_KEY = "cpu"
 RAM_KEY = "ram_mb"
@@ -823,6 +823,26 @@ RULESET = register(
                     " registry knows, only off the end, and never the whole model."
                 ),
                 body=_without_a_trailing_colour,
+            ),
+            Rule(
+                id="laptops-model-from-the-registry",
+                layer=FINISH,
+                why=(
+                    "Dell's 2025 names put the size before the tier — `Dell Pro 14 Essential`,"
+                    " `Dell 16 Plus`, `Alienware 16 Aurora` — and the shops write them in either"
+                    " order: on 25.09.2026 `Pro Essential 14` 17 times beside `Pro 14 Essential`"
+                    " 78, `Plus 16` 7 beside `16 Plus` 5, `Alienware Aurora 16` 4 beside"
+                    " `Alienware 16 Aurora` 4, and dateks in capitals — `PRO 14 PLUS 2IN1`. No"
+                    " cut of the title turns one order into the other; each spelling became a"
+                    " family of its own, 63 of them for Dell."
+                    "\n\n"
+                    "Which spelling is the maker's is a fact about Dell, so it is rows in"
+                    " `model_aliases` and this is only the matching phones already use: the"
+                    " longest known name found whole in the title, else in the model the rules"
+                    " before this cut, and nothing replaced when none is found. A maker with no"
+                    " page of laptop names is left as its shop read it."
+                ),
+                body=devices.from_the_registry,
             ),
         ),
     ),

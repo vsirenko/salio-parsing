@@ -206,6 +206,13 @@ gap in the registry has to read as a gap. For the same reason a stated maker the
 knows but the registry has no page for reads nothing from it, where it used to read every
 maker's page: ZTE has none, Hammer's holds `Blade`, and four ZTE phones were one entry. A
 brand field naming no maker we know (`Nothing Phone`, a reseller) still opens every page.
+Laptops read through the same rule since `laptops-8`, for a different reason: their
+subtraction is clean, but a maker's name comes in more than one word order — Dell's
+`Pro 14 Essential` 78 times beside `Pro Essential 14` 17, `16 Plus` beside `Plus 16` — and
+only a row can say which order is the maker's. So far only Dell has laptop rows, entered as a
+complete line: an entry for `14 Plus` alone would be the longest name found in
+`Inspiron 14 Plus`. A laptop line with a model number in it (`XPS 14 9440`, a 2024 machine,
+beside the 2026 `XPS 14`) is entered with the number, so the longer name keeps them apart.
 The registry
 itself — where it came from, why it is per brand, why `+` survives — is described in
 [brands](../brands/README.md), "The model registry".

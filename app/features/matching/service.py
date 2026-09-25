@@ -1385,6 +1385,16 @@ class MatchingService:
             except IntegrityError:
                 reasons["conflict"] += 1
 
+        # A family is named by whichever spelling made it, and the lookup that files an entry
+        # under it ignores case — so dateks's `PRO MAX 16 PLUS` headed a family whose 13
+        # entries all read `Pro Max 16 Plus` once the registry spelled the name. Only a
+        # difference of case, and only when every entry agrees: that is the name the
+        # family already has, written the way everything in it now writes it.
+        recased = 0
+        for product_id, model in await self._miscased_families(limit=limit):
+            await catalog.update_product(product_id, ProductUpdate(model=model))
+            recased += 1
+
         # A family with nothing in it is a name and no prices. Merges emptied 288 of them
         # before this pass hid what it emptied, and the storefront's filter is `is_visible`.
         hidden = 0
@@ -1397,6 +1407,7 @@ class MatchingService:
             renamed=renamed,
             merged=merged,
             rehomed=rehomed,
+            recased=recased,
             hidden=hidden,
             **dict(reasons),
         )
@@ -1405,10 +1416,29 @@ class MatchingService:
             renamed=renamed,
             merged=merged,
             rehomed=rehomed,
+            recased=recased,
             hidden=hidden,
             refused=sum(reasons.values()),
             reasons=dict(reasons),
         )
+
+    async def _miscased_families(self, *, limit: int) -> list[tuple[int, str]]:
+        """Visible families whose entries all spell the family's name in another case."""
+        spelling = func.min(Variant.model)
+        rows = await self.session.execute(
+            select(Product.id, spelling)
+            .join(Variant, Variant.product_id == Product.id)
+            .where(Product.is_visible.is_(True))
+            .group_by(Product.id, Product.model)
+            .having(
+                func.count(func.distinct(Variant.model)) == 1,
+                spelling != Product.model,
+                func.lower(spelling) == func.lower(Product.model),
+            )
+            .order_by(Product.id)
+            .limit(limit)
+        )
+        return [(product_id, model) for product_id, model in rows.all()]
 
     async def _empty_families(self, *, limit: int) -> list[int]:
         """Visible families with no entry in them."""

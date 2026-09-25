@@ -2067,6 +2067,43 @@ def test_an_entry_named_after_a_reading_that_changed_is_rebuilt(client):
     assert entry["model"] == "iPhone 15"
 
 
+def test_a_family_takes_the_case_every_entry_in_it_writes(client):
+    """dateks's `PRO MAX 16 PLUS` made a family and kept heading it after every entry in
+    it had come to read `Pro Max 16 Plus`: the family lookup ignores case, so nothing moved."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    a_colour_axis(client, token, category["id"])
+    payload = {
+        "name": "Apple iPhone 15 256 GB black",
+        "brand": "Apple",
+        "attributes": {"storage": "256 GB", "color": "black"},
+    }
+    offer = offer_from(
+        client, token, source["id"], {**payload, "model": "IPHONE 15"}, external_id="C-1"
+    )
+    variant_id = promote(client, token, offer)["variant_id"]
+    ingest(
+        client,
+        token,
+        source["id"],
+        {
+            "external_id": "C-1",
+            "market_code": "LV",
+            "payload": {**payload, "model": "iPhone 15"},
+        },
+    )
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert (report["renamed"], report["recased"]) == (1, 1)
+    variant = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    family = client.get(
+        f"/api/admin/products/{variant['product']['id']}", headers=auth(token)
+    ).json()
+    assert (family["model"], family["is_visible"]) == ("iPhone 15", True)
+    again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert again["recased"] == 0
+
+
 def test_a_renamed_entry_moves_into_the_family_its_name_says(client):
     """A rename used to stop at the entry: `Galaxy S26 S942 5G Dual Sim` became
     `Galaxy S26` and stayed filed under the product the old name had made, so the

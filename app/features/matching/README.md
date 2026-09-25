@@ -173,6 +173,13 @@ Nothing else hides a family, so a hidden one with an entry in it is only this pa
 on 23.09.2026 `Apple iPhone 16 Pro` and 60 tablet families sat off the storefront that way,
 their names emptied by one reading and filled again by the next.
 
+**A family takes the case its entries write.** The lookup that files an entry under a family
+ignores case, so the spelling that made a family heads it for good: dateks's `PRO MAX 16
+PLUS` stayed the storefront heading over 13 entries that all read `Pro Max 16 Plus` once the
+registry spelled the name. A rebuild renames a family only when every entry in it agrees on
+one spelling and that spelling differs from the family's name by case alone — anything more
+is a different name, and that is a rename of the entries, not of the family.
+
 ## Working the queue
 
 **A queue row carries what deciding needs.** `offer` is the listing as the shop wrote it —
