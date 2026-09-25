@@ -40,7 +40,9 @@ httpcore2==2.13.1
 httptools==0.8.0
     # via uvicorn
 httpx2==2.13.1
-    # via typesafe-sdk
+    # via
+    #   -r requirements.txt
+    #   typesafe-sdk
 idna==3.20
     # via
     #   anyio
@@ -80,6 +82,8 @@ pyyaml==6.0.3
     # via uvicorn
 six==1.17.0
     # via python-dateutil
+socksio==1.0.0
+    # via -r requirements.txt
 sqlalchemy==2.1.0
     # via
     #   -r requirements.txt

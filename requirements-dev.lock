@@ -108,6 +108,7 @@ httpx==0.28.1
 httpx2==2.13.1
     # via
     #   -c requirements.lock
+    #   -r requirements.txt
     #   typesafe-sdk
 identify==2.6.19
     # via pre-commit
@@ -212,6 +213,10 @@ six==1.17.0
     # via
     #   -c requirements.lock
     #   python-dateutil
+socksio==1.0.0
+    # via
+    #   -c requirements.lock
+    #   -r requirements.txt
 sqlalchemy==2.1.0
     # via
     #   -c requirements.lock

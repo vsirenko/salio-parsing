@@ -10,6 +10,70 @@
         "title": "Access",
         "type": "string"
       },
+      "AddressCheck": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The address the probe saw the request come from",
+            "title": "Ip"
+          },
+          "ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ms"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "url": {
+            "description": "Masked",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "ok"
+        ],
+        "title": "AddressCheck",
+        "type": "object"
+      },
       "AliasCreate": {
         "additionalProperties": false,
         "description": "What a source calls this attribute.",
@@ -2774,6 +2838,13 @@
               "type": "string"
             },
             "title": "Market Codes",
+            "type": "array"
+          },
+          "proxies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Proxies",
             "type": "array"
           },
           "run_id": {
@@ -6105,6 +6176,201 @@
         "title": "PromotionReport",
         "type": "object"
       },
+      "ProxyCheck": {
+        "description": "Each address asked for the probe page once; what came back.",
+        "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/AddressCheck"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "probe": {
+            "title": "Probe",
+            "type": "string"
+          },
+          "proxy_id": {
+            "title": "Proxy Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "proxy_id",
+          "probe",
+          "addresses"
+        ],
+        "title": "ProxyCheck",
+        "type": "object"
+      },
+      "ProxyCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Urls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "urls"
+        ],
+        "title": "ProxyCreate",
+        "type": "object"
+      },
+      "ProxyRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "sources": {
+            "description": "The channels going out through it, by slug",
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "urls": {
+            "description": "Masked: the credentials are never shown",
+            "items": {
+              "type": "string"
+            },
+            "title": "Urls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "urls",
+          "is_enabled",
+          "note",
+          "sources",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProxyRead",
+        "type": "object"
+      },
+      "ProxyUpdate": {
+        "additionalProperties": false,
+        "description": "Every field optional. `urls`, when sent, replaces the whole list: a masked address\ncannot be sent back, so the list is given again in full or not at all.",
+        "properties": {
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urls"
+          }
+        },
+        "title": "ProxyUpdate",
+        "type": "object"
+      },
       "QueueReason": {
         "enum": [
           "brand_unknown",
@@ -7940,6 +8206,17 @@
             "default": "0.98",
             "title": "Min Price Coverage"
           },
+          "proxy_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proxy Id"
+          },
           "slug": {
             "maxLength": 64,
             "minLength": 1,
@@ -8275,6 +8552,18 @@
             "title": "Offers Count",
             "type": "integer"
           },
+          "proxy_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The proxy its runs go out through",
+            "title": "Proxy Id"
+          },
           "shop_id": {
             "title": "Shop Id",
             "type": "integer"
@@ -8477,6 +8766,17 @@
               }
             ],
             "title": "Min Price Coverage"
+          },
+          "proxy_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proxy Id"
           },
           "trust": {
             "anyOf": [
@@ -18530,6 +18830,340 @@
         "summary": "Update a product",
         "tags": [
           "admin: catalogue"
+        ]
+      }
+    },
+    "/api/admin/proxies": {
+      "get": {
+        "operationId": "list_proxies_api_admin_proxies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProxyRead"
+                  },
+                  "title": "Response List Proxies Api Admin Proxies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List proxies",
+        "tags": [
+          "admin: proxies"
+        ]
+      },
+      "post": {
+        "description": "`urls` like `http://user:pass@host:port` or `socks5://…`, taken in turn by a run.",
+        "operationId": "create_proxy_api_admin_proxies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProxyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The name is taken"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add a proxy",
+        "tags": [
+          "admin: proxies"
+        ]
+      }
+    },
+    "/api/admin/proxies/{proxy_id}": {
+      "delete": {
+        "operationId": "remove_proxy_api_admin_proxies__proxy_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proxy_id",
+            "required": true,
+            "schema": {
+              "title": "Proxy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Proxy not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Channels still go out through it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove a proxy no channel uses",
+        "tags": [
+          "admin: proxies"
+        ]
+      },
+      "get": {
+        "operationId": "get_proxy_api_admin_proxies__proxy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proxy_id",
+            "required": true,
+            "schema": {
+              "title": "Proxy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Proxy not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get a proxy",
+        "tags": [
+          "admin: proxies"
+        ]
+      },
+      "patch": {
+        "description": "Switching it off sends its channels out direct from the next run; nothing else to edit.",
+        "operationId": "update_proxy_api_admin_proxies__proxy_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proxy_id",
+            "required": true,
+            "schema": {
+              "title": "Proxy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProxyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Proxy not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The name is taken"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update a proxy",
+        "tags": [
+          "admin: proxies"
+        ]
+      }
+    },
+    "/api/admin/proxies/{proxy_id}/check": {
+      "post": {
+        "description": "One request for `PROXY_CHECK_URL` through each address: whether it answered, how fast,\nand the address the far side saw.",
+        "operationId": "check_proxy_api_admin_proxies__proxy_id__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proxy_id",
+            "required": true,
+            "schema": {
+              "title": "Proxy Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Proxy not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Try every address of a proxy",
+        "tags": [
+          "admin: proxies"
         ]
       }
     },

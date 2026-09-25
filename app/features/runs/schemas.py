@@ -185,6 +185,9 @@ class Job(BaseModel):
     # What this particular pass is expected to bring back — `delivers_full` or
     # `delivers_quick`, already chosen by `kind` so the worker does not choose wrongly.
     delivers: list[str]
+    # The addresses of the channel's proxy, whole, credentials and all: the worker is what
+    # connects. Empty goes direct — no proxy chosen, or the one chosen switched off.
+    proxies: list[str] = Field(default_factory=list)
 
 
 class Due(BaseModel):

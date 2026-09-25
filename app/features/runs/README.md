@@ -227,6 +227,13 @@ listing belonged to — facts the crawl had and the page does not state. Without
 reparse of a marketplace channel would fail on every item for want of something it already
 knew. The worker fills them from the listing, so a channel does not have to remember to.
 
+**A run goes out through its channel's proxy.** The job carries the proxy's addresses whole
+(`proxies`) — the one place they are, because the worker is what connects — and the fetcher
+makes a client per address and takes them in turn. An address that fails to connect, or
+answers 407 for its own credentials, is out for the rest of the run and the request goes
+through the next; with every one out the request fails. A proxy switched off gives the job
+none, and the channel goes direct. See [proxies](../proxies/README.md).
+
 **A reparse settles once, at the end.** Settling walks the whole match queue — a minute or
 more — and the scheduler's loop does nothing else meanwhile, so a reparse of twenty
 channels settled after each took an hour on 25.09.2026 for runs of two seconds. A reparse

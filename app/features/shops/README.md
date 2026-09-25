@@ -69,6 +69,12 @@ door into the same shop.
 delivering to Riga needs a row even though we run no German storefront. Where its offers
 are *shown* is `shop_markets`, which points at `markets`.
 
+**A channel may go out through a proxy** (`proxy_id`, a row of
+[proxies](../proxies/README.md)), where the shop does not let the server's own address in.
+It belongs to the channel rather than the shop: one shop's channels reach different hosts
+and only some of them block. A proxy that does not exist is refused (`unknown_proxy`);
+`null` sends the channel direct again.
+
 **`shop_markets` carries its own flag.** Delivery is the reason a shop could appear in a
 market; whether it does is our decision. A shop can be switched off in Lithuania without
 being touched in Latvia, and it is attached disabled by default. So `?market_code=` alone

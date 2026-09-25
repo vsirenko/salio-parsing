@@ -23,6 +23,7 @@ from app.db.models import (
     Offer,
     OfferMatch,
     Product,
+    Proxy,
     RawOffer,
     Run,
     SchedulerHeartbeat,
@@ -205,7 +206,14 @@ class RunService:
             # A reparse re-reads full snapshots, so it is expected to bring back what a
             # full pass brings back.
             delivers=list(source.delivers_quick if kind is Kind.QUICK else source.delivers_full),
+            proxies=await self._proxies(source.proxy_id),
         )
+
+    async def _proxies(self, proxy_id: int | None) -> list[str]:
+        if proxy_id is None:
+            return []
+        proxy = await self.session.get(Proxy, proxy_id)
+        return list(proxy.urls) if proxy is not None and proxy.is_enabled else []
 
     # --- finishing ---
 

@@ -24,6 +24,7 @@ from app.features.matching.service import MatchingService
 from app.features.offers.service import OfferService
 from app.features.pipeline.service import PipelineService
 from app.features.prices.service import PriceService
+from app.features.proxies.service import ProxyService
 from app.features.rate_limit.service import LoginRateLimiter
 from app.features.runs.service import RunService
 from app.features.shops.service import ShopService
@@ -116,11 +117,16 @@ def get_market_service(session: SessionDep) -> MarketService:
     return MarketService(session)
 
 
+def get_proxy_service(session: SessionDep) -> ProxyService:
+    return ProxyService(session)
+
+
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 CurrencyServiceDep = Annotated[CurrencyService, Depends(get_currency_service)]
 CountryServiceDep = Annotated[CountryService, Depends(get_country_service)]
 MarketServiceDep = Annotated[MarketService, Depends(get_market_service)]
+ProxyServiceDep = Annotated[ProxyService, Depends(get_proxy_service)]
 CategoryServiceDep = Annotated[CategoryService, Depends(get_category_service)]
 AttributeServiceDep = Annotated[AttributeService, Depends(get_attribute_service)]
 BrandServiceDep = Annotated[BrandService, Depends(get_brand_service)]
