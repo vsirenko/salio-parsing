@@ -13,6 +13,7 @@ from types import TracebackType
 import httpx2
 
 from app.core.config import settings
+from app.core.net import masked_url
 from app.features.runs.channel import Part
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,9 @@ class Rate:
             await asyncio.sleep(pause)
 
 
+PROXY_AUTH_REQUIRED = 407
+
+
 class FetchError(Exception):
     """The shop did not serve this, after trying. One product's problem, not the run's."""
 
@@ -75,6 +79,8 @@ class Fetcher:
         rate: float | None = None,
         retries: int | None = None,
         client: httpx2.AsyncClient | None = None,
+        proxies: list[str] | None = None,
+        clients: list[httpx2.AsyncClient] | None = None,
     ) -> None:
         self.retries = settings.fetch_retries if retries is None else retries
         # Two limits, and each says what it is. The gate is how many requests may be open
@@ -83,13 +89,55 @@ class Fetcher:
         # that are all technically within their concurrency.
         self._gate = asyncio.Semaphore(concurrency or settings.fetch_concurrency)
         self._rate = Rate(settings.fetch_rate_per_second if rate is None else rate)
-        self._client = client or httpx2.AsyncClient(
-            timeout=settings.fetch_timeout_seconds,
-            follow_redirects=True,
-            headers={"user-agent": user_agent or settings.fetch_user_agent},
-        )
-        self._owned = client is None
+        headers = {"user-agent": user_agent or settings.fetch_user_agent}
+
+        def made(proxy: str | None) -> httpx2.AsyncClient:
+            return httpx2.AsyncClient(
+                timeout=settings.fetch_timeout_seconds,
+                follow_redirects=True,
+                headers=headers,
+                proxy=proxy,
+            )
+
+        # One client per way out, because a client's proxy is fixed when it is made: a
+        # channel's proxy with five addresses is five clients, taken in turn. Without a
+        # proxy it is the one direct client it always was.
+        if clients is not None:
+            self._clients, self._labels = (
+                list(clients),
+                [f"client {i}" for i in range(len(clients))],
+            )
+        elif client is not None:
+            self._clients, self._labels = [client], ["direct"]
+        elif proxies:
+            self._clients = [made(proxy) for proxy in proxies]
+            self._labels = [masked_url(proxy) for proxy in proxies]
+        else:
+            self._clients, self._labels = [made(None)], ["direct"]
+        self._owned = client is None and clients is None
+        # An address that failed to connect is out for the rest of the run: a proxy that is
+        # down stays down for minutes, and every request sent to it would cost a timeout.
+        self._down: set[int] = set()
+        self._turn = 0
         self.requests = 0
+
+    @property
+    def _client(self) -> httpx2.AsyncClient:
+        return self._clients[0]
+
+    def _next(self) -> int | None:
+        """The next way out still up, in turn; none when every one has failed."""
+        for _ in range(len(self._clients)):
+            index = self._turn % len(self._clients)
+            self._turn += 1
+            if index not in self._down:
+                return index
+        return None
+
+    def _out(self, index: int, why: str) -> None:
+        if len(self._clients) > 1 or self._labels[index] != "direct":
+            self._down.add(index)
+            log.warning("%s is out for this run: %s", self._labels[index], why)
 
     async def __aenter__(self) -> "Fetcher":
         return self
@@ -101,7 +149,8 @@ class Fetcher:
         tb: TracebackType | None,
     ) -> None:
         if self._owned:
-            await self._client.aclose()
+            for client in self._clients:
+                await client.aclose()
 
     async def get(self, url: str, *, role: str = "detail", **kwargs) -> Part:
         return await self.request("GET", url, role=role, **kwargs)
@@ -121,13 +170,26 @@ class Fetcher:
             # the concurrency slots is what made the delay cost throughput rather than only
             # spacing requests out.
             await self._rate.wait()
+            index = self._next()
+            if index is None:
+                raise FetchError(f"{method} {url}: every proxy address is out ({last})")
             async with self._gate:
                 try:
                     self.requests += 1
-                    response = await self._client.request(method, url, **kwargs)
+                    response = await self._clients[index].request(method, url, **kwargs)
+                except (httpx2.ProxyError, httpx2.ConnectError, httpx2.ConnectTimeout) as error:
+                    # The way out failed, not the shop: the next attempt takes another.
+                    last = error
+                    response = None
+                    self._out(index, f"{type(error).__name__}: {error}")
                 except httpx2.HTTPError as error:
                     last = error
                     response = None
+            if response is not None and response.status_code == PROXY_AUTH_REQUIRED:
+                # The proxy refused its own credentials; the shop never saw the request.
+                self._out(index, "407 proxy authentication required")
+                last, response = FetchError("407 from the proxy"), None
+                continue
 
             if response is not None and response.status_code not in RETRY_ON:
                 return Part(

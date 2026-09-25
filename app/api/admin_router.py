@@ -32,6 +32,7 @@ from app.features.offers.admin_router import sources_router as source_offers_rou
 from app.features.pipeline.admin_router import router as pipeline_router
 from app.features.prices.admin_router import availability_router
 from app.features.prices.admin_router import router as prices_router
+from app.features.proxies.admin_router import router as proxies_router
 from app.features.runs.admin_router import router as runs_router
 from app.features.runs.admin_router import scheduler_router
 from app.features.runs.admin_router import sources_router as source_runs_router
@@ -47,6 +48,7 @@ admin_router.include_router(audit_router)
 admin_router.include_router(currencies_router)
 admin_router.include_router(countries_router)
 admin_router.include_router(markets_router)
+admin_router.include_router(proxies_router)
 admin_router.include_router(categories_router)
 admin_router.include_router(attributes_router)
 admin_router.include_router(brands_router)

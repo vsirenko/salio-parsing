@@ -889,6 +889,32 @@ class ShopMarket(Base):
     __table_args__ = (Index("ix_shop_markets_market_code", "market_code"),)
 
 
+class Proxy(Base):
+    """A way out to the shops that do not let the server's own address in.
+
+    Named, and chosen by a channel, so one proxy serves every channel that needs it and its
+    password changes in one place. Several addresses, taken in turn by a run and skipped for
+    the rest of it when one stops answering: a provider's pool, or a few gateways.
+
+    The addresses carry their credentials — `http://user:pass@host:port` — so they are a
+    secret: the API shows them masked and the audit trail never holds them. Only the job a
+    worker is handed carries them whole, because the worker is what connects.
+    """
+
+    __tablename__ = "proxies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    urls: Mapped[list] = mapped_column(JSONB, default=list)
+    # Switched off, a proxy's channels go direct; nothing else has to be edited to try that.
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        TimestampTZ, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Source(Base):
     """One way into a shop, not the shop and not its website.
 
@@ -942,6 +968,10 @@ class Source(Base):
     min_price_coverage: Mapped[Decimal] = mapped_column(
         Numeric(3, 2), default=Decimal("0.98"), server_default="0.98"
     )
+    # The way out to the shop, where the server's own address is not let in. Per channel,
+    # not per shop: one shop's channels reach different hosts, and only some of them block.
+    # A proxy in use cannot be deleted, so this never points at nothing by surprise.
+    proxy_id: Mapped[int | None] = mapped_column(ForeignKey("proxies.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
     __table_args__ = (

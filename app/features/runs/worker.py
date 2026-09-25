@@ -105,7 +105,11 @@ async def collect(
         # A channel may ask for less than the default: a shop whose pages sit behind a
         # rate limiter answers 429 at the pace its index is happy with.
         polite = Fetcher(
-            rate=getattr(channel, "rate", None), concurrency=getattr(channel, "concurrency", None)
+            rate=getattr(channel, "rate", None),
+            concurrency=getattr(channel, "concurrency", None),
+            # The channel's proxy, when it has one: the way out to a shop that does not let
+            # the server's own address in.
+            proxies=job.proxies or None,
         )
         async with fetcher or polite as session:
             try:

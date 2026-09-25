@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     fetch_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     fetch_retries: int = Field(default=3, ge=0, le=10)
     fetch_user_agent: str = "salio-parsing/0.1 (+https://example.com/bot)"
+    # What a proxy check asks for through each address: a page that answers with the
+    # address it saw, so the check says which one the shop would see.
+    proxy_check_url: str = "https://api.ipify.org?format=json"
+    proxy_check_timeout_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
     # Where a worker keeps the bytes a shop served. Its own disk rather than the database:
     # a parser is wrong more often than a site changes, and every fix is worth only what it
     # costs to re-apply — with a snapshot that is nothing, without one it is another crawl.

@@ -275,6 +275,8 @@ class SourceCreate(BaseModel):
     min_items: int | None = Field(default=None, gt=0)
     max_drop_pct: int = Field(default=30, ge=0, le=100)
     min_price_coverage: Decimal = Field(default=Decimal("0.98"), ge=0, le=1)
+    # The proxy its runs go out through (`/api/admin/proxies`); none goes direct.
+    proxy_id: int | None = None
 
     @field_validator("slug")
     @classmethod
@@ -303,6 +305,8 @@ class SourceUpdate(BaseModel):
     min_items: int | None = Field(default=None, gt=0)
     max_drop_pct: int | None = Field(default=None, ge=0, le=100)
     min_price_coverage: Decimal | None = Field(default=None, ge=0, le=1)
+    # Null takes the proxy away and the channel goes direct.
+    proxy_id: int | None = None
 
     @field_validator("cron_full", "cron_quick")
     @classmethod
@@ -343,6 +347,7 @@ class SourceRead(BaseModel):
     min_items: int | None
     max_drop_pct: int
     min_price_coverage: Decimal
+    proxy_id: int | None = Field(default=None, description="The proxy its runs go out through")
     last_run: RunBrief | None = None
     last_full_ok_at: datetime | None = Field(
         default=None, description="When its newest full pass that ended ok finished"

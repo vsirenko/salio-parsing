@@ -8,6 +8,10 @@ sqlalchemy[asyncio]>=2.0,<3.0
 asyncpg>=0.29,<1.0
 alembic>=1.13,<2.0
 croniter>=6.0,<7.0
+# The collectors' HTTP client, used directly rather than only through the judge's SDK that
+# happens to bring it; socksio is what lets it go through a SOCKS5 proxy.
+httpx2>=2.13,<3.0
+socksio>=1.0,<2.0
 # The only channel that reads markup needs a real parser: regular expressions over
 # HTML fail quietly, which is the one way a parser must not fail.
 lxml>=6.0,<7.0

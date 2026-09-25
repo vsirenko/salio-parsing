@@ -15,6 +15,7 @@ from app.db.models import (
     Market,
     Offer,
     OfferMatch,
+    Proxy,
     RawOffer,
     Run,
     Seller,
@@ -307,6 +308,7 @@ class ShopService:
                 " brings nothing back.",
                 code="quick_cron_needs_a_quick_pass",
             )
+        await self._check_proxy(payload.proxy_id)
         source = Source(shop_id=shop_id, **payload.model_dump(mode="json"))
         self.session.add(source)
         try:
@@ -317,6 +319,10 @@ class ShopService:
 
         audit.record_changes(added_source=payload.slug, **payload.model_dump(mode="json"))
         return await self.get_source(source.id)
+
+    async def _check_proxy(self, proxy_id: int | None) -> None:
+        if proxy_id is not None and await self.session.get(Proxy, proxy_id) is None:
+            raise ValidationError(f"Proxy {proxy_id} not found", code="unknown_proxy")
 
     async def update_source(self, source_id: int, payload: SourceUpdate) -> SourceRead:
         source = await self._source(source_id)
@@ -357,6 +363,9 @@ class ShopService:
             source.max_drop_pct = payload.max_drop_pct
         if payload.min_price_coverage is not None:
             source.min_price_coverage = payload.min_price_coverage
+        if "proxy_id" in sent:
+            await self._check_proxy(payload.proxy_id)
+            source.proxy_id = payload.proxy_id
         self._check_schedule(source)
 
         await self.session.flush()
