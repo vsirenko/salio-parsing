@@ -81,8 +81,8 @@ docker compose up -d db
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt          # runtime only
-pip install -r requirements-dev.txt      # + pytest, httpx, ruff
+pip install -r requirements.lock         # runtime only, the versions CI tested
+pip install -r requirements-dev.lock     # + pytest, httpx, ruff
 
 cp .env.example .env
 
@@ -94,7 +94,7 @@ With [uv](https://docs.astral.sh/uv/) instead:
 
 ```bash
 uv venv --python 3.12
-uv pip install -r requirements-dev.txt
+uv pip sync requirements-dev.lock
 cp .env.example .env
 ```
 

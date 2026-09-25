@@ -1,7 +1,12 @@
 ## Environment
 - Python 3.12+, virtualenv in `.venv`. Run tooling through it: `.venv/bin/pytest`,
   `.venv/bin/ruff`, `.venv/bin/uvicorn`, `.venv/bin/cz`, `.venv/bin/alembic`.
-- Install dev deps: `uv pip install -r requirements-dev.txt`.
+- Install dev deps at the locked versions: `uv pip sync requirements-dev.lock`. The image
+  installs `requirements.lock` and CI `requirements-dev.lock`, so all three run the same
+  versions. `requirements*.txt` hold the ranges; after changing one, recompile both locks —
+  `uv pip compile requirements.txt -o requirements.lock --python-version 3.12 --no-header`,
+  then `uv pip compile requirements-dev.txt -c requirements.lock -o requirements-dev.lock
+  --python-version 3.12 --no-header` — and commit them with it.
 - Settings come from `.env` via pydantic-settings (`app/core/config.py`).
 - PostgreSQL runs in compose on host port **55432**, the api on **8080**. Do not move
   them to 5432 / 8000 — those are taken by other projects on this machine.

@@ -7,9 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Dependencies first so code changes don't invalidate the pip layer.
-COPY requirements.txt ./
-RUN pip install -r requirements.txt
+# Dependencies first so code changes don't invalidate the pip layer. From the lock, at the
+# exact versions CI tested: requirements.txt holds ranges, and an image built from those
+# took whatever was newest that day — Starlette 1.7.0 on CI against 1.6.0 on a laptop.
+COPY requirements.lock ./
+RUN pip install -r requirements.lock
 
 COPY app ./app
 COPY alembic ./alembic
