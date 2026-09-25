@@ -300,3 +300,21 @@ def test_a_reparse_rereads_the_newest_observation_too(client, event_loop):
     )
     assert handed.status_code == 202, handed.text
     assert event_loop.run_until_complete(readings(newest["raw_offer_id"])) == before + 1
+
+
+def test_a_reparse_waiting_means_the_one_before_it_leaves_settling_to_it(client, event_loop):
+    """Settling walks the whole queue; twenty reparses settled twenty times took an hour."""
+    from app.db.session import session_factory
+    from app.features.runs.service import RunService
+
+    async def waiting() -> bool:
+        async with session_factory() as session:
+            return await RunService(session).reparses_waiting()
+
+    token = admin_token(client)
+    source = channel(client, token, cron_full=None, cron_quick=None)
+    assert event_loop.run_until_complete(waiting()) is False
+    run = start(client, token, source["id"], kind="reparse")
+    assert event_loop.run_until_complete(waiting()) is True
+    client.post(f"/api/admin/runs/{run['id']}/cancel", headers=auth(token))
+    assert event_loop.run_until_complete(waiting()) is False

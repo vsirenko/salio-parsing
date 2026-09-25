@@ -227,6 +227,12 @@ listing belonged to — facts the crawl had and the page does not state. Without
 reparse of a marketplace channel would fail on every item for want of something it already
 knew. The worker fills them from the listing, so a channel does not have to remember to.
 
+**A reparse settles once, at the end.** Settling walks the whole match queue — a minute or
+more — and the scheduler's loop does nothing else meanwhile, so a reparse of twenty
+channels settled after each took an hour on 25.09.2026 for runs of two seconds. A reparse
+that finishes while another is queued or running ends at `settle_deferred`, and the last one
+settles for all of them: settling is over the whole catalogue anyway, not over one channel.
+
 **A settled run says how many families its category had before and after**
 (`settled.families_before`, `families_after`), and the scheduler logs a warning when there
 are more after. Rereading what is already placed should fold families, not make them, so

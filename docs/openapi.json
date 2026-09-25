@@ -6766,7 +6766,7 @@
         "type": "object"
       },
       "RunProgressRead": {
-        "description": "What a run has done so far: the worker's counts while it reads, then what settling\nit placed. `phase` walks `reading` → `settling` → `settled` (or `unsettled`, with the\nreason); a quick pass ends at `done`.",
+        "description": "What a run has done so far: the worker's counts while it reads, then what settling\nit placed. `phase` walks `reading` → `settling` → `settled` (or `unsettled`, with the\nreason); a quick pass ends at `done`. A reparse finishing while others wait ends at\n`settle_deferred`: the last one of them settles for all.",
         "properties": {
           "discovered": {
             "anyOf": [

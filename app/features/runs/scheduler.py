@@ -255,8 +255,20 @@ class Scheduler:
             del self.workers[worker.run_id]
             if worker.process.returncode != 0:
                 await self._finish(worker.run_id, f"worker exited with {worker.process.returncode}")
+            elif worker.kind is Kind.REPARSE and await self._more_reparses_waiting():
+                # Settling walks the whole queue, a minute or more, and the loop does nothing
+                # else meanwhile: a reparse of twenty channels settled twenty times took an
+                # hour on 25.09.2026 for runs of two seconds each. The last one settles for
+                # all of them.
+                async with session_factory() as session:
+                    await RunService(session).record_settle_deferred(worker.run_id)
+                    await session.commit()
             elif worker.kind in (Kind.FULL, Kind.REPARSE):
                 await self.settle(worker.run_id)
+
+    async def _more_reparses_waiting(self) -> bool:
+        async with session_factory() as session:
+            return await RunService(session).reparses_waiting()
 
     async def settle(self, run_id: int) -> None:
         """Place what a finished run collected, the way a person used to by hand.

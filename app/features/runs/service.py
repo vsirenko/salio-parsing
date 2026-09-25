@@ -339,6 +339,22 @@ class RunService:
             or 0
         )
 
+    async def reparses_waiting(self) -> bool:
+        """Whether a reparse is queued or running, which will settle for this one too."""
+        return bool(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(Run)
+                .where(Run.kind == Kind.REPARSE.value, Run.finished_at.is_(None))
+            )
+        )
+
+    async def record_settle_deferred(self, run_id: int) -> None:
+        run = await self.session.get(Run, run_id)
+        if run is not None:
+            run.progress = {**(run.progress or {}), "phase": "settle_deferred"}
+            await self.session.flush()
+
     async def record_settled(self, run_id: int, settled: dict[str, int] | None) -> None:
         """What settling a finished run placed, from the scheduler; `None` as it begins."""
         run = await self.session.get(Run, run_id)

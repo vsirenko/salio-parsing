@@ -274,7 +274,8 @@ class SettledCounts(BaseModel):
 class RunProgressRead(BaseModel):
     """What a run has done so far: the worker's counts while it reads, then what settling
     it placed. `phase` walks `reading` → `settling` → `settled` (or `unsettled`, with the
-    reason); a quick pass ends at `done`."""
+    reason); a quick pass ends at `done`. A reparse finishing while others wait ends at
+    `settle_deferred`: the last one of them settles for all."""
 
     phase: str | None = None
     discovered: int | None = None
