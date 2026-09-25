@@ -1,6 +1,7 @@
 """Placing a listing in the catalogue, or saying exactly why it could not be placed."""
 
 import logging
+import re
 from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -152,6 +153,20 @@ class IdentityCheck(NamedTuple):
     # land on a blue one's entry: they agreed on capacity, and the entry had no colour to
     # disagree with yet.
     complete: frozenset[int] = frozenset()
+
+
+# The glass Apple sells an iPad Pro and a MacBook Pro with, beside the standard one. It is
+# another product — another part number, a hundred or two more — so it stays on the entry's
+# model and apart in its key, and it is not another family: `iPad Pro M5` with the glass and
+# without was two families on the storefront, 32 entries and 16. Apple's word, the same in
+# every language.
+_GLASS = re.compile(r"\s+Nano-texture\s*$", re.IGNORECASE)
+_GLASS_SQL = r"\s+Nano-texture\s*$"
+
+
+def family_of(model: str) -> str:
+    """The family a model belongs to: the model, less the glass."""
+    return _GLASS.sub("", model).strip() or model
 
 
 # The rebuild endpoint's path, as the audit trail records it.
@@ -1539,7 +1554,10 @@ class MatchingService:
         rows = await self.session.scalars(
             select(Variant.id)
             .join(Product, Product.id == Variant.product_id)
-            .where(func.lower(Variant.model) != func.lower(Product.model))
+            .where(
+                func.lower(func.regexp_replace(Variant.model, _GLASS_SQL, "", "i"))
+                != func.lower(Product.model)
+            )
             .order_by(Variant.id)
             .limit(limit)
         )
@@ -1768,6 +1786,7 @@ class MatchingService:
         guess here: the family is exactly what the model string already said, and the
         alternative is a catalogue where every variant is an orphan.
         """
+        model = family_of(model)
         existing = await self.session.scalar(
             select(Product).where(
                 Product.brand_id == brand_id,
