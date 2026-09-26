@@ -561,6 +561,47 @@ class ModelAlias(Base):
     )
 
 
+class RereadRequest(Base):
+    """A brand's listings in a category, to be read again because its registry changed.
+
+    The registry is vocabulary, and a reading is a function of the rules and the words: a
+    hundred model names entered move no ruleset version, so nothing looks stale and nothing
+    is recomputed until the stored listings are read again. On 26.09.2026 that took a laptop
+    re-reading all twenty thousand listings over HTTP, three admin tokens and forty minutes,
+    to rename a thousand Apple ones. A change to a brand's model names now leaves one of
+    these; the scheduler takes it once the changes have gone quiet, reads that brand's
+    listings in that category again, a batch per tick, and settles the catalogue after.
+    One open request per brand and category: edits in a row refresh it rather than queue
+    two hundred.
+    """
+
+    __tablename__ = "reread_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    brand_id: Mapped[int] = mapped_column(ForeignKey("brands.id", ondelete="CASCADE"))
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"))
+    # Moved on every change it stands for: the scheduler waits for it to be quiet.
+    requested_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
+    finished_at: Mapped[datetime | None] = mapped_column(TimestampTZ)
+    # Offers are read in id order, a batch at a time; this is where the next batch starts.
+    after_offer_id: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    read: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # What the settling after it did — renamed, merged, split — once it is finished.
+    report: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    error: Mapped[str | None] = mapped_column(String(500))
+
+    __table_args__ = (
+        Index(
+            "uq_reread_requests_open",
+            "brand_id",
+            "category_id",
+            unique=True,
+            postgresql_where=text("finished_at is null"),
+        ),
+    )
+
+
 class Product(Base):
     """The family a human searches for: "iPhone 15 Pro".
 

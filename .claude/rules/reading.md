@@ -41,8 +41,10 @@
   to miss. A reading is a function of the rules *and* of the words handed to them, and
   entering a hundred aliases in the registry moves no version at all — so nothing looks
   stale and nothing is recomputed. Registry work therefore has to be followed by a
-  **reparse**, which re-reads what is stored with the reader as it is now and does not
-  consult the version. Ordinary ingestion still does: there, unchanged bytes should not cost
+  **re-read**, which reads what is stored with the reader as it is now and does not consult
+  the version. A change to a maker's model names asks for one itself (`reread_requests`, see
+  `app/features/brands/README.md`); other registries — colours, attribute names — still
+  need a reparse or `POST /api/admin/brands/{id}/reread` by hand. Ordinary ingestion still does: there, unchanged bytes should not cost
   work, and that is what keeps `raw_offers` proportional to how much the world changes
   rather than to how often we look at it.
 

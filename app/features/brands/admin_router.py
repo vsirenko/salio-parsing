@@ -22,6 +22,8 @@ from app.features.brands.schemas import (
     BrandUpdate,
     ModelAliasCreate,
     ModelAliasRead,
+    RereadRequestCreate,
+    RereadRequestRead,
 )
 from app.schemas.common import ErrorResponse
 from app.schemas.pagination import Page, Pagination
@@ -207,3 +209,29 @@ async def add_model(
 async def remove_model(brand_id: int, alias_id: int, service: BrandServiceDep) -> Response:
     await service.remove_model(brand_id, alias_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{brand_id}/rereads",
+    response_model=list[RereadRequestRead],
+    summary="The re-reads its registry changes asked for",
+)
+async def list_rereads(brand_id: int, service: BrandServiceDep) -> list[RereadRequestRead]:
+    """Newest first, the last fifty: waiting, being read, or finished with what settling did."""
+    return await service.list_rereads(brand_id)
+
+
+@router.post(
+    "/{brand_id}/reread",
+    response_model=RereadRequestRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Read this maker's listings in a category again",
+    responses={404: {"model": ErrorResponse, "description": "Brand or category not found"}},
+)
+async def request_reread(
+    brand_id: int, payload: RereadRequestCreate, service: BrandServiceDep
+) -> RereadRequestRead:
+    """What every change to its model names asks for already, asked by hand: the scheduler
+    reads the listings placed or queued under this maker in the category again, then
+    rebuilds and splits. Nothing is read in this request."""
+    return await service.request_reread(brand_id, payload.category_id)

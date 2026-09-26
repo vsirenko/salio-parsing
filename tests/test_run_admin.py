@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from tests.test_auth import auth
 from tests.test_matching import admin_token
+from tests.test_offers import post
 from tests.test_runs import channel, finish, start
 from tests.test_worker import taken, worker_token
 
@@ -411,3 +412,38 @@ def test_a_reread_reads_the_newest_full_observation_as_well_as_the_newest(client
     report = client.post(f"/api/admin/sources/{source['id']}/reread", headers=auth(token)).json()
     assert (report["read"], report["next_after_id"]) == (2, None), report
     assert event_loop.run_until_complete(age_and_count(False)) == 2
+
+
+def test_a_reread_can_be_narrowed_to_one_maker(client):
+    """A registry change moves one maker's listings; the rest need not be read again."""
+    from tests.test_matching import a_shop_we_can_build_from, a_storage_axis, offer_from, promote
+
+    token = admin_token(client)
+    _, source, category, apple = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 17 256GB",
+                "brand": "Apple",
+                "model": "iPhone 17",
+                "attributes": {"storage": "256 GB"},
+            },
+            external_id="A-1",
+        ),
+    )
+    offer_from(client, token, source["id"], {"name": "Unknown Phone X 128GB"}, external_id="U-1")
+    other = post(client, token, "/api/admin/brands", {"slug": "nokia", "canonical_name": "Nokia"})
+    url = f"/api/admin/sources/{source['id']}/reread"
+    assert client.post(url, headers=auth(token)).json()["read"] == 2
+    assert (
+        client.post(url, headers=auth(token), params={"brand_id": apple["id"]}).json()["read"] == 1
+    )
+    assert (
+        client.post(url, headers=auth(token), params={"brand_id": other["id"]}).json()["read"] == 0
+    )

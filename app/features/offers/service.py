@@ -7,7 +7,7 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import Select, case, func, or_, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,6 +98,26 @@ def _found(reading: NormalizedOffer | None) -> list[str]:
     if reading is None:
         return []
     return [field for field in COUNTED if getattr(reading, field, None) is not None]
+
+
+def offers_of_brand(brand_id: int, category_id: int | None) -> Select:
+    """The listings a change to a maker's registry can move: placed on one of its entries in
+    the category, or queued under it there. A reading names no brand — it is resolved when
+    the listing is placed — so where it was placed or queued is where the brand is known."""
+    placed = (
+        select(OfferMatch.offer_id)
+        .join(Variant, Variant.id == OfferMatch.variant_id)
+        .where(OfferMatch.superseded_at.is_(None), Variant.brand_id == brand_id)
+    )
+    queued = (
+        select(MatchQueue.offer_id)
+        .join(Offer, Offer.id == MatchQueue.offer_id)
+        .where(MatchQueue.brand_id == brand_id)
+    )
+    if category_id is not None:
+        placed = placed.where(Variant.category_id == category_id)
+        queued = queued.where(Offer.category_id == category_id)
+    return union(placed, queued)
 
 
 class OfferService:
@@ -316,7 +336,9 @@ class OfferService:
         audit.record_changes(raw_offer_id=raw_offer_id, ruleset_version=reading.ruleset_version)
         return NormalizedOfferRead.model_validate(reading)
 
-    async def reread_source(self, source_id: int, *, limit: int, after_id: int = 0) -> RereadReport:
+    async def reread_source(
+        self, source_id: int, *, limit: int, after_id: int = 0, brand_id: int | None = None
+    ) -> RereadReport:
         """Read every listing's newest observations of a channel again from their payloads.
 
         What a reparse cannot do for a channel with no snapshots: seven phone channels had
@@ -324,26 +346,66 @@ class OfferService:
         re-read nothing and was rejected, so m79's phones kept reading working memory as
         storage after the rule was fixed. The payload is stored for every observation, so
         this needs no snapshot and no network. Paged by offer id: `next_after_id` continues.
-
-        Two observations per listing where they differ: the newest, which the price is
-        from, and the newest from a pass that carried the catalogue, which the name and the
-        axes are from. The newest alone was a quick pass's for every rdveikals listing on
-        26.09.2026, and a quick pass does not move what a listing is called — so a re-read
-        after a registry change left 375 Samsung entries with listings still reading the
-        old way, and the names and axes a rebuild follows stood still.
+        `brand_id` narrows it to that maker's listings (`offers_of_brand`).
         """
         source = await self._source(source_id)
         audit.set_target("source", source_id)
-        page = (
-            select(RawOffer.offer_id)
-            .where(RawOffer.source_id == source_id, RawOffer.offer_id > after_id)
-            .group_by(RawOffer.offer_id)
-            .order_by(RawOffer.offer_id)
-            .limit(limit)
+        page = select(RawOffer.offer_id).where(
+            RawOffer.source_id == source_id, RawOffer.offer_id > after_id
         )
-        offer_ids = list(await self.session.scalars(page))
+        if brand_id is not None:
+            page = page.where(RawOffer.offer_id.in_(offers_of_brand(brand_id, source.category_id)))
+        offer_ids = list(
+            await self.session.scalars(
+                page.group_by(RawOffer.offer_id).order_by(RawOffer.offer_id).limit(limit)
+            )
+        )
+        read = await self._reread(offer_ids, source_id=source_id)
+        last = offer_ids[-1] if offer_ids else None
+        audit.record_changes(reread=read, after_id=after_id, brand_id=brand_id)
+        return RereadReport(
+            source_id=source_id,
+            read=read,
+            next_after_id=last if len(offer_ids) == limit else None,
+        )
+
+    async def reread_brand(
+        self, brand_id: int, category_id: int, *, limit: int, after_id: int = 0
+    ) -> tuple[int, int | None]:
+        """A maker's listings in a category read again, a page at a time, from every channel.
+
+        What a change to the registry needs and nothing more: on 26.09.2026 renaming a
+        thousand Apple listings took re-reading twenty thousand. Returns how many
+        observations were read and the offer id the next page starts after, or None.
+        """
+        offer_ids = list(
+            await self.session.scalars(
+                select(Offer.id)
+                .where(Offer.id > after_id, Offer.id.in_(offers_of_brand(brand_id, category_id)))
+                .order_by(Offer.id)
+                .limit(limit)
+            )
+        )
+        read = await self._reread(offer_ids)
+        return read, offer_ids[-1] if len(offer_ids) == limit else None
+
+    async def _reread(self, offer_ids: list[int], *, source_id: int | None = None) -> int:
+        """Each listing's two observations that matter, read again.
+
+        Two where they differ: the newest, which the price is from, and the newest from a
+        pass that carried the catalogue, which the name and the axes are from. The newest
+        alone was a quick pass's for every rdveikals listing on 26.09.2026, and a quick pass
+        does not move what a listing is called — so a re-read after a registry change left
+        375 Samsung entries with listings still reading the old way, and the names and axes
+        a rebuild follows stood still.
+        """
+        if not offer_ids:
+            return 0
         quick = func.coalesce(Run.kind == Kind.QUICK.value, False)
         order = (RawOffer.fetched_at.desc(), RawOffer.id.desc())
+        scope = [RawOffer.offer_id.in_(offer_ids)]
+        if source_id is not None:
+            scope.append(RawOffer.source_id == source_id)
         ranked = (
             select(
                 RawOffer.id.label("raw_id"),
@@ -357,7 +419,7 @@ class OfferService:
                 .label("rank_of_kind"),
             )
             .outerjoin(Run, Run.id == RawOffer.run_id)
-            .where(RawOffer.source_id == source_id, RawOffer.offer_id.in_(offer_ids))
+            .where(*scope)
             .subquery()
         )
         rows = (
@@ -373,21 +435,18 @@ class OfferService:
                 .order_by(ranked.c.offer_id, ranked.c.rank.desc())
             )
         ).all()
+        sources: dict[int, Source] = {}
         read = 0
         for raw_id, _ in rows:
             raw = await self.session.get(RawOffer, raw_id)
-            reading = await self._store_reading(raw, source=source)
+            if raw.source_id not in sources:
+                sources[raw.source_id] = await self._source(raw.source_id)
+            reading = await self._store_reading(raw, source=sources[raw.source_id])
             offer = await self.session.get(Offer, raw.offer_id)
             await self._apply_reading_to_offer(offer, reading, raw=raw)
             read += 1
         await self.session.flush()
-        last = offer_ids[-1] if offer_ids else None
-        audit.record_changes(reread=read, after_id=after_id)
-        return RereadReport(
-            source_id=source_id,
-            read=read,
-            next_after_id=last if len(offer_ids) == limit else None,
-        )
+        return read
 
     # --- the path of one listing ---
 

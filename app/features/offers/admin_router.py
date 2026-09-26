@@ -65,12 +65,15 @@ async def reread_source(
     service: OfferServiceDep,
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
     after_id: Annotated[int, Query(ge=0, description="`next_after_id` of the page before")] = 0,
+    brand_id: Annotated[
+        int | None, Query(description="Only this maker's listings: placed or queued under it")
+    ] = None,
 ) -> RereadReport:
     """Each listing's newest observation, read again from its stored payload with the rules
     and the registry as they are now. For a channel a reparse cannot reach — one collected
     before snapshots were kept, whose reparse sees nothing and is rejected. It does not
     place anything; `POST /matching/rebuild` and `/matching/run` do that after."""
-    return await service.reread_source(source_id, limit=limit, after_id=after_id)
+    return await service.reread_source(source_id, limit=limit, after_id=after_id, brand_id=brand_id)
 
 
 @sources_router.post(

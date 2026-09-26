@@ -330,3 +330,90 @@ def test_a_settling_that_fails_says_so_on_the_run(client, event_loop, monkeypatc
     progress = client.get(f"/api/admin/runs/{run['id']}", headers=auth(token)).json()["progress"]
     assert progress["phase"] == "unsettled"
     assert "the matcher fell over" in progress["settle_error"]
+
+
+# --- what a registry change asks for ---
+
+
+def test_a_registry_change_is_read_into_the_catalogue_without_anybody_asking(
+    client, event_loop, monkeypatch
+):
+    """Renaming a thousand Apple listings on 26.09.2026 took a laptop re-reading twenty
+    thousand, three admin tokens and forty minutes. A change to a maker's model names now
+    leaves a request; the scheduler reads that maker's listings, a batch a tick, and settles."""
+    from tests.test_matching import a_shop_we_can_build_from, a_storage_axis, offer_from, promote
+
+    monkeypatch.setattr(settings, "reread_quiet_seconds", 0)
+    monkeypatch.setattr(settings, "reread_batch", 1)
+    token = admin_token(client)
+    _, source, category, apple = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    offer = offer_from(
+        client,
+        token,
+        source["id"],
+        {
+            "name": "Apple iPhone Air 6.5 1TB Hvid sky",
+            "brand": "Apple",
+            "model": "iPhone Air 6.5",
+            "attributes": {"storage": "1 TB"},
+        },
+    )
+    entry = promote(client, token, offer)["variant_id"]
+    assert entry is not None
+
+    def name_it(alias):
+        response = client.post(
+            f"/api/admin/brands/{apple['id']}/models",
+            headers=auth(token),
+            json={"category_id": category["id"], "alias": alias, "model": "iPhone Air"},
+        )
+        assert response.status_code == 201, response.text
+
+    name_it("iPhone Air")
+    name_it("iPhone Air 5G")
+    (asked,) = client.get(f"/api/admin/brands/{apple['id']}/rereads", headers=auth(token)).json()
+    # Two changes in a row are one request, waiting.
+    assert (asked["category_id"], asked["started_at"], asked["finished_at"]) == (
+        category["id"],
+        None,
+        None,
+    )
+
+    # A batch of one listing, then the empty page that finishes it and settles.
+    event_loop.run_until_complete(scheduler().reread())
+    event_loop.run_until_complete(scheduler().reread())
+    (done,) = client.get(f"/api/admin/brands/{apple['id']}/rereads", headers=auth(token)).json()
+    assert done["finished_at"] is not None and done["error"] is None, done
+    assert done["read"] == 1
+    assert done["report"]["renamed"] == 1, done
+    renamed = client.get(f"/api/admin/variants/{entry}", headers=auth(token)).json()
+    assert renamed["model"] == "iPhone Air"
+    # Nothing left to do.
+    event_loop.run_until_complete(scheduler().reread())
+    assert (
+        len(client.get(f"/api/admin/brands/{apple['id']}/rereads", headers=auth(token)).json()) == 1
+    )
+
+
+def test_a_reread_can_be_asked_for_by_hand(client):
+    from tests.test_matching import a_shop_we_can_build_from
+
+    token = admin_token(client)
+    _, _, category, apple = a_shop_we_can_build_from(client, token)
+    response = client.post(
+        f"/api/admin/brands/{apple['id']}/reread",
+        headers=auth(token),
+        json={"category_id": category["id"]},
+    )
+    assert response.status_code == 202, response.text
+    again = client.post(
+        f"/api/admin/brands/{apple['id']}/reread",
+        headers=auth(token),
+        json={"category_id": category["id"]},
+    ).json()
+    assert again["id"] == response.json()["id"]
+    missing = client.post(
+        f"/api/admin/brands/{apple['id']}/reread", headers=auth(token), json={"category_id": 999999}
+    )
+    assert missing.status_code == 404

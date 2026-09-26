@@ -19,14 +19,16 @@ import shlex
 import signal
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.db.models import RereadRequest
 from app.db.session import engine, session_factory
 from app.features.judge.service import JudgeService
 from app.features.matching.service import MatchingService
+from app.features.offers.service import OfferService
 from app.features.pipeline.service import PipelineService
 from app.features.runs.schemas import Kind, RunResult
 from app.features.runs.service import RunService
@@ -121,6 +123,7 @@ class Scheduler:
             while not self.stopping:
                 await self.reap()
                 started = await self.tick()
+                await self.reread()
                 await self.beat(started)
                 await self.keep_the_day()
                 if once:
@@ -265,6 +268,94 @@ class Scheduler:
                     await session.commit()
             elif worker.kind in (Kind.FULL, Kind.REPARSE):
                 await self.settle(worker.run_id)
+
+    async def reread(self) -> None:
+        """A batch of the oldest re-read a registry change asked for, once changes are quiet.
+
+        A batch per tick, so collection is not held up behind a maker with three thousand
+        listings; the request keeps where it got to. When the last batch is read the
+        catalogue is settled the way a person did it by hand on 26.09.2026 — rebuild until
+        nothing moves, split what holds two values of an axis, rebuild once more. A change
+        arriving meanwhile starts the request over (`BrandService._ask_for_reread`), and a
+        request is only finished if no change came while it was being settled. Logged,
+        never fatal: a request that fails is closed with its error, not retried forever.
+        """
+        now = datetime.now(UTC)
+        quiet = now - timedelta(seconds=settings.reread_quiet_seconds)
+        request_id: int | None = None
+        try:
+            async with session_factory() as session:
+                request = await session.scalar(
+                    select(RereadRequest)
+                    .where(RereadRequest.finished_at.is_(None), RereadRequest.requested_at <= quiet)
+                    .order_by(RereadRequest.requested_at)
+                    .limit(1)
+                    .with_for_update(skip_locked=True)
+                )
+                if request is None:
+                    return
+                request_id, asked = request.id, request.requested_at
+                request.started_at = request.started_at or now
+                read, after = await OfferService(session).reread_brand(
+                    request.brand_id,
+                    request.category_id,
+                    limit=settings.reread_batch,
+                    after_id=request.after_offer_id,
+                )
+                request.read += read
+                if after is not None:
+                    request.after_offer_id = after
+                    await session.commit()
+                    return
+                await session.commit()
+
+                report = await self._settle_after_reread(session)
+                request = await session.get(
+                    RereadRequest, request_id, with_for_update=True, populate_existing=True
+                )
+                if request.requested_at != asked:
+                    # Changed while it was being settled: read it again, with the words now.
+                    await session.commit()
+                    return
+                request.report = report
+                request.finished_at = datetime.now(UTC)
+                await session.commit()
+            log.info("re-read request %d finished: %s", request_id, report)
+        except Exception as error:  # noqa: BLE001 - see the docstring
+            log.warning("re-read request %s could not be finished: %s", request_id, error)
+            if request_id is None:
+                return
+            try:
+                async with session_factory() as session:
+                    failed = await session.get(RereadRequest, request_id)
+                    if failed is not None and failed.finished_at is None:
+                        failed.error = str(error)[:500]
+                        failed.finished_at = datetime.now(UTC)
+                        await session.commit()
+            except Exception:  # noqa: BLE001
+                log.exception("and its failure could not be recorded")
+
+    async def _settle_after_reread(self, session) -> dict[str, int]:
+        matching = MatchingService(session, judge=JudgeService(session))
+        report = {"renamed": 0, "merged": 0, "realigned": 0, "split": 0, "moved": 0}
+        for _ in range(SETTLE_ROUNDS):
+            rebuilt = await matching.rebuild_named_from_a_stale_reading(limit=SETTLE_LIMIT)
+            await session.commit()
+            report["renamed"] += rebuilt.renamed
+            report["merged"] += rebuilt.merged
+            report["realigned"] += rebuilt.realigned
+            if not (rebuilt.found or rebuilt.realigned or rebuilt.merged):
+                break
+        split = await matching.split_by_axis(limit=SETTLE_LIMIT)
+        await session.commit()
+        report["split"], report["moved"] = split.split, split.moved
+        if split.split:
+            rebuilt = await matching.rebuild_named_from_a_stale_reading(limit=SETTLE_LIMIT)
+            await session.commit()
+            report["renamed"] += rebuilt.renamed
+            report["merged"] += rebuilt.merged
+            report["realigned"] += rebuilt.realigned
+        return report
 
     async def _more_reparses_waiting(self) -> bool:
         async with session_factory() as session:

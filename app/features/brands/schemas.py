@@ -1,6 +1,7 @@
 """Brand schemas."""
 
 import re
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -181,6 +182,32 @@ class ModelAliasRead(BaseModel):
     alias_normalized: str
     model: str
     origin: Origin
+
+
+class RereadRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: int
+
+
+class RereadRequestRead(BaseModel):
+    """A maker's listings in a category, asked to be read again, and how far that has got.
+
+    `started_at` empty is waiting for the changes to go quiet; `finished_at` set is done,
+    with what settling the catalogue after it did in `report`.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    brand_id: int
+    category_id: int
+    requested_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    read: int
+    report: dict
+    error: str | None
 
 
 class BrandMatch(BaseModel):
