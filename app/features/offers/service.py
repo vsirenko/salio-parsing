@@ -317,36 +317,60 @@ class OfferService:
         return NormalizedOfferRead.model_validate(reading)
 
     async def reread_source(self, source_id: int, *, limit: int, after_id: int = 0) -> RereadReport:
-        """Read every listing's newest observation of a channel again from its stored payload.
+        """Read every listing's newest observations of a channel again from their payloads.
 
         What a reparse cannot do for a channel with no snapshots: seven phone channels had
         none on 25.09.2026 — collected before snapshots were kept — and a reparse of each
         re-read nothing and was rejected, so m79's phones kept reading working memory as
         storage after the rule was fixed. The payload is stored for every observation, so
         this needs no snapshot and no network. Paged by offer id: `next_after_id` continues.
+
+        Two observations per listing where they differ: the newest, which the price is
+        from, and the newest from a pass that carried the catalogue, which the name and the
+        axes are from. The newest alone was a quick pass's for every rdveikals listing on
+        26.09.2026, and a quick pass does not move what a listing is called — so a re-read
+        after a registry change left 375 Samsung entries with listings still reading the
+        old way, and the names and axes a rebuild follows stood still.
         """
         source = await self._source(source_id)
         audit.set_target("source", source_id)
-        newest = (
+        page = (
+            select(RawOffer.offer_id)
+            .where(RawOffer.source_id == source_id, RawOffer.offer_id > after_id)
+            .group_by(RawOffer.offer_id)
+            .order_by(RawOffer.offer_id)
+            .limit(limit)
+        )
+        offer_ids = list(await self.session.scalars(page))
+        quick = func.coalesce(Run.kind == Kind.QUICK.value, False)
+        order = (RawOffer.fetched_at.desc(), RawOffer.id.desc())
+        ranked = (
             select(
                 RawOffer.id.label("raw_id"),
                 RawOffer.offer_id.label("offer_id"),
+                quick.label("quick"),
                 func.row_number()
-                .over(
-                    partition_by=RawOffer.offer_id,
-                    order_by=(RawOffer.fetched_at.desc(), RawOffer.id.desc()),
-                )
+                .over(partition_by=RawOffer.offer_id, order_by=order)
                 .label("rank"),
+                func.row_number()
+                .over(partition_by=(RawOffer.offer_id, quick), order_by=order)
+                .label("rank_of_kind"),
             )
-            .where(RawOffer.source_id == source_id, RawOffer.offer_id > after_id)
+            .outerjoin(Run, Run.id == RawOffer.run_id)
+            .where(RawOffer.source_id == source_id, RawOffer.offer_id.in_(offer_ids))
             .subquery()
         )
         rows = (
             await self.session.execute(
-                select(newest.c.raw_id, newest.c.offer_id)
-                .where(newest.c.rank == 1)
-                .order_by(newest.c.offer_id)
-                .limit(limit)
+                select(ranked.c.raw_id, ranked.c.offer_id)
+                .where(
+                    or_(
+                        ranked.c.rank == 1,
+                        (ranked.c.rank_of_kind == 1) & ranked.c.quick.is_(False),
+                    )
+                )
+                # The full pass's first, so the newest — the price — is applied last.
+                .order_by(ranked.c.offer_id, ranked.c.rank.desc())
             )
         ).all()
         read = 0
@@ -357,12 +381,12 @@ class OfferService:
             await self._apply_reading_to_offer(offer, reading, raw=raw)
             read += 1
         await self.session.flush()
-        last = rows[-1][1] if rows else None
+        last = offer_ids[-1] if offer_ids else None
         audit.record_changes(reread=read, after_id=after_id)
         return RereadReport(
             source_id=source_id,
             read=read,
-            next_after_id=last if len(rows) == limit else None,
+            next_after_id=last if len(offer_ids) == limit else None,
         )
 
     # --- the path of one listing ---

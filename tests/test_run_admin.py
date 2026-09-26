@@ -363,3 +363,51 @@ def test_a_channel_with_no_snapshots_is_reread_from_its_payloads(client, event_l
     ).json()
     assert (rest["read"], rest["next_after_id"]) == (1, None)
     assert event_loop.run_until_complete(age_and_count(False)) == 3
+
+
+def test_a_reread_reads_the_newest_full_observation_as_well_as_the_newest(client, event_loop):
+    """A quick pass is the newest observation of every rdveikals listing, and it does not
+    move what a listing is called: re-reading it alone left 375 Samsung entries reading the
+    registry as it was before a change."""
+    from sqlalchemy import func, select, update
+
+    from app.db.models import NormalizedOffer, RawOffer
+    from app.db.session import session_factory
+
+    token = admin_token(client)
+    source = channel(client, token, cron_full=None, cron_quick=None)
+    full = {"name": "Apple iPhone 15 128GB", "price": "700"}
+    response = client.post(
+        f"/api/admin/sources/{source['id']}/offers",
+        headers=auth(token),
+        json={"external_id": "Q-1", "market_code": "LV", "payload": full},
+    )
+    assert response.status_code == 202, response.text
+    run = start(client, token, source["id"], kind="quick")
+    taken(event_loop, run["id"])
+    handed = client.post(
+        f"/api/worker/sources/{source['id']}/offers/batch",
+        headers=auth(worker_token(client)),
+        json={
+            "market_code": "LV",
+            "run_id": run["id"],
+            "offers": [{"external_id": "Q-1", "payload": {"price": "690"}}],
+        },
+    )
+    assert handed.status_code == 202, handed.text
+
+    async def age_and_count(age: bool) -> int:
+        async with session_factory() as session:
+            if age:
+                await session.execute(update(NormalizedOffer).values(ruleset_version="old"))
+                await session.commit()
+            return await session.scalar(
+                select(func.count(func.distinct(NormalizedOffer.raw_offer_id)))
+                .join(RawOffer, RawOffer.id == NormalizedOffer.raw_offer_id)
+                .where(RawOffer.source_id == source["id"], NormalizedOffer.ruleset_version != "old")
+            )
+
+    assert event_loop.run_until_complete(age_and_count(True)) == 0
+    report = client.post(f"/api/admin/sources/{source['id']}/reread", headers=auth(token)).json()
+    assert (report["read"], report["next_after_id"]) == (2, None), report
+    assert event_loop.run_until_complete(age_and_count(False)) == 2

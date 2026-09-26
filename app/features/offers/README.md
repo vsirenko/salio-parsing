@@ -97,7 +97,11 @@ blank both — the matcher passes over it for the same reason (`MatchingService.
 A listing only ever seen by a quick pass therefore has no title, which is true: nobody has
 read its card. And only from the listing's **newest** such observation, the order
 the matcher and the pipeline read by: re-reading an older one used to put its reading over
-the newer one's, and 18 tablets carried the axes of the observation before theirs. No picture yet: nothing reads one out of a payload, and the shops write it
+the newer one's, and 18 tablets carried the axes of the observation before theirs. **So a
+re-read of a channel reads two observations of a listing where they differ**: the newest, for
+the price, and the newest from a pass that carried the catalogue, for the name and the axes.
+The newest alone was a quick pass's for every rdveikals listing on 26.09.2026, and a re-read
+after a registry change left 375 Samsung entries with listings reading the old way. No picture yet: nothing reads one out of a payload, and the shops write it
 five ways (relative paths, icons in the list) — see `TODO.md`.
 
 **`run_id` is carried through to `raw_offers`.** Null when a sample is loaded by hand. It
