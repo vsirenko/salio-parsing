@@ -288,6 +288,47 @@ class MergePair(BaseModel):
     detail: str | None = Field(default=None, description="What the refusal said")
 
 
+class SplitPart(BaseModel):
+    """The listings of one value that left an entry, and where they went."""
+
+    value: str
+    into_id: int | None = Field(description="None on a dry run that would make the entry")
+    created: bool
+    listings: int
+    gtins: list[str] = []
+
+
+class SplitEntry(BaseModel):
+    variant_id: int
+    title: str
+    axis: str
+    kept: str = Field(description="The value the entry keeps, and is given")
+    parts: list[SplitPart] = []
+    merged_into: int | None = Field(
+        default=None, description="Given its value, the entry turned out to be this one"
+    )
+    refused: str | None = Field(
+        default=None, description="Why it was left alone: two marked values on one barcode"
+    )
+
+
+class SplitReport(BaseModel):
+    """What a pass of splits did, or would do.
+
+    An axis that arrived after its entries were made finds some of them holding listings of
+    both values — the Enterprise Edition and the ordinary phone on one card. The entry keeps
+    the value most of its listings read, and the others move to the entry that is theirs.
+    """
+
+    found: int
+    split: int
+    moved: int
+    created: int
+    refused: int
+    dry_run: bool = False
+    entries: list[SplitEntry] = []
+
+
 class RenameReport(BaseModel):
     """What a pass of rebuilds did.
 

@@ -74,9 +74,10 @@ and the questions that have to be answered with real data first, are written dow
       the ordinary 256 and 512 black. So that fold leaves the EE rows alone. An edition read
       from the title words, the part-number suffix and the barcode, and kept as an identity
       axis, is what would keep them apart; measure the suffixes against collected bytes first.
-      *Read since 26.09.2026* (`normalization/edition.py`, phones-16 and tablets-12). Left: the
-      `edition` attribute in phones and tablets, the reread, the realign, and the entries
-      that already hold both editions, split; then the EE families folded into the ordinary.
+      *Read since 26.09.2026* (`normalization/edition.py`, phones-16 and tablets-12); a
+      rebuild fills the axis on the entries made before it, and `POST /matching/split` parts
+      the ones holding both. Left: the `edition` attribute on production, the reread, the
+      rebuild and the split there.
 
 - [x] Currency and country reference tables, admin-managed, seeded with the three
       Baltic markets. VAT rates are left null deliberately — see the migration.

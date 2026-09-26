@@ -8959,6 +8959,159 @@
         "title": "SourceUpdate",
         "type": "object"
       },
+      "SplitEntry": {
+        "properties": {
+          "axis": {
+            "title": "Axis",
+            "type": "string"
+          },
+          "kept": {
+            "description": "The value the entry keeps, and is given",
+            "title": "Kept",
+            "type": "string"
+          },
+          "merged_into": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Given its value, the entry turned out to be this one",
+            "title": "Merged Into"
+          },
+          "parts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SplitPart"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it was left alone: two marked values on one barcode",
+            "title": "Refused"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "variant_id": {
+            "title": "Variant Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "variant_id",
+          "title",
+          "axis",
+          "kept"
+        ],
+        "title": "SplitEntry",
+        "type": "object"
+      },
+      "SplitPart": {
+        "description": "The listings of one value that left an entry, and where they went.",
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "gtins": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Gtins",
+            "type": "array"
+          },
+          "into_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None on a dry run that would make the entry",
+            "title": "Into Id"
+          },
+          "listings": {
+            "title": "Listings",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "into_id",
+          "created",
+          "listings"
+        ],
+        "title": "SplitPart",
+        "type": "object"
+      },
+      "SplitReport": {
+        "description": "What a pass of splits did, or would do.\n\nAn axis that arrived after its entries were made finds some of them holding listings of\nboth values — the Enterprise Edition and the ordinary phone on one card. The entry keeps\nthe value most of its listings read, and the others move to the entry that is theirs.",
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SplitEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "found": {
+            "title": "Found",
+            "type": "integer"
+          },
+          "moved": {
+            "title": "Moved",
+            "type": "integer"
+          },
+          "refused": {
+            "title": "Refused",
+            "type": "integer"
+          },
+          "split": {
+            "title": "Split",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "found",
+          "split",
+          "moved",
+          "created",
+          "refused"
+        ],
+        "title": "SplitReport",
+        "type": "object"
+      },
       "Stage": {
         "description": "One node: how many things reached it, and what they are made of.",
         "properties": {
@@ -17038,6 +17191,71 @@
           }
         ],
         "summary": "Work through what is unplaced",
+        "tags": [
+          "admin: matching"
+        ]
+      }
+    },
+    "/api/admin/matching/split": {
+      "post": {
+        "description": "What a new axis leaves behind: the Enterprise Edition and the ordinary phone on one\nentry. The entry keeps the value most of its listings read; the others move, with their\nbarcodes, to the entry that is theirs. On one barcode the value a title shows beats the\none it does not — a shop that says nothing has not said standard.",
+        "operationId": "split_by_axis_api_admin_matching_split_post",
+        "parameters": [
+          {
+            "description": "How many entries to consider",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "description": "How many entries to consider",
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Compute the same report and keep none of it: nothing is written",
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Compute the same report and keep none of it: nothing is written",
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Split the entries whose listings read two values of an axis the entry lacks",
         "tags": [
           "admin: matching"
         ]

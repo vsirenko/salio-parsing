@@ -91,6 +91,9 @@ from app.features.matching.schemas import (
     RenameReport,
     RunReport,
     Snooze,
+    SplitEntry,
+    SplitPart,
+    SplitReport,
     SuspectKind,
     SuspectReport,
 )
@@ -102,6 +105,19 @@ from app.schemas.pagination import Pagination
 # How much each rung is worth. A barcode is proof; a model string that agreed is a guess
 # that landed, and the gap between them is what `method` exists to preserve.
 log = logging.getLogger(__name__)
+
+
+class _SplitCandidate(NamedTuple):
+    """An entry with no value for an axis its listings read two ways."""
+
+    variant_id: int
+    attribute_id: int
+    key: str
+    # (offer, barcode, the value it reads)
+    listings: list[tuple[int, str | None, str]]
+    # canonical -> whether a title shows it
+    shown: dict[str, bool]
+
 
 # The one condition the catalogue's entries are about; `offers.condition` is checked against
 # `new`, `refurbished` and `used` by the database.
@@ -1555,6 +1571,315 @@ class MatchingService:
             refused=sum(reasons.values()),
             reasons=dict(reasons),
         )
+
+    async def split_by_axis(self, *, limit: int = 100, dry_run: bool = False) -> SplitReport:
+        """Split the entries whose listings read two values of an axis the entry lacks.
+
+        An axis that arrives after its entries were made finds some of them holding both
+        values: on 26.09.2026, 51 Samsung entries held the Enterprise Edition and the
+        ordinary phone together, 143 listings of the one beside 402 of the other. A rebuild
+        cannot fill such an axis, rightly — the listings do not agree — and a merge has
+        nothing to merge. The entry keeps the value most of its listings read and is given
+        it; the listings of every other value move to the entry that is theirs, made if it
+        does not exist, and their barcodes with them, or the next listing to arrive under
+        one would be matched back.
+
+        **A barcode carries the value its listings state.** A shop that says nothing about
+        the edition has not said standard: rdveikals lists the A35 whose m79 part number is
+        an Enterprise one as `Galaxy A35 128GB Awesome Navy`, under the same barcode. So on
+        one barcode the value a title shows (`in_title`) beats the one it does not, and two
+        different shown values on one barcode leave the entry alone. Every listing has to
+        state the axis; an entry with a silent listing is not split.
+        """
+        catalog = CatalogService(self.session)
+        report = SplitReport(found=0, split=0, moved=0, created=0, refused=0, dry_run=dry_run)
+        async with self.session.begin_nested() as preview:
+            for candidate in await self._split_candidates(limit=limit):
+                report.found += 1
+                try:
+                    async with self.session.begin_nested():
+                        entry = await self._split(catalog, candidate, dry_run=dry_run)
+                except AppError as error:
+                    variant = await self.session.get(Variant, candidate.variant_id)
+                    entry = SplitEntry(
+                        variant_id=candidate.variant_id,
+                        title=variant.title if variant else "",
+                        axis=candidate.key,
+                        kept="",
+                        refused=error.code,
+                    )
+                report.entries.append(entry)
+                if entry.refused:
+                    report.refused += 1
+                    continue
+                report.split += 1
+                report.moved += sum(part.listings for part in entry.parts)
+                report.created += sum(part.created for part in entry.parts)
+            audit.clear_target()
+            audit.record_changes(
+                found=report.found,
+                split=report.split,
+                moved=report.moved,
+                created=report.created,
+                refused=report.refused,
+            )
+            if dry_run:
+                await preview.rollback()
+                audit.discard_changes()
+        return report
+
+    async def _split_candidates(self, *, limit: int) -> list[_SplitCandidate]:
+        axes: dict[int, list[tuple[int, str]]] = {}
+        for category_id, attribute_id, key in (
+            await self.session.execute(
+                select(CategoryAttribute.category_id, Attribute.id, Attribute.key)
+                .join(Attribute, Attribute.id == CategoryAttribute.attribute_id)
+                .where(
+                    CategoryAttribute.identity_bearing.is_(True),
+                    Attribute.value_type == "enum",
+                )
+            )
+        ).all():
+            axes.setdefault(category_id, []).append((attribute_id, key))
+        if not axes:
+            return []
+        shown = {
+            (attribute_id, canonical): in_title
+            for attribute_id, canonical, in_title in (
+                await self.session.execute(
+                    select(
+                        AttributeValue.attribute_id,
+                        AttributeValue.canonical,
+                        AttributeValue.in_title,
+                    )
+                )
+            ).all()
+        }
+        rows = await self.session.execute(
+            select(Variant.id, Variant.category_id, Offer.id, Offer.gtin, Offer.identity)
+            .join(OfferMatch, OfferMatch.variant_id == Variant.id)
+            .join(Offer, Offer.id == OfferMatch.offer_id)
+            .where(
+                OfferMatch.superseded_at.is_(None),
+                Variant.is_visible.is_(True),
+                Variant.category_id.in_(list(axes)),
+            )
+            .order_by(Variant.id, Offer.id)
+        )
+        listings: dict[int, list[tuple[int, str | None, dict[str, Any]]]] = {}
+        category_of: dict[int, int] = {}
+        for variant_id, category_id, offer_id, gtin, identity in rows.all():
+            listings.setdefault(variant_id, []).append((offer_id, gtin, identity or {}))
+            category_of[variant_id] = category_id
+        held = {
+            (variant_id, attribute_id)
+            for variant_id, attribute_id in (
+                await self.session.execute(
+                    select(VariantAttribute.variant_id, VariantAttribute.attribute_id).where(
+                        VariantAttribute.variant_id.in_(list(listings))
+                    )
+                )
+            ).all()
+        }
+        found: list[_SplitCandidate] = []
+        for variant_id, on_it in listings.items():
+            for attribute_id, key in axes[category_of[variant_id]]:
+                if (variant_id, attribute_id) in held:
+                    continue
+                said = [identity.get(key) for _, _, identity in on_it]
+                if any(value is None for value in said) or len(set(map(str, said))) < 2:
+                    continue
+                found.append(
+                    _SplitCandidate(
+                        variant_id=variant_id,
+                        attribute_id=attribute_id,
+                        key=key,
+                        listings=[
+                            (offer_id, gtin, str(identity[key]))
+                            for offer_id, gtin, identity in on_it
+                        ],
+                        shown={
+                            canonical: in_title
+                            for (attribute, canonical), in_title in shown.items()
+                            if attribute == attribute_id
+                        },
+                    )
+                )
+                break
+            if len(found) >= limit:
+                break
+        return found
+
+    async def _split(
+        self, catalog: CatalogService, candidate: _SplitCandidate, *, dry_run: bool
+    ) -> SplitEntry:
+        variant = await self.session.get(Variant, candidate.variant_id)
+        audit.set_target("variant", variant.id)
+        entry = SplitEntry(variant_id=variant.id, title=variant.title, axis=candidate.key, kept="")
+        # The value each barcode carries: the one a title shows, where its listings differ.
+        by_gtin: dict[str, set[str]] = {}
+        for _, gtin, value in candidate.listings:
+            if gtin:
+                by_gtin.setdefault(gtin, set()).add(value)
+        carried: dict[str, str] = {}
+        for gtin, values in by_gtin.items():
+            marked = {value for value in values if candidate.shown.get(value, True)}
+            if len(marked) > 1:
+                entry.refused = f"barcode {gtin} carries both {' and '.join(sorted(marked))}"
+                return entry
+            carried[gtin] = marked.pop() if marked else values.pop()
+        groups: dict[str, list[tuple[int, str | None]]] = {}
+        for offer_id, gtin, value in candidate.listings:
+            groups.setdefault(carried.get(gtin, value) if gtin else value, []).append(
+                (offer_id, gtin)
+            )
+        # Most listings keep the entry; a tie keeps the value a title does not show.
+        kept = max(
+            groups, key=lambda value: (len(groups[value]), not candidate.shown.get(value, True))
+        )
+        entry.kept = kept
+        values = {
+            canonical: value_id
+            for canonical, value_id in (
+                await self.session.execute(
+                    select(AttributeValue.canonical, AttributeValue.id).where(
+                        AttributeValue.attribute_id == candidate.attribute_id
+                    )
+                )
+            ).all()
+        }
+        if len(groups) == 1:
+            # Every barcode sided one way: nothing moves, the entry is only given its value.
+            entry.merged_into = await self._give_value(
+                catalog, variant.id, candidate.attribute_id, values[kept]
+            )
+            return entry
+        axes = (
+            (
+                await self.session.execute(
+                    select(VariantAttribute).where(VariantAttribute.variant_id == variant.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for value, moving in groups.items():
+            if value == kept:
+                continue
+            into, created = await self._twin_with(
+                catalog, variant, list(axes), candidate, values[value]
+            )
+            gtins = sorted({gtin for _, gtin in moving if gtin})
+            for offer_id, _ in moving:
+                old = await self.session.scalar(
+                    select(OfferMatch).where(
+                        OfferMatch.offer_id == offer_id, OfferMatch.superseded_at.is_(None)
+                    )
+                )
+                offer = await self._offer(offer_id)
+                await self._link(
+                    offer,
+                    into,
+                    Method(old.method),
+                    {**(old.evidence or {}), "split_from": variant.id, candidate.key: value},
+                    decided_by=DecidedBy(old.decided_by),
+                )
+            for gtin in gtins:
+                await self.session.execute(
+                    delete(VariantGtin).where(
+                        VariantGtin.variant_id == variant.id, VariantGtin.gtin == gtin
+                    )
+                )
+                if await self.session.get(VariantGtin, (into, gtin)) is None:
+                    self.session.add(VariantGtin(variant_id=into, gtin=gtin, origin="rule"))
+            await self.session.flush()
+            entry.parts.append(
+                SplitPart(
+                    value=value,
+                    into_id=None if dry_run and created else into,
+                    created=created,
+                    listings=len(moving),
+                    gtins=gtins,
+                )
+            )
+        entry.merged_into = await self._give_value(
+            catalog, variant.id, candidate.attribute_id, values[kept]
+        )
+        return entry
+
+    async def _give_value(
+        self, catalog: CatalogService, variant_id: int, attribute_id: int, value_id: int
+    ) -> int | None:
+        """The axis set on the entry that keeps it; where that makes it an entry that exists,
+        the two are one and it is merged — the id it went into, or None."""
+        try:
+            async with self.session.begin_nested():
+                await catalog.set_variant_attribute(
+                    variant_id,
+                    VariantAttributeSet(
+                        attribute_id=attribute_id, value_id=value_id, origin="consensus"
+                    ),
+                )
+        except ConflictError as error:
+            twin = (error.details or {}).get("variant_id")
+            if twin is None:
+                raise
+            await catalog.merge_variants(
+                variant_id,
+                int(twin),
+                reason="split: the value it kept made it an entry that existed",
+                decided_by="rule",
+            )
+            return int(twin)
+        return None
+
+    async def _twin_with(
+        self,
+        catalog: CatalogService,
+        variant: Variant,
+        axes: list[VariantAttribute],
+        candidate: _SplitCandidate,
+        value_id: int,
+    ) -> tuple[int, bool]:
+        """The entry this one would be with the axis at `value_id`: found, or made."""
+        made = await catalog.create_variant(
+            VariantCreate(
+                brand_id=variant.brand_id,
+                category_id=variant.category_id,
+                model=variant.model,
+                product_id=variant.product_id,
+                kind=variant.kind,
+                unit_count=variant.unit_count,
+            )
+        )
+        try:
+            async with self.session.begin_nested():
+                for axis in axes:
+                    await catalog.set_variant_attribute(
+                        made.id,
+                        VariantAttributeSet(
+                            attribute_id=axis.attribute_id,
+                            value_id=axis.value_id,
+                            value_num=axis.value_num,
+                            value_bool=axis.value_bool,
+                            value_text=axis.value_text,
+                            origin=axis.origin,
+                        ),
+                    )
+                await catalog.set_variant_attribute(
+                    made.id,
+                    VariantAttributeSet(
+                        attribute_id=candidate.attribute_id, value_id=value_id, origin="consensus"
+                    ),
+                )
+        except ConflictError as error:
+            twin = (error.details or {}).get("variant_id")
+            if twin is None:
+                raise
+            await self.session.delete(await self.session.get(Variant, made.id))
+            await self.session.flush()
+            return int(twin), False
+        return made.id, True
 
     async def _stale_axes(self, *, limit: int) -> list[tuple[int, int, dict[str, Any]]]:
         """Axes an entry holds that every listing on it now reads another way, and enum axes

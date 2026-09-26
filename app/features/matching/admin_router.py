@@ -45,6 +45,7 @@ from app.features.matching.schemas import (
     RenameReport,
     RunReport,
     Snooze,
+    SplitReport,
     SuspectKind,
     SuspectReport,
 )
@@ -245,6 +246,23 @@ async def rebuild_stale(
     name is good enough, and one of them disagreeing about a `5G` suffix is not a reason to
     rename what they share."""
     return await service.rebuild_named_from_a_stale_reading(limit=limit)
+
+
+@router.post(
+    "/split",
+    response_model=SplitReport,
+    summary="Split the entries whose listings read two values of an axis the entry lacks",
+)
+async def split_by_axis(
+    service: MatchingServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500, description="How many entries to consider")] = 100,
+    dry_run: DryRun = False,
+) -> SplitReport:
+    """What a new axis leaves behind: the Enterprise Edition and the ordinary phone on one
+    entry. The entry keeps the value most of its listings read; the others move, with their
+    barcodes, to the entry that is theirs. On one barcode the value a title shows beats the
+    one it does not — a shop that says nothing has not said standard."""
+    return await service.split_by_axis(limit=limit, dry_run=dry_run)
 
 
 @router.post(

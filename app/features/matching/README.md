@@ -26,6 +26,7 @@ Placing a listing in the catalogue, or saying exactly why it could not be placed
 | `POST /api/admin/matching/merge` | fold together the entries a barcode — or an Apple part number — says are one product |
 | `GET /api/admin/matching/suspects` | what looks filed twice, with the evidence and the fix to make; changes nothing |
 | `POST /api/admin/matching/merge/pair` | fold one chosen entry into another; refused where they differ on an axis unless `despite_axes` |
+| `POST /api/admin/matching/split` | split an entry whose listings read two values of an axis it lacks — the Enterprise Edition and the ordinary phone on one card; `dry_run=true` previews |
 | `POST /api/admin/matching/rebuild` | rebuild the entries named after a reading that has since changed, and delete the empty families nothing points at |
 
 ## How it works
@@ -219,6 +220,22 @@ tablet. **The axes go before the names**: an entry renamed while an axis is stil
 takes the key of the entry that differs from it only there, and on 26.09.2026 the S26 Ultra
 Enterprise Edition, renamed before its new `edition` was filled, merged into the ordinary
 256 and 512 black.
+
+**A new axis can leave an entry holding both of its values, and a split parts them.** When
+the edition became an axis, 51 Samsung entries held the Enterprise Edition and the ordinary
+phone together — 143 listings of the one beside 402 of the other, 1459 € and 1039 € on one
+card. A rebuild rightly cannot fill that axis, and a merge has nothing to merge.
+`POST /matching/split` gives the entry the value most of its listings read and moves the
+others, **with their barcodes**, to the entry that is theirs — found by its identity key, or
+made with the same model, family and axes. The barcodes move because the next listing to
+arrive under one would otherwise be matched straight back. **On one barcode the value a
+title shows beats the one it does not**: rdveikals lists an Enterprise A35 as `Galaxy A35
+128GB Awesome Navy`, under the barcode m79's Enterprise part number carries, and a shop that
+says nothing has not said standard. Two different shown values on one barcode leave the entry
+alone, and so does a listing that states nothing at all. An entry that its kept value turns
+into one that exists is merged into it. On the laptop's copy of production on 26.09.2026 it
+split all 51, moved 122 listings and made 41 entries, and the 35 listings left reading
+standard on an Enterprise entry each share a barcode with one that says Enterprise.
 
 **A family takes the case its entries write.** The lookup that files an entry under a family
 ignores case, so the spelling that made a family heads it for good: dateks's `PRO MAX 16

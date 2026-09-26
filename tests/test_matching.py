@@ -2521,3 +2521,107 @@ def test_a_second_hand_listing_is_not_placed_on_a_new_product(client, event_loop
     assert report["attempted"] == 0
     promoted = client.post("/api/admin/matching/promote", headers=auth(token)).json()
     assert promoted["promoted"] == 0
+
+
+def test_an_entry_holding_both_values_of_a_new_axis_is_split_by_barcode(client):
+    """51 Samsung entries held the Enterprise Edition and the ordinary phone together when
+    the edition became an axis. rdveikals lists an Enterprise A35 without a word about it,
+    under the barcode m79's Enterprise part number carries: the barcode decides for it."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    storage = a_storage_axis(client, token, category["id"])
+    samsung = post(
+        client, token, "/api/admin/brands", {"slug": "samsung", "canonical_name": "Samsung"}
+    )
+    post(client, token, f"/api/admin/brands/{samsung['id']}/aliases", {"alias": "Samsung"})
+
+    def listing(external_id, words, ean):
+        return offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Samsung Galaxy S26 Ultra 256GB Black {words}".strip(),
+                "brand": "Samsung",
+                "model": "Galaxy S26 Ultra",
+                "ean": ean,
+                "attributes": {"storage": "256 GB"},
+            },
+            external_id=external_id,
+        )
+
+    first = listing("S-1", "", "8806097827221")
+    entry = promote(client, token, first)["variant_id"]
+    others = {
+        "enterprise": listing("S-2", "Enterprise Edition", "8806099108724"),
+        "silent": listing("S-3", "", "8806099108724"),
+        "ordinary": listing("S-4", "", "8806097821250"),
+    }
+    for offer in others.values():
+        placed = client.put(
+            f"/api/admin/offers/{offer}/match", headers=auth(token), json={"variant_id": entry}
+        )
+        assert placed.status_code == 200, placed.text
+    client.post(
+        f"/api/admin/variants/{entry}/gtins",
+        headers=auth(token),
+        json={"value": "8806099108724"},
+    )
+
+    edition = post(
+        client,
+        token,
+        "/api/admin/attributes",
+        {"key": "edition", "name": "Edition", "value_type": "enum"},
+    )
+    post(
+        client,
+        token,
+        f"/api/admin/attributes/{edition['id']}/values",
+        {"canonical": "standard", "in_title": False},
+    )
+    post(
+        client, token, f"/api/admin/attributes/{edition['id']}/values", {"canonical": "enterprise"}
+    )
+    post(
+        client,
+        token,
+        f"/api/admin/categories/{category['id']}/attributes",
+        {"attribute_id": edition["id"], "identity_bearing": True},
+    )
+
+    preview = client.post(
+        "/api/admin/matching/split", headers=auth(token), params={"dry_run": True}
+    ).json()
+    assert (preview["found"], preview["split"], preview["moved"]) == (1, 1, 2), preview
+    assert preview["entries"][0]["parts"][0]["into_id"] is None
+
+    report = client.post("/api/admin/matching/split", headers=auth(token)).json()
+    assert (report["split"], report["moved"], report["created"]) == (1, 2, 1), report
+    (split,) = report["entries"]
+    assert split["kept"] == "standard"
+    (part,) = split["parts"]
+    assert (part["value"], part["listings"], part["gtins"]) == (
+        "enterprise",
+        2,
+        ["08806099108724"],
+    )
+
+    def on(offer):
+        return client.get(f"/api/admin/offers/{offer}/matches", headers=auth(token)).json()[0][
+            "variant_id"
+        ]
+
+    assert on(others["enterprise"]) == on(others["silent"]) == part["into_id"]
+    assert on(others["ordinary"]) == on(first) == entry
+    moved = client.get(f"/api/admin/variants/{part['into_id']}", headers=auth(token)).json()
+    assert "enterprise" in moved["title"].lower()
+    kept_gtins = client.get(f"/api/admin/variants/{entry}/gtins", headers=auth(token)).json()
+    assert "08806099108724" not in {row["gtin"] for row in kept_gtins}
+    # The storage came along, and nothing is left to split.
+    axes = client.get(
+        f"/api/admin/variants/{part['into_id']}/attributes", headers=auth(token)
+    ).json()
+    assert storage["id"] in {row["attribute_id"] for row in axes}, axes
+    again = client.post("/api/admin/matching/split", headers=auth(token)).json()
+    assert again["found"] == 0, again
