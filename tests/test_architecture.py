@@ -69,6 +69,9 @@ ALLOWED_CROSS_FEATURE = {
     # maker's model names reaches no stored reading until the listings are read again, and
     # reading is the offers' own logic. Copying it into the scheduler would be two readers.
     ("runs", "offers"): "the scheduler re-reads what a registry change asked to be read",
+    # A maker's name is in every title of what it makes, and a title is composed the way
+    # the catalogue composes it; a second composer would be a second title.
+    ("brands", "catalog"): "a renamed maker re-titles its families and entries",
     ("runs", "judge"): "the matcher is built with its judge, which only reads stored verdicts here",
     # Everything the pipeline shows is counted from the tables as they are now, so yesterday
     # cannot be recomputed. The scheduler is the one process that is always running, so it

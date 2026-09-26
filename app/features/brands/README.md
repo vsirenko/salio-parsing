@@ -17,7 +17,11 @@ What is written on the box, and every string a source might write instead.
 | `POST /api/admin/brands/{brand_id}/reread` | ask for one by hand, for a `category_id` |
 
 No delete on a brand: one variants point at cannot go, and one nothing points at costs
-nothing to keep. A wrong brand is merged, which is catalogue work and does not exist yet.
+nothing to keep. **A rename retitles what the maker makes**: a family's and an entry's
+title carries the maker's name and is composed when something it is built from changes, so
+renaming `CAT` to `Cat` left every entry reading `CAT S75` until something else touched it.
+`PATCH` with a new `canonical_name` composes them again through the catalogue
+(`CatalogService.retitle_brand`), and the audit entry says how many. A wrong brand is merged, which is catalogue work and does not exist yet.
 
 ## How it works
 

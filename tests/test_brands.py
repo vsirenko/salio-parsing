@@ -390,3 +390,42 @@ def test_a_listing_reads_only_its_own_category_s_names(client):
     assert model() == "as read", "a tablet's name was read into a phone"
     add_model(client, token, apple["id"], "Pixel Air", "Pixel Air", phones["id"])
     assert model() == "Pixel Air"
+
+
+def test_a_renamed_brand_retitles_what_it_makes(client):
+    """`CAT` became `Cat`, and every entry went on reading `CAT S75` until something else
+    happened to touch it: a title carries the maker's name."""
+    from tests.test_matching import (
+        a_shop_we_can_build_from,
+        a_storage_axis,
+        admin_token,
+        offer_from,
+        promote,
+    )
+
+    token = admin_token(client)
+    _, source, category, apple = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    variant_id = promote(
+        client,
+        token,
+        offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Apple iPhone 17 256GB",
+                "brand": "Apple",
+                "model": "iPhone 17",
+                "attributes": {"storage": "256 GB"},
+            },
+        ),
+    )["variant_id"]
+    renamed = client.patch(
+        f"/api/admin/brands/{apple['id']}", headers=auth(token), json={"canonical_name": "APPLE"}
+    )
+    assert renamed.status_code == 200, renamed.text
+    entry = client.get(f"/api/admin/variants/{variant_id}", headers=auth(token)).json()
+    assert entry["title"].startswith("APPLE iPhone 17"), entry["title"]
+    family = client.get(f"/api/admin/products/{entry['product']['id']}", headers=auth(token)).json()
+    assert family["title"] == "APPLE iPhone 17"

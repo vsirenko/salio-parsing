@@ -36,6 +36,7 @@ from app.features.brands.schemas import (
     ModelAliasRead,
     RereadRequestRead,
 )
+from app.features.catalog.service import CatalogService
 from app.schemas.pagination import Pagination
 
 
@@ -91,6 +92,9 @@ class BrandService:
         audit.set_target("brand", brand.id)
 
         sent = payload.model_dump(exclude_unset=True, mode="json")
+        renamed = (
+            payload.canonical_name is not None and payload.canonical_name != brand.canonical_name
+        )
         if payload.canonical_name is not None:
             brand.canonical_name = payload.canonical_name
         if payload.slug is not None:
@@ -102,6 +106,9 @@ class BrandService:
             await self.session.rollback()
             raise ConflictError(f"The slug '{payload.slug}' is already taken") from exc
 
+        if renamed:
+            # The titles carry the maker's name, and nothing else would touch them.
+            sent["retitled"] = await CatalogService(self.session).retitle_brand(brand.id)
         audit.record_changes(**sent)
         return await self._read_brand(brand.id)
 
