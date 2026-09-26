@@ -93,7 +93,7 @@ def test_a_marketing_colour_stays_unresolved():
 def test_the_version_says_what_was_applied():
     assert (
         parsed("Mobilais telefons Nokia 3210, 128 MB, melna krās.", "Nokia")["ruleset_version"]
-        == "generic-3+phones-15+onea-shop-1+onea-5"
+        == "generic-3+phones-16+onea-shop-1+onea-5"
     )
 
 
@@ -124,7 +124,7 @@ def test_a_tablet_s_head_loses_its_codes_wherever_they_sit():
     )
     assert tablet(
         'Planšetdators Samsung Galaxy Tab A11 SM-X135FZAAEEE Enterprise Edition, 8.6"', "Samsung"
-    ) == ("Galaxy Tab A11 Enterprise Edition")
+    ) == ("Galaxy Tab A11")  # the edition is an axis, read by Samsung's rules
     assert tablet('Planšetdators Lenovo Yoga Tab Plus ZAEG0022PL TB520FU, 12.7"', "Lenovo") == (
         "Yoga Tab Plus"
     )

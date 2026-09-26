@@ -259,6 +259,22 @@ as nano-texture on Apple's alone — anyone else's matte screen is the ordinary 
 Its `NORDIC` keyboard on a `KS/A` MacBook is the Swedish-Finnish one: Apple makes no other
 keyboard for the Nordic countries.
 
+**The edition is an axis, not a name, and it is Samsung's.** Samsung sells most phones and
+tablets a second time as an Enterprise Edition — the same hardware under barcodes and part
+numbers of its own, at its own price: 1459 € against 1039 € for an S26 Ultra 256 on
+26.09.2026. On the model it made `Galaxy S26 Ultra 5G EE` and `… Enterprise Edition`
+families of their own, and where only the part number said it the reading was the ordinary
+model, so a rebuild merged the two entries into one. `normalization/edition.py` puts it on
+the identity as `edition`: enterprise where the title says `Enterprise`, the capital `EE`
+stands as a word, or Samsung's part number ends in `EE…` (`SM-S948BZKDEEE`, against `…EUE`),
+standard everywhere else, and the words leave the model. Measured over every Samsung listing
+that day, an `EE…` part number shared its barcode with a listing that says Enterprise 12 times
+in 12 and with an ordinary one never. Samsung's alone — `EE` in a Dell or Asus laptop title is
+an Estonian keyboard — but read by the phones' and the tablets' rules, asking the listing
+whether it is a Samsung, because the brand layer is chosen by the shop's brand field and m79
+and bm leave it empty on 583 Samsung phones. It runs after the registry, so a registry name
+that spells the edition loses it too. `standard` is kept out of titles, as the glass's is.
+
 **A rule may be declared and not written.** `Rule.pending` is a gap that is visible, and the
 first one is real: colour splits a phone into variants, and across 520 collected products the
 word before `krās` takes 61 distinct forms — Latvian declension (`melns`, `melna`), plain

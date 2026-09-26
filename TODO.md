@@ -63,6 +63,21 @@ The reason this repository exists, and none of it is built. The shape it should 
 and the questions that have to be answered with real data first, are written down in
 [docs/parser-design.md](docs/parser-design.md).
 
+- [ ] **Samsung's Enterprise Edition is not an axis, so it lands on the ordinary entry.** It
+      is the same hardware sold as its own product: its own barcodes (`8806099108724` against
+      `8806097827221` for an S26 Ultra 256 black), its own part-number suffix (`SM-S948BZKDEEE`
+      against `…EUE`), and on 26.09.2026 1a.lv and Ksenukai asked 1459 € for it against 1039 €.
+      Where a title says so only in the part number or the barcode — BM's `Galaxy S26 Ultra 5G
+      (S948) | Black` — the reading is the ordinary model, and 34 entries of the laptop's
+      database held both. Folding the S26 `… 5G` spellings into one model on 26.09.2026 renamed
+      the two S26 Ultra EE entries to the ordinary name, and the rebuild then merged each into
+      the ordinary 256 and 512 black. So that fold leaves the EE rows alone. An edition read
+      from the title words, the part-number suffix and the barcode, and kept as an identity
+      axis, is what would keep them apart; measure the suffixes against collected bytes first.
+      *Read since 26.09.2026* (`normalization/edition.py`, phones-16 and tablets-12). Left: the
+      `edition` attribute in phones and tablets, the reread, the realign, and the entries
+      that already hold both editions, split; then the EE families folded into the ordinary.
+
 - [x] Currency and country reference tables, admin-managed, seeded with the three
       Baltic markets. VAT rates are left null deliberately — see the migration.
 - [ ] **Fill in the VAT rates** for LV, LT and EE. They were not seeded because they

@@ -60,6 +60,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         "phones-model-does-not-repeat-the-maker",
         "phones-model-from-the-registry",
         "phones-model-without-a-trailing-colour",
+        "phones-model-without-the-edition",
     ]
     # General to specific: the category, then what is true of the shop, then of this
     # channel, and canonicalisation last.
@@ -70,6 +71,7 @@ def test_the_rules_an_offer_gets_can_be_listed_before_one_is_read():
         SHOP,
         SOURCE,
         SOURCE,
+        FINISH,
         FINISH,
         FINISH,
         FINISH,
@@ -113,11 +115,11 @@ def test_the_version_names_what_was_applied():
     assert version_for(KSENUKAI, shop_slug="ksenukai") == "generic-3+ksenukai-shop-1+ksenukai-7"
     assert (
         version_for(KSENUKAI, shop_slug="ksenukai", category=PHONES)
-        == "generic-3+phones-15+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-16+ksenukai-shop-1+ksenukai-7"
     )
     assert (
         read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)["ruleset_version"]
-        == "generic-3+phones-15+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-16+ksenukai-shop-1+ksenukai-7"
     )
 
 
@@ -287,7 +289,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-3+phones-15+apple-phones-2"
+    assert fields["ruleset_version"] == "generic-3+phones-16+apple-phones-2"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -457,6 +459,69 @@ def test_a_shop_that_contradicts_itself_is_no_vote_at_all():
     assert fields["identity"]["color"] == "black"
 
 
+def test_samsung_s_enterprise_edition_is_an_axis_and_not_part_of_the_model():
+    """The Enterprise Edition is the same phone at its own price — 1459 € against 1039 € for
+    an S26 Ultra 256 on 26.09.2026 — so it is another entry of the family, not a family."""
+    words = Vocabulary(models=REGISTRY, brand_names=frozenset({"samsung"}))
+
+    def edition(title: str, **extra: str) -> tuple[str | None, str]:
+        fields = read(
+            {"name": title, "brand": "Samsung", **extra}, category=PHONES, vocabulary=words
+        )
+        return fields.get("model"), fields["identity"]["edition"]
+
+    assert edition("Samsung Galaxy S26 Ultra Enterprise Edition, 12GB/256GB, Black") == (
+        "Galaxy S26 Ultra",
+        "enterprise",
+    )
+    # Only the part number says it: `…EEE` is the Enterprise Edition's region, `…EUE` not.
+    assert edition(
+        "Samsung Galaxy S26 Ultra S948 5G Dual Sim 12GB RAM 256GB - Black SM-S948BZKDEEE"
+    ) == ("Galaxy S26 Ultra", "enterprise")
+    assert edition("Samsung Galaxy S26 Ultra SM-S948B DS 12 / 256 GB Black SM-S948BZKDEUE") == (
+        "Galaxy S26 Ultra",
+        "standard",
+    )
+    # bigbox's bare abbreviation, and m79's `Enterprise` with the second word left off.
+    assert edition("Samsung Galaxy S26 Ultra 5G 256 GB EE DS Graphite")[1] == "enterprise"
+    assert edition("Samsung Galaxy S26 Ultra 5G 6GB/128GB Enterprise (Black)")[1] == "enterprise"
+    # A shop's model field loses the words too, where no registry name is found.
+    assert edition(
+        "Samsung Galaxy A57 5G Enterprise Edition 8GB/128GB",
+        model="Galaxy A57 5G Enterprise Edition",
+    ) == ("Galaxy A57 5G", "enterprise")
+    # Lower case is a word, not the edition.
+    assert edition("Samsung Galaxy S26 Ultra 256GB ee")[1] == "standard"
+    # m79 and bm leave the brand field empty on 583 Samsung phones: the title is enough.
+    brandless = read(
+        {"name": "Samsung Galaxy S26 Ultra 5G 12GB/512GB Black Enterprise Edition"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert brandless["identity"]["edition"] == "enterprise"
+    # A registry name that spells the edition loses it too: the rule runs after the registry.
+    spelled = Vocabulary(
+        models={"samsung": {"galaxy s26 ultra 5g ee": "Galaxy S26 Ultra 5G EE"}},
+        brand_names=frozenset({"samsung"}),
+    )
+    assert (
+        read(
+            {"name": "Samsung Galaxy S26 Ultra 5G EE SM-S948BZKGEEE, 256 GB", "brand": "Samsung"},
+            category=PHONES,
+            vocabulary=spelled,
+        )["model"]
+        == "Galaxy S26 Ultra 5G"
+    )
+
+
+def test_the_edition_is_samsung_s_alone():
+    """`EE` in Dell's and Asus's laptop titles is an Estonian keyboard, and the one other
+    phone saying Enterprise on 26.09.2026 was a DECT handset."""
+    fields = read({"name": "Motorola moto g86 EE 256GB", "brand": "Motorola"}, category=PHONES)
+    assert "edition" not in fields["identity"]
+    assert "edition" not in read({"name": "Enterprise 8254 DECT Blue"}, category=PHONES)["identity"]
+
+
 def test_the_name_with_one_shop_behind_it_is_declared_and_unwritten():
     brand_rules = [r for r in rules_for(category=PHONES, brand="samsung") if r.layer == BRAND]
     assert next(r for r in brand_rules if r.id == "samsung-pinkgold").pending
@@ -545,14 +610,14 @@ FINGERPRINTS = {
     "onea-shop-1": "24e6184df567",
     "onea-tablets-2": "9d9c0dc1733a",
     "oneplus-phones-1": "29eaabd5e1ad",
-    "phones-15": "cc73a69e2fe5",
+    "phones-16": "e84662e6add6",
     "rdveikals-8": "c10c83870bfc",
     "rdveikals-laptops-11": "ddb6791ba2fc",
     "rdveikals-shop-1": "e0b3a42600f7",
     "rdveikals-tablets-3": "d209e87f9410",
     "samsung-phones-2": "9653d4e6a46a",
     "samsung-tablets-1": "dd93c1347519",
-    "tablets-11": "697efb0f6f30",
+    "tablets-12": "bb896083604b",
     "tet-4": "751b4c587085",
     "tet-shop-1": "3129e8453377",
     "tet-tablets-1": "7aabd390e9ed",

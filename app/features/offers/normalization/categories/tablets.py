@@ -10,7 +10,7 @@ two barcodes and two prices, and a shop writes which it is into the name.
 import re
 from typing import Any
 
-from app.features.offers.normalization import devices, glass
+from app.features.offers.normalization import devices, edition, glass
 from app.features.offers.normalization.rules import (
     CATEGORY,
     FINISH,
@@ -21,7 +21,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "tablets"
-VERSION = "tablets-11"
+VERSION = "tablets-12"
 
 CONNECTIVITY_KEY = "connectivity"
 SCREEN_KEY = "screen_inch"
@@ -288,6 +288,19 @@ RULESET = register(
                 layer=FINISH,
                 why="As for a phone: the registry's spelling of a name found whole in the title.",
                 body=devices.from_the_registry,
+            ),
+            Rule(
+                id="tablets-model-without-the-edition",
+                layer=FINISH,
+                why=(
+                    "As for a phone: Samsung's Enterprise Edition, the same tablet at its own"
+                    " price under its own barcodes and part numbers, is an entry of the"
+                    " family and not a family — `Galaxy Tab Active5 EE`, `Tab A11+ Enterprise"
+                    " Edition` and six more were families of their own on 26.09.2026, and"
+                    " rdveikals names it only in the part number on its Tab Active and Tab S10"
+                    " Lite listings."
+                ),
+                body=edition.the_edition,
             ),
             Rule(
                 id="tablets-glass",

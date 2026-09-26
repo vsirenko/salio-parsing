@@ -68,7 +68,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-11"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-12"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
@@ -275,6 +275,23 @@ def test_the_glass_is_an_axis_and_not_part_of_the_model():
         )["model"]
         == "Galaxy Tab S9 FE Standard Edition"
     )
+
+
+def test_samsung_s_enterprise_edition_is_an_axis_of_its_tablets():
+    """`Galaxy Tab A11+ Enterprise Edition` was a family beside the A11+: the edition goes on
+    the identity, and the part number says it where the title does not."""
+
+    def edition(title: str) -> str:
+        return read({"name": title, "brand": "Samsung"}, category=TABLETS)["identity"]["edition"]
+
+    assert (
+        edition('Samsung Galaxy Tab A11+ Wi-Fi Enterprise Edition SM-X230NZAREEB, 11", 6GB/128GB')
+        == "enterprise"
+    )
+    assert edition('Samsung Galaxy Tab S10 Lite 10.9" 6GB 128GB SM-X400N Gray SM-X400NZAREEE') == (
+        "enterprise"
+    )
+    assert edition("Samsung Galaxy Tab A11+ WiFi 128 GB, pelēks, SM-X230NZAREUE") == "standard"
 
 
 def test_the_maker_s_colour_in_the_title_beats_the_shop_s_bucket():

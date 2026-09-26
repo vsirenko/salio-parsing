@@ -6,7 +6,7 @@ rule, but that storage is what tells two otherwise identical phones apart is tru
 shop that sells them.
 """
 
-from app.features.offers.normalization import devices
+from app.features.offers.normalization import devices, edition
 from app.features.offers.normalization.rules import (
     CATEGORY,
     FINISH,
@@ -19,7 +19,7 @@ SLUG = "phones"
 # Bumped when a rule body changes, not only when a rule is added: the version is
 # what a reparse compares to decide whether a stored reading is stale, so a fix
 # that leaves it alone is a fix that never reaches the rows it was written for.
-VERSION = "phones-15"
+VERSION = "phones-16"
 
 RULESET = register(
     CATEGORY,
@@ -202,6 +202,30 @@ RULESET = register(
                     " without its `Galaxy`. Both are rows, not rules."
                 ),
                 body=devices.from_the_registry,
+            ),
+            Rule(
+                id="phones-model-without-the-edition",
+                layer=FINISH,
+                why=(
+                    "Samsung sells most of its phones a second time as an Enterprise Edition —"
+                    " the same phone under barcodes and part numbers of its own, at its own"
+                    " price: 1459 € against 1039 € for an S26 Ultra 256 at 1a.lv and Ksenukai"
+                    " on 26.09.2026. On the model — `Galaxy S26 Ultra 5G EE`, `… Enterprise"
+                    " Edition` — it was a family of its own, and where only the part number or"
+                    " the barcode said it the reading was the ordinary model and a rebuild"
+                    " merged the two entries. Measured that day over every Samsung listing: a"
+                    " part number ending `EE…` (`EEE`, `EEB`, `EEA`) shared its barcode with a"
+                    " listing that says Enterprise 12 times in 12 and with an ordinary"
+                    " `EUE`/`EUB` one never; bigbox's and m79's bare `EE` 4 in 4 and never."
+                    " So it is an axis: enterprise where the words, the abbreviation or the"
+                    " part number say so, standard everywhere else, and the words leave the"
+                    " model. After the registry, which spells `… 5G EE` names of its own."
+                    "\n\n"
+                    "Samsung's only, asked of the listing: `EE` is an Estonian keyboard in"
+                    " Dell's and Asus's laptop titles, and the one other phone saying"
+                    " Enterprise that day was a DECT handset, `Enterprise 8254`."
+                ),
+                body=edition.the_edition,
             ),
         ),
     ),
