@@ -143,7 +143,15 @@ class MData:
         return fields
 
     def read_listing(self, listing: Listing) -> dict[str, Any]:
-        return dict(listing.card)
+        """The card for the quick pass, with the price it charges picked out as the page's
+        reading does. Handed over as it stood, the card's `prices` list reached no reading:
+        every quick pass on 25–26.09.2026 brought 105 phones and 20 tablets with no price and
+        was rejected for it."""
+        fields = dict(listing.card)
+        charged = _charged(fields.get("prices") or [])
+        if charged:
+            fields["price"] = charged
+        return fields
 
     async def _page(self, fetcher: Fetcher, page: int) -> Part:
         return await fetcher.get(
@@ -235,11 +243,15 @@ def _from_page(body: str, *, card: dict[str, Any]) -> dict[str, Any]:
     fields["mpn"] = specs.get("Manufacturer code", "")
     if offers.get("price"):
         fields["price"] = str(offers["price"])
-    prices = card.get("prices") or []
-    if prices:
-        # The card prints the price before a discount first, so the last is what is charged.
-        fields["price"] = prices[-1].replace(" ", "").replace(" ", "")
+    charged = _charged(card.get("prices") or [])
+    if charged:
+        fields["price"] = charged
     return fields
+
+
+def _charged(prices: list[str]) -> str | None:
+    """The price a card charges: the card prints the one before a discount first, so the last."""
+    return prices[-1].replace(" ", "").replace("\xa0", "") if prices else None
 
 
 def _condition(body: str) -> str:

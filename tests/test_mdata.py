@@ -259,3 +259,18 @@ def test_the_tablet_channel_asks_for_its_own_category():
 
     assert TABLETS_CHANNEL.slug == "mdata-tablets"
     assert TABLETS_CHANNEL.category == TABLET_CATEGORY == 556
+
+
+def test_the_quick_pass_reads_the_price_the_card_charges():
+    """The card's `prices` reached no reading, and every quick pass came back priceless."""
+    from app.features.offers.normalization import read
+    from app.features.runs.channel import Listing
+
+    listing = next(c for c in _cards(LISTING) if c.external_id == IPHONE)
+    fields = MData().read_listing(listing)
+    assert fields["price"] == listing.card["prices"][-1].replace(" ", "").replace("\xa0", "")
+    reading = read(fields, source_slug="mdata-phones", shop_slug="mdata", category="phones")
+    assert reading["price"] is not None
+    # A card on sale prints the price before the discount first; the last one is charged.
+    on_sale = Listing(external_id="1", url="u", card={"prices": ["899,00", "799,00"]})
+    assert MData().read_listing(on_sale)["price"] == "799,00"
