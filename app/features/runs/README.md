@@ -240,6 +240,15 @@ channels settled after each took an hour on 25.09.2026 for runs of two seconds. 
 that finishes while another is queued or running ends at `settle_deferred`, and the last one
 settles for all of them: settling is over the whole catalogue anyway, not over one channel.
 
+**The scheduler also reads what a registry change asked to be read.** Each tick, after
+starting runs, it takes the oldest `reread_requests` row whose changes have been quiet for
+`REREAD_QUIET_SECONDS`, reads `REREAD_BATCH` of that maker's listings in the category from
+their stored payloads (`OfferService.reread_brand`, no network, no worker), and keeps where it
+got to. After the last batch it settles as a person did by hand — rebuild until nothing
+moves, split, rebuild — and writes the counts on the request. A batch per tick, so a maker
+with three thousand listings does not hold collection up; a failure closes the request with
+its error rather than retrying it every tick.
+
 **A settled run says how many families its category had before and after**
 (`settled.families_before`, `families_after`), and the scheduler logs a warning when there
 are more after. Rereading what is already placed should fold families, not make them, so

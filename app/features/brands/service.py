@@ -1,8 +1,10 @@
 """Brands and the strings that resolve to them."""
 
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Select, delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +18,7 @@ from app.db.models import (
     Offer,
     OfferMatch,
     Product,
+    RereadRequest,
     Variant,
 )
 from app.db.query import offer_is_listed, ordered, paginated_rows
@@ -31,6 +34,7 @@ from app.features.brands.schemas import (
     BrandUpdate,
     ModelAliasCreate,
     ModelAliasRead,
+    RereadRequestRead,
 )
 from app.schemas.pagination import Pagination
 
@@ -192,6 +196,7 @@ class BrandService:
         audit.record_changes(
             added_model_alias=normalized, model=payload.model, category_id=payload.category_id
         )
+        await self._ask_for_reread(brand_id, payload.category_id)
         return ModelAliasRead.model_validate(alias)
 
     async def remove_model(self, brand_id: int, alias_id: int) -> None:
@@ -203,6 +208,51 @@ class BrandService:
         audit.set_target("brand", brand_id)
         audit.record_changes(removed_model_alias=alias.alias_normalized, model=alias.model)
         await self.session.execute(delete(ModelAlias).where(ModelAlias.id == alias_id))
+        await self._ask_for_reread(brand_id, alias.category_id)
+
+    async def request_reread(self, brand_id: int, category_id: int) -> RereadRequestRead:
+        """The same request a registry change leaves, asked for by hand."""
+        await self._brand(brand_id)
+        if await self.session.get(Category, category_id) is None:
+            raise NotFoundError(f"Category {category_id} not found")
+        audit.set_target("brand", brand_id)
+        request = await self._ask_for_reread(brand_id, category_id)
+        audit.record_changes(reread_requested=request.id, category_id=category_id)
+        return RereadRequestRead.model_validate(request)
+
+    async def list_rereads(self, brand_id: int) -> list[RereadRequestRead]:
+        await self._brand(brand_id)
+        rows = await self.session.scalars(
+            select(RereadRequest)
+            .where(RereadRequest.brand_id == brand_id)
+            .order_by(RereadRequest.id.desc())
+            .limit(50)
+        )
+        return [RereadRequestRead.model_validate(row) for row in rows]
+
+    async def _ask_for_reread(self, brand_id: int, category_id: int) -> RereadRequest:
+        """One open request per maker and category, moved to now by every change.
+
+        A change to the registry reaches no stored reading by itself — the version covers the
+        rules, not the words — so it leaves this for the scheduler. The time moves with each
+        change because the scheduler waits for them to go quiet: 235 names entered in a row
+        are one re-read, not 235. A change arriving while one is being read starts it over,
+        since the pages already read were read with the words as they were.
+        """
+        now = datetime.now(UTC)
+        statement = (
+            insert(RereadRequest)
+            .values(brand_id=brand_id, category_id=category_id, requested_at=now)
+            .on_conflict_do_update(
+                index_elements=[RereadRequest.brand_id, RereadRequest.category_id],
+                index_where=RereadRequest.finished_at.is_(None),
+                set_={"requested_at": now, "started_at": None, "after_offer_id": 0, "read": 0},
+            )
+            .returning(RereadRequest.id)
+        )
+        request_id = await self.session.scalar(statement)
+        await self.session.flush()
+        return await self.session.get(RereadRequest, request_id, populate_existing=True)
 
     # --- what the matcher will call ---
 

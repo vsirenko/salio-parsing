@@ -6915,6 +6915,99 @@
         "title": "RereadReport",
         "type": "object"
       },
+      "RereadRequestCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "category_id": {
+            "title": "Category Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category_id"
+        ],
+        "title": "RereadRequestCreate",
+        "type": "object"
+      },
+      "RereadRequestRead": {
+        "description": "A maker's listings in a category, asked to be read again, and how far that has got.\n\n`started_at` empty is waiting for the changes to go quiet; `finished_at` set is done,\nwith what settling the catalogue after it did in `report`.",
+        "properties": {
+          "brand_id": {
+            "title": "Brand Id",
+            "type": "integer"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "read": {
+            "title": "Read",
+            "type": "integer"
+          },
+          "report": {
+            "additionalProperties": true,
+            "title": "Report",
+            "type": "object"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "id",
+          "brand_id",
+          "category_id",
+          "requested_at",
+          "started_at",
+          "finished_at",
+          "read",
+          "report",
+          "error"
+        ],
+        "title": "RereadRequestRead",
+        "type": "object"
+      },
       "ReviewCreate": {
         "additionalProperties": false,
         "properties": {
@@ -14023,6 +14116,126 @@
           }
         ],
         "summary": "Remove a model name",
+        "tags": [
+          "admin: brands"
+        ]
+      }
+    },
+    "/api/admin/brands/{brand_id}/reread": {
+      "post": {
+        "description": "What every change to its model names asks for already, asked by hand: the scheduler\nreads the listings placed or queued under this maker in the category again, then\nrebuilds and splits. Nothing is read in this request.",
+        "operationId": "request_reread_api_admin_brands__brand_id__reread_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "brand_id",
+            "required": true,
+            "schema": {
+              "title": "Brand Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RereadRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RereadRequestRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Brand or category not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read this maker's listings in a category again",
+        "tags": [
+          "admin: brands"
+        ]
+      }
+    },
+    "/api/admin/brands/{brand_id}/rereads": {
+      "get": {
+        "description": "Newest first, the last fifty: waiting, being read, or finished with what settling did.",
+        "operationId": "list_rereads_api_admin_brands__brand_id__rereads_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "brand_id",
+            "required": true,
+            "schema": {
+              "title": "Brand Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RereadRequestRead"
+                  },
+                  "title": "Response List Rereads Api Admin Brands  Brand Id  Rereads Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The re-reads its registry changes asked for",
         "tags": [
           "admin: brands"
         ]
@@ -21884,6 +22097,24 @@
               "minimum": 0,
               "title": "After Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Only this maker's listings: placed or queued under it",
+            "in": "query",
+            "name": "brand_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this maker's listings: placed or queued under it",
+              "title": "Brand Id"
             }
           }
         ],

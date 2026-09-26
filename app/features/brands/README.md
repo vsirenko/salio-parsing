@@ -13,6 +13,8 @@ What is written on the box, and every string a source might write instead.
 | `DELETE /api/admin/brands/{brand_id}/aliases/{alias_id}` | remove one |
 | `GET · POST /api/admin/brands/{brand_id}/models` | list and add model names |
 | `DELETE /api/admin/brands/{brand_id}/models/{alias_id}` | remove one |
+| `GET /api/admin/brands/{brand_id}/rereads` | the re-reads its registry changes asked for, newest first |
+| `POST /api/admin/brands/{brand_id}/reread` | ask for one by hand, for a `category_id` |
 
 No delete on a brand: one variants point at cannot go, and one nothing points at costs
 nothing to keep. A wrong brand is merged, which is catalogue work and does not exist yet.
@@ -96,8 +98,17 @@ known name it would win. Nothing is collapsed by the seed — `Galaxy S26 Ultra 
 over: Samsung sells a `Galaxy A16` and a `Galaxy A16 5G` as different phones. Making one an
 alias of the other is a decision, entered by hand.
 
-**Registry work moves no ruleset version.** A hundred rows entered here change no code,
-so nothing looks stale and nothing is recomputed. Follow it with a reparse.
+**Registry work moves no ruleset version, so it asks for a re-read itself.** A hundred rows
+entered here change no code, so nothing looks stale and nothing is recomputed — on
+26.09.2026 renaming a thousand Apple listings took a laptop re-reading twenty thousand over
+HTTP, three admin tokens and forty minutes. Adding or removing a model name leaves a
+`reread_requests` row for the brand and the category, one open per pair and moved to now by
+every change, and the scheduler takes it once the changes have been quiet for
+`REREAD_QUIET_SECONDS`: 235 names entered in a row are one re-read. It reads only the
+listings placed or queued under that maker there, a batch per tick, then settles — rebuild,
+split, rebuild — and writes what that did on the request. A change arriving while one is
+read starts it over, because the pages already read used the words as they were. See
+[runs](../runs/README.md), "the scheduler".
 
 ## Decisions worth knowing before changing it
 

@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     # a TTL, a heartbeat and a way to steal a stale one, and an advisory lock is released
     # when the connection drops, which is the same semantics with none of the machinery.
     scheduler_tick_seconds: int = Field(default=20, ge=1, le=600)
+    # A registry change is read into stored listings once the changes have gone quiet this
+    # long, a batch of this many listings per scheduler tick.
+    reread_quiet_seconds: int = Field(default=60, ge=0, le=3600)
+    reread_batch: int = Field(default=500, ge=1, le=5000)
     # Deliberately low. Two concurrent crawls on a small box is how the memory limit is
     # found, and a channel collects far faster with a few neighbours than with a dozen.
     scheduler_max_running: int = Field(default=1, ge=1, le=16)
