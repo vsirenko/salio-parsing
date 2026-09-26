@@ -201,6 +201,8 @@ class MatchingService:
         self._strict: dict[int, bool] = {}
         # Which identity axes each channel does not publish, by source id.
         self._unpublished_axes: dict[int, frozenset[str]] = {}
+        # Each maker's lines and the aliases that name them, by the parent's id.
+        self._lines: dict[int, tuple[dict[int, Brand], dict[str, int]]] = {}
 
     # --- running it ---
 
@@ -818,6 +820,57 @@ class MatchingService:
             reading.brand_id = lookup.brand.id
         return lookup
 
+    async def _narrowed(self, reading: NormalizedOffer, lookup: BrandLookup) -> BrandLookup:
+        """The line of the resolved maker the title names, where it names exactly one.
+
+        Shops write the parent in the brand field and the line in the title: on 26.09.2026
+        70 POCO listings said `Xiaomi` in the field and `Xiaomi Poco F9 Ultra` in the title,
+        17 Hammer ones `myPhone`, nine REDMAGIC ones `ZTE` — and a field that resolved was
+        never weighed against the title, so every one of them was filed under the parent.
+        Only a line the catalogue says is one (`brands.parent_id`), and only one of them.
+        """
+        if lookup.brand is None:
+            return lookup
+        line = await self.line_named_in(lookup.brand.id, (reading.title or "").split())
+        if line is None:
+            return lookup
+        return BrandLookup(line, lookup.state, [line.id], *lookup[3:])
+
+    async def line_named_in(self, parent_id: int, words: list[str]) -> Brand | None:
+        """The one line of this maker the words name — by any of its aliases but a line's
+        own `line` kind, which is safe only in a brand field — or nothing."""
+        if parent_id not in self._lines:
+            lines = {
+                brand.id: brand
+                for brand in await self.session.scalars(
+                    select(Brand).where(Brand.parent_id == parent_id)
+                )
+            }
+            table: dict[str, int] = {}
+            if lines:
+                rows = await self.session.execute(
+                    select(BrandAlias.alias_normalized, BrandAlias.brand_id).where(
+                        BrandAlias.brand_id.in_(list(lines)), BrandAlias.kind != "line"
+                    )
+                )
+                table = dict(rows.all())
+            self._lines[parent_id] = (lines, table)
+        lines, table = self._lines[parent_id]
+        if not table:
+            return None
+        cleaned = [word.strip("(),.:;/|\"'„“”") for word in words]
+        found: set[int] = set()
+        for start in range(len(cleaned)):
+            for take in (2, 1):
+                chunk = " ".join(cleaned[start : start + take])
+                try:
+                    named = table.get(normalize_brand(chunk))
+                except ValueError:
+                    continue
+                if named is not None:
+                    found.add(named)
+        return lines[found.pop()] if len(found) == 1 else None
+
     async def _brand_from_title(self, reading: NormalizedOffer) -> Brand | None:
         """The maker the title begins with, when the field named one nobody knows.
 
@@ -912,7 +965,10 @@ class MatchingService:
             # this 425 fully-read phones could not become a catalogue entry.
             named = await self._brand_from_title(reading)
             if named is not None:
-                return self._settled(reading, BrandLookup(named, "resolved_title", [named.id]))
+                return self._settled(
+                    reading,
+                    await self._narrowed(reading, BrandLookup(named, "resolved_title", [named.id])),
+                )
             return BrandLookup(None, "none_given", [])
         try:
             normalized = normalize_brand(reading.brand_raw)
@@ -929,14 +985,20 @@ class MatchingService:
         )
         brands = list(rows.scalars().unique())
         if len(brands) == 1:
-            return self._settled(reading, BrandLookup(brands[0], "resolved", [brands[0].id]))
+            return self._settled(
+                reading,
+                await self._narrowed(reading, BrandLookup(brands[0], "resolved", [brands[0].id])),
+            )
         if not brands:
             # The field names a maker nobody has heard of, and the title may name one we
             # have. Only then: a field that resolves is never second-guessed, and a field
             # that resolves to two is a question the judge answers, not this.
             named = await self._brand_from_title(reading)
             if named is not None:
-                return self._settled(reading, BrandLookup(named, "resolved_title", [named.id]))
+                return self._settled(
+                    reading,
+                    await self._narrowed(reading, BrandLookup(named, "resolved_title", [named.id])),
+                )
             return BrandLookup(None, "unknown", [])
 
         candidates = [brand.id for brand in brands]
@@ -1482,6 +1544,36 @@ class MatchingService:
             except AppError as error:
                 reasons[error.code] += 1
 
+        # An entry of a maker whose every listing names one of its lines is the line's: 70
+        # POCO listings sat on Xiaomi entries, placed there by the field or by the barcode of
+        # the first one to arrive. Before the names, for the same reason as the axes: the
+        # brand is in the identity key, and a name given under the wrong maker merges wrong.
+        rebranded = 0
+        for variant_id, line_id in await self._misbranded(limit=limit):
+            try:
+                async with self.session.begin_nested():
+                    await catalog.move_to_brand(variant_id, line_id)
+                    rehomed += await self._rehome(catalog, variant_id)
+                rebranded += 1
+            except ConflictError as error:
+                twin = (error.details or {}).get("variant_id")
+                if twin is None:
+                    reasons[error.code] += 1
+                    continue
+                try:
+                    async with self.session.begin_nested():
+                        await catalog.merge_variants(
+                            variant_id,
+                            twin,
+                            reason="its listings name another maker's line, whose entry it is",
+                            decided_by="rule",
+                        )
+                    merged += 1
+                except AppError as failure:
+                    reasons[failure.code] += 1
+            except AppError as error:
+                reasons[error.code] += 1
+
         # Axes left for the next pass mean names wait for it: the limit cut 574 fills at 500
         # on 26.09.2026, and the rest would have been renamed with their axis still missing.
         stale = await self._stale_names(limit=limit) if len(axes) < limit else []
@@ -1555,6 +1647,7 @@ class MatchingService:
             rehomed=rehomed,
             recased=recased,
             realigned=realigned,
+            rebranded=rebranded,
             hidden=hidden,
             deleted=deleted,
             **dict(reasons),
@@ -1566,6 +1659,7 @@ class MatchingService:
             rehomed=rehomed,
             recased=recased,
             realigned=realigned,
+            rebranded=rebranded,
             hidden=hidden,
             deleted=deleted,
             refused=sum(reasons.values()),
@@ -1880,6 +1974,38 @@ class MatchingService:
             await self.session.flush()
             return int(twin), False
         return made.id, True
+
+    async def _misbranded(self, *, limit: int) -> list[tuple[int, int]]:
+        """Entries of a maker with lines whose every listing names the same one of them."""
+        parents = list(
+            await self.session.scalars(
+                select(Brand.parent_id).where(Brand.parent_id.is_not(None)).distinct()
+            )
+        )
+        if not parents:
+            return []
+        rows = await self.session.execute(
+            select(Variant.id, Variant.brand_id, Offer.title)
+            .join(OfferMatch, OfferMatch.variant_id == Variant.id)
+            .join(Offer, Offer.id == OfferMatch.offer_id)
+            .where(
+                OfferMatch.superseded_at.is_(None),
+                Variant.is_visible.is_(True),
+                Variant.brand_id.in_(parents),
+            )
+            .order_by(Variant.id)
+        )
+        titles: dict[tuple[int, int], list[str]] = {}
+        for variant_id, brand_id, title in rows.all():
+            titles.setdefault((variant_id, brand_id), []).append(title or "")
+        found: list[tuple[int, int]] = []
+        for (variant_id, brand_id), on_it in titles.items():
+            named = {await self.line_named_in(brand_id, title.split()) for title in on_it}
+            if len(named) == 1 and None not in named:
+                found.append((variant_id, named.pop().id))
+                if len(found) >= limit:
+                    break
+        return found
 
     async def _stale_axes(self, *, limit: int) -> list[tuple[int, int, dict[str, Any]]]:
         """Axes an entry holds that every listing on it now reads another way, and enum axes

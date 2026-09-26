@@ -452,6 +452,10 @@ class Brand(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(String(64), unique=True)
     canonical_name: Mapped[str] = mapped_column(String(200))
+    # The maker this one is a line of, where shops write the parent in the brand field and
+    # the line in the title: POCO under Xiaomi, Hammer under myPhone, RugOne under Ulefone.
+    # A listing resolved to the parent whose title names the line is the line's.
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(TimestampTZ, server_default=func.now())
 
     __table_args__ = (CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'", name="slug_shape"),)

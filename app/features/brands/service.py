@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import audit
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.db.models import (
     Brand,
     BrandAlias,
@@ -99,6 +99,9 @@ class BrandService:
             brand.canonical_name = payload.canonical_name
         if payload.slug is not None:
             brand.slug = payload.slug
+        if "parent_id" in sent:
+            await self._check_parent(brand, payload.parent_id)
+            brand.parent_id = payload.parent_id
 
         try:
             await self.session.flush()
@@ -302,6 +305,19 @@ class BrandService:
             raise NotFoundError(f"Brand {brand_id} not found")
         return _brand_row(row)
 
+    async def _check_parent(self, brand: Brand, parent_id: int | None) -> None:
+        """A line of one maker, whose own parent is not the line: one level, no loops."""
+        if parent_id is None:
+            return
+        if parent_id == brand.id:
+            raise ValidationError("A brand is not a line of itself", code="parent_is_self")
+        parent = await self._brand(parent_id)
+        if parent.parent_id is not None:
+            raise ValidationError(
+                f"{parent.canonical_name} is itself a line of another maker; name that one",
+                code="parent_is_a_line",
+            )
+
     async def _brand(self, brand_id: int) -> Brand:
         brand = await self.session.get(Brand, brand_id)
         if brand is None:
@@ -340,6 +356,7 @@ def _brand_row(row: Any) -> BrandRow:
         id=brand.id,
         slug=brand.slug,
         canonical_name=brand.canonical_name,
+        parent_id=brand.parent_id,
         products_count=row.products_count,
         variants_count=row.variants_count,
         offers_count=row.offers_count,

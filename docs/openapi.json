@@ -984,6 +984,18 @@
             "title": "Id",
             "type": "integer"
           },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The maker this one is a line of: POCO's is Xiaomi",
+            "title": "Parent Id"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -1044,6 +1056,18 @@
             "title": "Offers Count",
             "type": "integer"
           },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The maker this one is a line of: POCO's is Xiaomi",
+            "title": "Parent Id"
+          },
           "products_count": {
             "title": "Products Count",
             "type": "integer"
@@ -1085,6 +1109,17 @@
               }
             ],
             "title": "Canonical Name"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
           },
           "slug": {
             "anyOf": [
@@ -6801,6 +6836,11 @@
             },
             "title": "Reasons",
             "type": "object"
+          },
+          "rebranded": {
+            "default": 0,
+            "title": "Rebranded",
+            "type": "integer"
           },
           "recased": {
             "default": 0,

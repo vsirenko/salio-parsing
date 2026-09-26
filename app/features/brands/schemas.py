@@ -59,6 +59,9 @@ class BrandRead(BrandBase):
 
     id: int
     slug: str
+    parent_id: int | None = Field(
+        default=None, description="The maker this one is a line of: POCO's is Xiaomi"
+    )
 
 
 # What a list of brands may be sorted by, `?sort=`.
@@ -101,6 +104,8 @@ class BrandUpdate(BaseModel):
 
     canonical_name: str | None = Field(default=None, min_length=1, max_length=200)
     slug: str | None = Field(default=None, min_length=1, max_length=64)
+    # Null takes it away; left out, it stays.
+    parent_id: int | None = None
 
     @field_validator("slug")
     @classmethod

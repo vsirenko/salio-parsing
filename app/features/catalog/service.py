@@ -154,6 +154,24 @@ class CatalogService:
         audit.record_changes(**sent)
         return await self._read_product(product.id)
 
+    async def move_to_brand(self, variant_id: int, brand_id: int) -> None:
+        """The entry, and its part numbers, filed under another maker.
+
+        The brand is in the title and in the identity key, so both are made again; where the
+        key turns out to be one another entry holds, `identity_taken` names it for a merge.
+        """
+        variant = await self._variant(variant_id)
+        await self._brand(brand_id)
+        audit.set_target("variant", variant_id)
+        moved_from = variant.brand_id
+        variant.brand_id = brand_id
+        await self.session.execute(
+            update(VariantMpn).where(VariantMpn.variant_id == variant_id).values(brand_id=brand_id)
+        )
+        await self._regenerate(variant)
+        await self.session.flush()
+        audit.record_changes(brand_id=brand_id, from_brand_id=moved_from)
+
     async def retitle_brand(self, brand_id: int) -> int:
         """Every family and entry of a maker titled again from its name as it is now.
 
