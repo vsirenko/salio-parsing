@@ -63,6 +63,19 @@ The reason this repository exists, and none of it is built. The shape it should 
 and the questions that have to be answered with real data first, are written down in
 [docs/parser-design.md](docs/parser-design.md).
 
+- [ ] **An entry can hold listings of another model or another colour, and nothing parts
+      them.** On a copy of production on 26.09.2026, after the Samsung registry was made
+      whole, 22 Samsung entries held 40 listings whose registry model is another one — mostly
+      `Galaxy A16 5G` and `Galaxy A17 5G` on the 4G phone's entry — and 80 held 164 listings of
+      another colour (`Galaxy A17` grey 128 holds blue and light-blue ones). `POST
+      /matching/split` parts an axis an entry lacks; a split by model and by a held axis would
+      be the same operation over a different disagreement, and the colour needs the shades
+      that are one colour (`light-blue`, `blue`) told from the ones that are not first.
+- [ ] **A listing with no brand field gets no model from the registry where another maker
+      has a shorter name in its title.** m79's `Smartfon Samsung Z Flip 8 5G` finds `z flip 8`
+      on Samsung's page and `flip` on myPhone's and Nubia's; three answers, so none
+      (`devices.from_the_registry`). Across pages the longest should win, as it does within one.
+
 - [ ] **Samsung's Enterprise Edition is not an axis, so it lands on the ordinary entry.** It
       is the same hardware sold as its own product: its own barcodes (`8806099108724` against
       `8806097827221` for an S26 Ultra 256 black), its own part-number suffix (`SM-S948BZKDEEE`
