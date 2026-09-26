@@ -71,10 +71,9 @@ and the questions that have to be answered with real data first, are written dow
       /matching/split` parts an axis an entry lacks; a split by model and by a held axis would
       be the same operation over a different disagreement, and the colour needs the shades
       that are one colour (`light-blue`, `blue`) told from the ones that are not first.
-- [ ] **A listing with no brand field gets no model from the registry where another maker
-      has a shorter name in its title.** m79's `Smartfon Samsung Z Flip 8 5G` finds `z flip 8`
-      on Samsung's page and `flip` on myPhone's and Nubia's; three answers, so none
-      (`devices.from_the_registry`). Across pages the longest should win, as it does within one.
+- [x] **A listing with no brand field gets no model from the registry where another maker
+      has a shorter name in its title.** Across pages the longest wins since 26.09.2026
+      (`devices.from_the_registry`): m79's `Apple iPhone Air 6.5` and `Samsung Z Flip 8 5G`.
 
 - [ ] **Samsung's Enterprise Edition is not an axis, so it lands on the ordinary entry.** It
       is the same hardware sold as its own product: its own barcodes (`8806099108724` against

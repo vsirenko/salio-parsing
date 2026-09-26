@@ -32,7 +32,7 @@ from app.features.offers.normalization.rules import BRAND, Rule, Ruleset, Vocabu
 
 CATEGORY = "phones"
 BRAND_KEY = "apple"
-VERSION = "apple-phones-2"
+VERSION = "apple-phones-3"
 
 # `MG014HX/A`: five of configuration, two of market, then the suffix Apple puts on
 # everything it sells at retail.
@@ -74,6 +74,26 @@ def _configuration(
             "apple_market": found.group(2),
         }
     }
+
+
+# Apple numbers the iPhone SE by generation and the shops by year: 2016 is the first, 2020
+# the second, 2022 the third — Apple's own model list.
+SE_GENERATIONS = {"2016": "1st", "2020": "2nd", "2022": "3rd"}
+_SE = re.compile(r"^iphone se$", re.IGNORECASE)
+_YEAR = re.compile(r"(?<!\d)(2016|2020|2022)(?!\d)")
+
+
+def _se_generation(
+    payload: dict[str, Any], fields: dict[str, Any], vocabulary: Vocabulary
+) -> dict[str, Any]:
+    """`iPhone SE` with the generation its year names, where the title names exactly one."""
+    model = str(fields.get("model") or "").strip()
+    if not _SE.match(model):
+        return {}
+    years = set(_YEAR.findall(str(fields.get("title") or "")))
+    if len(years) != 1:
+        return {}
+    return {"model": f"iPhone SE ({SE_GENERATIONS[years.pop()]} generation)"}
 
 
 RULESET = register(
@@ -148,6 +168,20 @@ RULESET = register(
                     " than none: a colour mapped wrongly splits one product into several,"
                     " confidently."
                 ),
+            ),
+            Rule(
+                id="apple-se-generation-from-the-year",
+                layer=BRAND,
+                why=(
+                    "Apple has sold three iPhone SEs and names them by generation; the shops"
+                    " name them by year, and bm writes it after the capacity — `Apple iPhone"
+                    " SE 256GB (2022) Starlight MMXN3` — where no registry name can reach it."
+                    " On 26.09.2026 three such entries sat under a bare `iPhone SE` beside"
+                    " `iPhone SE 3` and `iPhone SE (2022) 5G`, one phone in three families."
+                    " The year is Apple's: 2016 the first, 2020 the second, 2022 the third."
+                    " Only where the title names exactly one of them."
+                ),
+                body=_se_generation,
             ),
         ),
     ),

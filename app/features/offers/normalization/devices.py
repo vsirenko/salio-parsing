@@ -270,7 +270,14 @@ def from_the_registry(
     for text in (fields.get("title"), fields.get("model")):
         if not text:
             continue
-        found = {name for page in pages if (name := models.from_title(str(text), page))}
+        # Across pages the longest wins, as it does within one: m79 states no maker, and
+        # `Apple iPhone Air 6.5 1TB` holds Apple's `iPhone Air` and Nubia's `Air`, `Samsung
+        # Z Flip 8 5G` Samsung's `Z Flip 8` and myPhone's `Flip`. Asked to agree, the pages
+        # gave nothing, and the shop's cut stood — `iPhone Air 6.5`, `Z Flip 8 5G`. Two
+        # different names of the same length still decide nothing.
+        scored = [models.longest_in_title(str(text), page) for page in pages]
+        longest = max((length for name, length in scored if name), default=0)
+        found = {name for name, length in scored if name and length == longest}
         if len(found) == 1:
             return {"model": found.pop()}
     return {}
