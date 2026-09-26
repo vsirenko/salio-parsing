@@ -115,11 +115,11 @@ def test_the_version_names_what_was_applied():
     assert version_for(KSENUKAI, shop_slug="ksenukai") == "generic-3+ksenukai-shop-1+ksenukai-7"
     assert (
         version_for(KSENUKAI, shop_slug="ksenukai", category=PHONES)
-        == "generic-3+phones-17+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-18+ksenukai-shop-1+ksenukai-7"
     )
     assert (
         read(item(), source_slug=KSENUKAI, shop_slug="ksenukai", category=PHONES)["ruleset_version"]
-        == "generic-3+phones-17+ksenukai-shop-1+ksenukai-7"
+        == "generic-3+phones-18+ksenukai-shop-1+ksenukai-7"
     )
 
 
@@ -289,7 +289,7 @@ def test_the_brand_layer_selects_itself_from_the_reading():
         {"name": "Apple iPhone", "brand": "Apple", "mpn": "MG014HX/A"},
         category=PHONES,
     )
-    assert fields["ruleset_version"] == "generic-3+phones-17+apple-phones-3"
+    assert fields["ruleset_version"] == "generic-3+phones-18+apple-phones-3"
     assert fields["identity"]["apple_config"] == "MG014"
     assert fields["identity"]["apple_market"] == "HX"
 
@@ -570,36 +570,36 @@ def test_collapsing_apple_market_codes_is_declared_and_refused():
 # new fingerprint here, in the same commit — two values that must move together, so
 # forgetting one is loud instead of silent.
 FINGERPRINTS = {
-    "apple-laptops-16": "4a957c3f1ad4",
+    "apple-laptops-17": "4f754e003940",
     "apple-phones-3": "67cd0bfb1e41",
     "apple-tablets-3": "c1d38b617cc6",
     "bigbox-10": "4497939fdfce",
-    "bigbox-laptops-13": "714a0cd03ca5",
+    "bigbox-laptops-14": "1ef31b1ef098",
     "bigbox-shop-1": "a1194a23b2e7",
     "bigbox-tablets-4": "2cf6e57ea6f2",
     "bm-4": "6117d7e812a9",
-    "bm-laptops-10": "2a56d901cc46",
+    "bm-laptops-11": "e29e210d4c5f",
     "bm-shop-1": "3d09a6688700",
     "bm-tablets-1": "24d34a1063df",
     "cec-3": "958bc58c1fb0",
-    "cec-laptops-6": "25af56b7f1b1",
+    "cec-laptops-7": "dfaf700cbcee",
     "cec-tablets-2": "336ec202acc2",
     "dateks-5": "0acd87a6666d",
-    "dateks-laptops-10": "461ec8514412",
+    "dateks-laptops-11": "b29c5bf60751",
     "dateks-shop-1": "76bf8766fb11",
     "dateks-tablets-1": "abe9d2e77bfe",
     "discover-6": "f6aa33b230a2",
-    "discover-laptops-6": "d24bb31c5562",
+    "discover-laptops-7": "68fe627e6ae9",
     "discover-shop-1": "6065096d8d22",
     "discover-tablets-3": "f8cf45775b77",
-    "euronics-laptops-10": "978ce1209e79",
+    "euronics-laptops-11": "1c2a843f9a72",
     "euronics-shop-1": "07e9d1415e04",
     "euronics-tablets-1": "0deff7ac20bc",
     "google-phones-3": "b13ca41b33fa",
     "ksenukai-7": "c39ae807fae8",
     "ksenukai-shop-1": "b5a073020a15",
     "ksenukai-tablets-2": "343e6a39fd31",
-    "laptops-13": "e5561c261829",
+    "laptops-14": "a6d6530276d2",
     "m79-8": "43b109729576",
     "m79-shop-1": "ad962ef2618c",
     "m79-tablets-1": "ca0ff57d51a2",
@@ -610,14 +610,14 @@ FINGERPRINTS = {
     "onea-shop-1": "24e6184df567",
     "onea-tablets-2": "9d9c0dc1733a",
     "oneplus-phones-1": "29eaabd5e1ad",
-    "phones-17": "adc129e4196d",
-    "rdveikals-9": "050ef8c56fa8",
-    "rdveikals-laptops-12": "db9eef497e65",
+    "phones-18": "b6ed6af232fa",
+    "rdveikals-10": "f2543737c502",
+    "rdveikals-laptops-13": "93d5ed5b9b6d",
     "rdveikals-shop-1": "e0b3a42600f7",
-    "rdveikals-tablets-4": "30ba6c43b949",
+    "rdveikals-tablets-5": "70b1cc9b65a2",
     "samsung-phones-2": "9653d4e6a46a",
     "samsung-tablets-1": "dd93c1347519",
-    "tablets-13": "9616fb89c79c",
+    "tablets-14": "6fee75557751",
     "tet-4": "751b4c587085",
     "tet-shop-1": "3129e8453377",
     "tet-tablets-1": "7aabd390e9ed",
@@ -733,9 +733,9 @@ def test_a_ruleset_is_hashed_over_every_module_its_rules_come_from(monkeypatch):
     """`laptops` opens with a rule from `devices`; its own module has to count as well."""
     from app.features.offers.normalization.categories import laptops
 
-    before = _fingerprints()["laptops-13"]
+    before = _fingerprints()["laptops-14"]
     monkeypatch.setattr(laptops, "_QUOTES", laptops._QUOTES + "\u2033")
-    assert _fingerprints()["laptops-13"] != before
+    assert _fingerprints()["laptops-14"] != before
 
 
 def test_every_ruleset_is_fingerprinted():
@@ -1046,3 +1046,26 @@ def test_an_iphone_se_is_named_by_the_generation_its_year_says():
     # No year, or two: nothing is guessed.
     assert model("Apple iPhone SE 64GB Black") == "iPhone SE"
     assert model("Apple iPhone SE 2020 / 2022 case bundle") == "iPhone SE"
+
+
+def test_a_model_field_is_looked_up_with_the_maker_in_front():
+    """Names that begin with a bare number are entered under the maker — `hmd 110 4g` —
+    because `15 5g` alone was found in `… Android 15 5G …`. rdveikals's model field says
+    `110 4G (TA-1662)`, no maker, and has to meet the name all the same."""
+    words = Vocabulary(
+        models={"hmd": {"hmd 110 4g": "110 4G"}, "xiaomi": {"xiaomi 15 5g": "15"}},
+        brand_names=frozenset({"hmd", "xiaomi"}),
+    )
+    fields = read(
+        {"name": "HMD 110 4G (TA-1662) Blue", "brand": "HMD", "model": "110 4G (TA-1662)"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert fields["model"] == "110 4G"
+    # And a bare number in someone else's title finds nothing.
+    other = read(
+        {"name": "Nothing 3a Lite Dual SIM Android 15 5G 8 GB 128 GB"},
+        category=PHONES,
+        vocabulary=words,
+    )
+    assert other.get("model") != "15"

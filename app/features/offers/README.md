@@ -215,6 +215,11 @@ and **across those pages the longest name wins, as it does within one**: m79 sta
 and `Apple iPhone Air 6.5` holds Apple's `iPhone Air` and Nubia's `Air`, `Samsung Z Flip 8
 5G` Samsung's `Z Flip 8` and myPhone's `Flip`. Asked only to agree, the pages gave nothing
 and m79's cut stood — `iPhone Air 6.5`, `iPhone 12 mini 5.4` — until 26.09.2026.
+**A name that begins with a bare number is entered with the maker in front** — `hmd 110 4g`,
+`xiaomi 15` — because the bare form is found inside other titles: `15 5g` read m79's `Nothing 3a
+Lite … Android 15 5G` as a Xiaomi. A title carries the maker, a shop's model field does not
+(rdveikals's `110 4G (TA-1662)`), so the model field is looked up with the stated maker in
+front of it.
 Laptops read through the same rule since `laptops-8`, for a different reason: their
 subtraction is clean, but a maker's name comes in more than one word order — Dell's
 `Pro 14 Essential` 78 times beside `Pro Essential 14` 17, `16 Plus` beside `Plus 16` — and

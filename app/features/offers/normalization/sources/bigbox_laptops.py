@@ -18,7 +18,7 @@ from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocab
 # distributor writes, as a code just before the operating system — `… 512 SSD EN W11P` — on
 # 127 (`EN` 99, `NOR` 21, `LV` 4, `DE` 3).
 LAPTOPS_SLUG = "bigbox-laptops"
-LAPTOPS_VERSION = "bigbox-laptops-13"
+LAPTOPS_VERSION = "bigbox-laptops-14"
 KEYBOARD_FIELD = "attribute_string_1171"
 _BEFORE_THE_SYSTEM = re.compile(
     r"\b([A-Z]{2,3})\s+(?:W1[01]\w*|Win\s?1[01]\w*|NoOS|FreeDOS|DOS|Linux)\b"

@@ -267,7 +267,7 @@ def from_the_registry(
         return {}
     else:
         pages = list(vocabulary.models.values())
-    for text in (fields.get("title"), fields.get("model")):
+    for text in (fields.get("title"), _with_the_maker(fields)):
         if not text:
             continue
         # Across pages the longest wins, as it does within one: m79 states no maker, and
@@ -281,6 +281,21 @@ def from_the_registry(
         if len(found) == 1:
             return {"model": found.pop()}
     return {}
+
+
+def _with_the_maker(fields: dict[str, Any]) -> str | None:
+    """The shop's model field with the maker it stated in front, where it is not there.
+
+    A name that begins with a bare number is entered under the maker's name — `hmd 110 4g`,
+    `xiaomi 15` — because the bare form is found inside other titles: m79's `… Android 15
+    5G …` of a Nothing phone read as Xiaomi's `15`. A title carries the maker; a model field
+    does not — rdveikals's `110 4G (TA-1662)` — so it is looked up as the maker writes it.
+    """
+    model = str(fields.get("model") or "").strip()
+    maker = str(fields.get("brand_raw") or "").strip()
+    if not model or not maker or model.casefold().startswith(maker.casefold()):
+        return model or None
+    return f"{maker} {model}"
 
 
 def _maker_key(raw: Any) -> str | None:
