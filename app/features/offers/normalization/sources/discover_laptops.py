@@ -12,7 +12,7 @@ from app.features.offers.normalization.categories import laptops
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 LAPTOPS_SLUG = "discover-laptops"
-LAPTOPS_VERSION = "discover-laptops-5"
+LAPTOPS_VERSION = "discover-laptops-6"
 
 # Apple's whole part number, region and all: `MDVT4ZE/A`. The five-character stem the shop
 # writes on older ones — `(MR7K3)` — names no one configuration and is left alone.

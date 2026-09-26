@@ -210,7 +210,11 @@ registry, knowing only the shorter name, filed 21 listings under the neighbourin
 gap in the registry has to read as a gap. For the same reason a stated maker the catalogue
 knows but the registry has no page for reads nothing from it, where it used to read every
 maker's page: ZTE has none, Hammer's holds `Blade`, and four ZTE phones were one entry. A
-brand field naming no maker we know (`Nothing Phone`, a reseller) still opens every page.
+brand field naming no maker we know (`Nothing Phone`, a reseller) still opens every page,
+and **across those pages the longest name wins, as it does within one**: m79 states no maker,
+and `Apple iPhone Air 6.5` holds Apple's `iPhone Air` and Nubia's `Air`, `Samsung Z Flip 8
+5G` Samsung's `Z Flip 8` and myPhone's `Flip`. Asked only to agree, the pages gave nothing
+and m79's cut stood — `iPhone Air 6.5`, `iPhone 12 mini 5.4` — until 26.09.2026.
 Laptops read through the same rule since `laptops-8`, for a different reason: their
 subtraction is clean, but a maker's name comes in more than one word order — Dell's
 `Pro 14 Essential` 78 times beside `Pro Essential 14` 17, `16 Plus` beside `Plus 16` — and

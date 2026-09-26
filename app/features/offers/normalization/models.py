@@ -43,7 +43,12 @@ VARIANT_WORDS = frozenset(
 
 
 def from_title(title: str, names: Mapping[str, str]) -> str | None:
-    """The longest of a maker's names found whole in the title, or nothing.
+    """The longest of a maker's names found whole in the title, or nothing."""
+    return longest_in_title(title, names)[0]
+
+
+def longest_in_title(title: str, names: Mapping[str, str]) -> tuple[str | None, int]:
+    """The longest of a maker's names found whole in the title, and how many words it is.
 
     Whole words only, in order: `galaxy s26` is found in `Samsung Galaxy S26 S942 5G Dual
     Sim` and not in `Galaxy S26+ 256GB`, because there the word is `s26+`. That is what lets
@@ -63,11 +68,11 @@ def from_title(title: str, names: Mapping[str, str]) -> str | None:
     tried against the title: a few hundred lookups per title however large the registry.
     """
     if not title or not names:
-        return None
+        return None, 0
     try:
         words = normalize_model_name(title).split()
     except ValueError:
-        return None
+        return None, 0
 
     longest = 0
     found: set[str] = set()
@@ -92,7 +97,7 @@ def from_title(title: str, names: Mapping[str, str]) -> str | None:
                 longest, found = length, {model}
             elif length == longest:
                 found.add(model)
-    return found.pop() if len(found) == 1 else None
+    return (found.pop(), longest) if len(found) == 1 else (None, longest)
 
 
 def _continued(words: list[str], end: int) -> bool:

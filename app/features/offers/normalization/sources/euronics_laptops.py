@@ -13,7 +13,7 @@ from app.features.offers.normalization.categories import laptops
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 LAPTOPS_SLUG = "euronics-laptops"
-LAPTOPS_VERSION = "euronics-laptops-9"
+LAPTOPS_VERSION = "euronics-laptops-10"
 CPU_FIELDS = ("processor producer", "processor type", "processor")
 
 

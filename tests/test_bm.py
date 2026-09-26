@@ -265,7 +265,7 @@ def test_a_marketing_name_resolves_to_nothing():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"] == "generic-3+phones-16+bm-shop-1+bm-4"
+    assert reading()["ruleset_version"] == "generic-3+phones-17+bm-shop-1+bm-4"
 
 
 # --- tablets: the same GraphQL under their own leaf ---
