@@ -31,7 +31,7 @@ from app.features.offers.normalization.rules import (
 )
 
 SLUG = "laptops"
-VERSION = "laptops-13"
+VERSION = "laptops-14"
 
 CPU_KEY = "cpu"
 RAM_KEY = "ram_mb"

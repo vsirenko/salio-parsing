@@ -13,7 +13,7 @@ from app.features.offers.normalization.devices import STORAGE_KEY, megabytes
 from app.features.offers.normalization.rules import SOURCE, Rule, Ruleset, Vocabulary, register
 
 SLUG = "rdveikals-phones"
-VERSION = "rdveikals-9"
+VERSION = "rdveikals-10"
 
 # `256GB`, `1 TB`, `128 MB`. Where the model stops and the configuration begins.
 SIZE = re.compile(r"\b\d+(?:[.,]\d+)?\s?(?:TB|GB|MB)\b", re.IGNORECASE)
@@ -129,7 +129,7 @@ RULESET = register(
 # none without a rule of this channel's own; the size and the connectivity words are the
 # tablet category's to take off and put back.
 TABLETS_SLUG = "rdveikals-tablets"
-TABLETS_VERSION = "rdveikals-tablets-4"
+TABLETS_VERSION = "rdveikals-tablets-5"
 
 # `16GB 512SSD`, `32GB 1TBSSD`, `16GB 1SSD`: the drive of a tablet that is a computer, written
 # with no unit of its own, so the only size a title reader finds is the working memory.

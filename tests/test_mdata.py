@@ -251,7 +251,7 @@ def test_a_record_the_shop_never_described_is_cut_at_the_configuration():
 
 
 def test_the_ruleset_version_says_what_was_applied():
-    assert reading()["ruleset_version"].startswith("generic-3+phones-17+mdata-shop-1+mdata-4")
+    assert reading()["ruleset_version"].startswith("generic-3+phones-18+mdata-shop-1+mdata-4")
 
 
 def test_the_tablet_channel_asks_for_its_own_category():

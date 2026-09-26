@@ -68,7 +68,7 @@ def test_connectivity_leaves_the_model_and_takes_its_plus_with_it():
 
 
 def test_the_version_says_what_was_applied():
-    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-13"
+    assert read({"name": "x"}, category=TABLETS)["ruleset_version"] == "generic-3+tablets-14"
 
 
 def test_a_quote_or_a_table_rule_at_the_edge_is_not_part_of_the_model():
