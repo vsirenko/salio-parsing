@@ -221,6 +221,16 @@ takes the key of the entry that differs from it only there, and on 26.09.2026 th
 Enterprise Edition, renamed before its new `edition` was filled, merged into the ordinary
 256 and 512 black.
 
+**A maker's line is the brand its title names.** Where a brand resolved — from the field, the
+title or a judgement — to a maker with lines (`brands.parent_id`), a title naming exactly one
+of them by its aliases (not a `line`-kind alias, which is safe only in a field) makes the
+listing the line's: `Xiaomi` in the field, `Xiaomi Poco F9 Ultra` in the title, is POCO. It
+used to be that a field that resolved was never weighed against the title, and 70 POCO, 17
+Hammer and nine REDMAGIC listings sat under their parents. A rebuild moves an entry of a
+parent whose every listing names the same line (`rebranded`) — with its part numbers, into
+the line's family, merged where the line already has the entry — before the names, because
+the brand is in the identity key.
+
 **A new axis can leave an entry holding both of its values, and a split parts them.** When
 the edition became an axis, 51 Samsung entries held the Enterprise Edition and the ordinary
 phone together — 143 listings of the one beside 402 of the other, 1459 € and 1039 € on one

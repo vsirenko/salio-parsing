@@ -2625,3 +2625,81 @@ def test_an_entry_holding_both_values_of_a_new_axis_is_split_by_barcode(client):
     assert storage["id"] in {row["attribute_id"] for row in axes}, axes
     again = client.post("/api/admin/matching/split", headers=auth(token)).json()
     assert again["found"] == 0, again
+
+
+def a_maker_with_a_line(client, token):
+    """Xiaomi, and POCO as its line: shops write the one in the field, the other in the title."""
+    xiaomi = post(
+        client, token, "/api/admin/brands", {"slug": "xiaomi", "canonical_name": "Xiaomi"}
+    )
+    post(client, token, f"/api/admin/brands/{xiaomi['id']}/aliases", {"alias": "Xiaomi"})
+    poco = post(client, token, "/api/admin/brands", {"slug": "poco", "canonical_name": "POCO"})
+    post(client, token, f"/api/admin/brands/{poco['id']}/aliases", {"alias": "Poco"})
+    return xiaomi, poco
+
+
+def test_a_line_is_the_maker_its_title_names_when_the_field_names_the_parent(client):
+    """70 POCO listings said `Xiaomi` in the brand field and `Xiaomi Poco F9 Ultra` in the
+    title, and were filed under Xiaomi: a field that resolved was never weighed."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    a_storage_axis(client, token, category["id"])
+    xiaomi, poco = a_maker_with_a_line(client, token)
+
+    def listing(external_id):
+        return offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": "Xiaomi Poco F9 Ultra 12GB/256GB Dark Cherry",
+                "brand": "Xiaomi",
+                "model": "F9 Ultra",
+                "attributes": {"storage": "256 GB"},
+            },
+            external_id=external_id,
+        )
+
+    # Before the line is declared, the field decides.
+    before = promote(client, token, listing("P-1"))["variant_id"]
+    entry = client.get(f"/api/admin/variants/{before}", headers=auth(token)).json()
+    assert entry["brand"]["id"] == xiaomi["id"]
+
+    declared = client.patch(
+        f"/api/admin/brands/{poco['id']}", headers=auth(token), json={"parent_id": xiaomi["id"]}
+    )
+    assert declared.status_code == 200, declared.text
+    assert declared.json()["parent_id"] == xiaomi["id"]
+
+    # A new listing is looked for under the line, where nothing is yet: it waits.
+    second = listing("P-2")
+    assert run_on(client, token, second)["matched"] is False
+    # The rebuild moves the entry made before; then the new listing finds it.
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert report["rebranded"] == 1, report
+    moved = client.get(f"/api/admin/variants/{before}", headers=auth(token)).json()
+    assert moved["brand"]["id"] == poco["id"]
+    assert moved["title"].startswith("POCO F9 Ultra")
+    assert run_on(client, token, second)["variant_id"] == before
+    again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert again["rebranded"] == 0
+
+
+def test_a_line_is_one_level_and_not_its_own(client):
+    token = admin_token(client)
+    xiaomi, poco = a_maker_with_a_line(client, token)
+    own = client.patch(
+        f"/api/admin/brands/{poco['id']}", headers=auth(token), json={"parent_id": poco["id"]}
+    )
+    assert own.status_code == 422 and own.json()["error"]["code"] == "parent_is_self"
+    client.patch(
+        f"/api/admin/brands/{poco['id']}", headers=auth(token), json={"parent_id": xiaomi["id"]}
+    )
+    chained = client.patch(
+        f"/api/admin/brands/{xiaomi['id']}", headers=auth(token), json={"parent_id": poco["id"]}
+    )
+    assert chained.status_code == 422 and chained.json()["error"]["code"] == "parent_is_a_line"
+    cleared = client.patch(
+        f"/api/admin/brands/{poco['id']}", headers=auth(token), json={"parent_id": None}
+    )
+    assert cleared.json()["parent_id"] is None

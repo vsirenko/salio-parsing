@@ -344,7 +344,7 @@ class Scheduler:
             report["renamed"] += rebuilt.renamed
             report["merged"] += rebuilt.merged
             report["realigned"] += rebuilt.realigned
-            if not (rebuilt.found or rebuilt.realigned or rebuilt.merged):
+            if not (rebuilt.found or rebuilt.realigned or rebuilt.merged or rebuilt.rebranded):
                 break
         split = await matching.split_by_axis(limit=SETTLE_LIMIT)
         await session.commit()

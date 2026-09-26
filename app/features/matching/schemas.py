@@ -348,6 +348,8 @@ class RenameReport(BaseModel):
     recased: int = 0
     # Entry axes set to what every listing on the entry now reads.
     realigned: int = 0
+    # Entries moved to the line of their maker that every listing on them names.
+    rebranded: int = 0
     # Families left with nothing in them, hidden.
     hidden: int = 0
     # Hidden families with nothing in them and nothing pointing at them, deleted.

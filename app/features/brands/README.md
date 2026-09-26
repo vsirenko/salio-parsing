@@ -102,6 +102,14 @@ known name it would win. Nothing is collapsed by the seed — `Galaxy S26 Ultra 
 over: Samsung sells a `Galaxy A16` and a `Galaxy A16 5G` as different phones. Making one an
 alias of the other is a decision, entered by hand.
 
+**A brand can be a line of another** (`parent_id`): POCO of Xiaomi, Hammer of myPhone, RugOne
+of Ulefone, nubia of ZTE, Honor of Huawei, Nokia of HMD. Shops write the parent in the brand
+field and the line in the title — 70 POCO listings said `Xiaomi` and `Xiaomi Poco F9 Ultra` on
+26.09.2026 — so the matcher takes the line a title names wherever the maker resolved to its
+parent, and a rebuild moves the parent's entries whose listings all name one line. One level:
+a line's parent is not itself a line (`parent_is_a_line`), and a brand is not its own
+(`parent_is_self`). `null` takes it away.
+
 **Registry work moves no ruleset version, so it asks for a re-read itself.** A hundred rows
 entered here change no code, so nothing looks stale and nothing is recomputed — on
 26.09.2026 renaming a thousand Apple listings took a laptop re-reading twenty thousand over
