@@ -154,6 +154,28 @@ class CatalogService:
         audit.record_changes(**sent)
         return await self._read_product(product.id)
 
+    async def retitle_brand(self, brand_id: int) -> int:
+        """Every family and entry of a maker titled again from its name as it is now.
+
+        A title is composed when something it is built from changes, and the maker's name is
+        one of those things: renamed `CAT` to `Cat`, every entry went on reading `CAT S75`
+        until something else happened to touch it. Returns how many were retitled.
+        """
+        brand = await self._brand(brand_id)
+        products = (
+            await self.session.scalars(select(Product).where(Product.brand_id == brand_id))
+        ).all()
+        for product in products:
+            product.title = compose_title(brand.canonical_name, product.model, [])
+            product.slug = slugify(product.title, entity_id=product.id)
+        variants = (
+            await self.session.scalars(select(Variant).where(Variant.brand_id == brand_id))
+        ).all()
+        for variant in variants:
+            await self._regenerate(variant)
+        await self.session.flush()
+        return len(products) + len(variants)
+
     # --- variants ---
 
     async def list_variants(
