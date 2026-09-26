@@ -2112,6 +2112,88 @@ def test_an_entry_s_axis_follows_what_every_listing_on_it_now_reads(client):
     assert again["realigned"] == 0
 
 
+def test_a_new_axis_reaches_the_entries_made_before_it_and_before_their_names(client):
+    """The edition became an axis after the S26 Ultra Enterprise Edition had an entry of its
+    own under that name. Renamed first, while the axis was still missing, it took the key of
+    the ordinary 256 and merged into it: 1039 € and 1459 € on one card."""
+    token = admin_token(client)
+    _, source, category, _ = a_shop_we_can_build_from(client, token)
+    storage = a_storage_axis(client, token, category["id"])
+    samsung = post(
+        client, token, "/api/admin/brands", {"slug": "samsung", "canonical_name": "Samsung"}
+    )
+    post(client, token, f"/api/admin/brands/{samsung['id']}/aliases", {"alias": "Samsung"})
+
+    def listing(external_id, part_number):
+        return offer_from(
+            client,
+            token,
+            source["id"],
+            {
+                "name": f"Samsung Galaxy S26 Ultra 256GB Black {part_number}",
+                "brand": "Samsung",
+                "model": "Galaxy S26 Ultra",
+                "attributes": {"storage": "256 GB"},
+            },
+            external_id=external_id,
+        )
+
+    ordinary = promote(client, token, listing("S-1", "SM-S948BZKDEUE"))["variant_id"]
+    enterprise = post(
+        client,
+        token,
+        "/api/admin/variants",
+        {
+            "brand_id": samsung["id"],
+            "category_id": category["id"],
+            "model": "Galaxy S26 Ultra Enterprise Edition",
+        },
+    )["id"]
+    client.put(
+        f"/api/admin/variants/{enterprise}/attributes",
+        headers=auth(token),
+        json={"attribute_id": storage["id"], "value_num": "262144"},
+    )
+    placed = client.put(
+        f"/api/admin/offers/{listing('S-2', 'SM-S948BZKDEEE')}/match",
+        headers=auth(token),
+        json={"variant_id": enterprise},
+    )
+    assert placed.status_code == 200, placed.text
+
+    edition = post(
+        client,
+        token,
+        "/api/admin/attributes",
+        {"key": "edition", "name": "Edition", "value_type": "enum"},
+    )
+    post(
+        client,
+        token,
+        f"/api/admin/attributes/{edition['id']}/values",
+        {"canonical": "standard", "in_title": False},
+    )
+    post(
+        client, token, f"/api/admin/attributes/{edition['id']}/values", {"canonical": "enterprise"}
+    )
+    post(
+        client,
+        token,
+        f"/api/admin/categories/{category['id']}/attributes",
+        {"attribute_id": edition["id"], "identity_bearing": True},
+    )
+
+    report = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert (report["realigned"], report["renamed"], report["merged"]) == (2, 1, 0), report
+    ordinary_entry = client.get(f"/api/admin/variants/{ordinary}", headers=auth(token)).json()
+    enterprise_entry = client.get(f"/api/admin/variants/{enterprise}", headers=auth(token)).json()
+    assert enterprise_entry["model"] == ordinary_entry["model"] == "Galaxy S26 Ultra"
+    assert "enterprise" in enterprise_entry["title"].lower()
+    assert "standard" not in ordinary_entry["title"].lower()
+    again = client.post("/api/admin/matching/rebuild", headers=auth(token)).json()
+    assert (again["realigned"], again["renamed"], again["merged"]) == (0, 0, 0), again
+
+
 def test_an_entry_named_after_a_reading_that_changed_is_rebuilt(client):
     """A catalogue entry built from one listing takes its model from that listing's reading,
     and does not follow when the reading improves.

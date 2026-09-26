@@ -212,7 +212,13 @@ leaves them behind: on 25.09.2026 MacBook Airs read 13.6" and 1 TB on every list
 entries holding 13" and 1000 GB, and 101 pairs of entries one Apple part number named could
 not be merged for it. A rebuild sets an identity axis to the value every listing on the
 entry now reads (`realigned`), only when they all agree and only to a value the registry
-knows; an entry that becomes one that exists is merged into it.
+knows; an entry that becomes one that exists is merged into it. **An enum axis the entry does
+not hold is filled the same way**, where every listing on it states one value — that is how a
+new axis reaches the entries made before it; the glass took a script calling the API once per
+tablet. **The axes go before the names**: an entry renamed while an axis is still missing
+takes the key of the entry that differs from it only there, and on 26.09.2026 the S26 Ultra
+Enterprise Edition, renamed before its new `edition` was filled, merged into the ordinary
+256 and 512 black.
 
 **A family takes the case its entries write.** The lookup that files an entry under a family
 ignores case, so the spelling that made a family heads it for good: dateks's `PRO MAX 16

@@ -1424,11 +1424,51 @@ class MatchingService:
         A rename that collides is the answer rather than the problem: the identity key says
         the entry has just become one that already exists, and the two are merged.
         """
-        stale = await self._stale_names(limit=limit)
         renamed = merged = rehomed = 0
         reasons: Counter[str] = Counter()
         catalog = CatalogService(self.session)
 
+        # An entry's axes were set from the listing that made it and are filled in, never
+        # overwritten, by the ones that join it — so a reading that improves leaves them
+        # behind, as it left the names. On 25.09.2026 MacBook Airs read 13.6" and 1 TB on
+        # every listing sat on entries holding 13" and 1000 GB, and 101 pairs of entries one
+        # Apple part number named could not be merged for it.
+        # Before the names: an entry renamed while an axis is still missing takes the key of
+        # the entry that differs from it only there. On 26.09.2026 the S26 Ultra Enterprise
+        # Edition, renamed before its new `edition` axis was filled, merged into the ordinary
+        # 256 and 512 black.
+        realigned = 0
+        axes = await self._stale_axes(limit=limit)
+        for variant_id, attribute_id, value in axes:
+            try:
+                async with self.session.begin_nested():
+                    await catalog.set_variant_attribute(
+                        variant_id,
+                        VariantAttributeSet(attribute_id=attribute_id, **value, origin="consensus"),
+                    )
+                realigned += 1
+            except ConflictError as error:
+                twin = (error.details or {}).get("variant_id")
+                if twin is None:
+                    reasons[error.code] += 1
+                    continue
+                try:
+                    async with self.session.begin_nested():
+                        await catalog.merge_variants(
+                            variant_id,
+                            twin,
+                            reason="its axes followed its listings into an entry that existed",
+                            decided_by="rule",
+                        )
+                    merged += 1
+                except AppError as failure:
+                    reasons[failure.code] += 1
+            except AppError as error:
+                reasons[error.code] += 1
+
+        # Axes left for the next pass mean names wait for it: the limit cut 574 fills at 500
+        # on 26.09.2026, and the rest would have been renamed with their axis still missing.
+        stale = await self._stale_names(limit=limit) if len(axes) < limit else []
         for variant_id, model in stale:
             try:
                 async with self.session.begin_nested():
@@ -1469,39 +1509,6 @@ class MatchingService:
                 reasons[error.code] += 1
             except IntegrityError:
                 reasons["conflict"] += 1
-
-        # An entry's axes were set from the listing that made it and are filled in, never
-        # overwritten, by the ones that join it — so a reading that improves leaves them
-        # behind, as it left the names. On 25.09.2026 MacBook Airs read 13.6" and 1 TB on
-        # every listing sat on entries holding 13" and 1000 GB, and 101 pairs of entries one
-        # Apple part number named could not be merged for it.
-        realigned = 0
-        for variant_id, attribute_id, value in await self._stale_axes(limit=limit):
-            try:
-                async with self.session.begin_nested():
-                    await catalog.set_variant_attribute(
-                        variant_id,
-                        VariantAttributeSet(attribute_id=attribute_id, **value, origin="consensus"),
-                    )
-                realigned += 1
-            except ConflictError as error:
-                twin = (error.details or {}).get("variant_id")
-                if twin is None:
-                    reasons[error.code] += 1
-                    continue
-                try:
-                    async with self.session.begin_nested():
-                        await catalog.merge_variants(
-                            variant_id,
-                            twin,
-                            reason="its axes followed its listings into an entry that existed",
-                            decided_by="rule",
-                        )
-                    merged += 1
-                except AppError as failure:
-                    reasons[failure.code] += 1
-            except AppError as error:
-                reasons[error.code] += 1
 
         # A family is named by whichever spelling made it, and the lookup that files an entry
         # under it ignores case — so dateks's `PRO MAX 16 PLUS` headed a family whose 13
@@ -1550,11 +1557,16 @@ class MatchingService:
         )
 
     async def _stale_axes(self, *, limit: int) -> list[tuple[int, int, dict[str, Any]]]:
-        """Axes an entry holds that every listing on it now reads another way.
+        """Axes an entry holds that every listing on it now reads another way, and enum axes
+        it does not hold at all that every listing on it reads one way.
 
         Unanimity, as for a name: one shop disagreeing is a question for a person, every
         listing agreeing is the reading having moved. Only an identity-bearing axis, and only
         a value the registry knows — an enum answer with no row is left alone.
+
+        An axis the entry lacks is filled only where every listing states it, not merely the
+        ones that do: that is how a new axis reaches the entries made before it. The glass
+        took a script calling the API once per tablet; the edition would have needed another.
         """
         rows = await self.session.execute(
             select(OfferMatch.variant_id, Offer.identity)
@@ -1595,8 +1607,9 @@ class MatchingService:
                 )
             ).all()
         }
+        held_rows = held.all()
         stale: list[tuple[int, int, dict[str, Any]]] = []
-        for variant_id, attribute_id, key, kind, number, canonical in held.all():
+        for variant_id, attribute_id, key, kind, number, canonical in held_rows:
             said = {
                 str(identity[key]) for identity in read[variant_id] if identity.get(key) is not None
             }
@@ -1618,6 +1631,42 @@ class MatchingService:
                 stale.append((variant_id, attribute_id, {"value_id": value_id}))
             if len(stale) >= limit:
                 break
+        if len(stale) >= limit:
+            return stale
+
+        holding = {(variant_id, attribute_id) for variant_id, attribute_id, *_ in held_rows}
+        categories = dict(
+            (
+                await self.session.execute(
+                    select(Variant.id, Variant.category_id).where(Variant.id.in_(list(read)))
+                )
+            ).all()
+        )
+        axes: dict[int, list[tuple[int, str]]] = {}
+        for category_id, attribute_id, key in (
+            await self.session.execute(
+                select(CategoryAttribute.category_id, Attribute.id, Attribute.key)
+                .join(Attribute, Attribute.id == CategoryAttribute.attribute_id)
+                .where(
+                    CategoryAttribute.identity_bearing.is_(True),
+                    Attribute.value_type == "enum",
+                )
+            )
+        ).all():
+            axes.setdefault(category_id, []).append((attribute_id, key))
+        for variant_id, identities in read.items():
+            for attribute_id, key in axes.get(categories.get(variant_id), []):
+                if (variant_id, attribute_id) in holding:
+                    continue
+                said = {str(identity.get(key)) for identity in identities}
+                if len(said) != 1 or any(identity.get(key) is None for identity in identities):
+                    continue
+                value_id = values.get((attribute_id, said.pop()))
+                if value_id is None:
+                    continue
+                stale.append((variant_id, attribute_id, {"value_id": value_id}))
+                if len(stale) >= limit:
+                    return stale
         return stale
 
     async def _delete_empty_hidden_families(self, *, limit: int) -> int:
